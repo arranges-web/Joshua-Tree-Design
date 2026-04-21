@@ -1,5 +1,5 @@
 import { motion } from "framer-motion";
-import { Laptop, Video, Clock, CheckCircle } from "lucide-react";
+import { Laptop, Video, Clock, CheckCircle, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 export function VirtualConsultations() {
@@ -94,6 +94,3 @@ export function VirtualConsultations() {
     </section>
   );
 }
-
-// local import for ShieldCheck as it wasn't imported above
-import { ShieldCheck } from "lucide-react";

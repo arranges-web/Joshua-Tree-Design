@@ -1,6 +1,7 @@
 import { ArrowRight, Phone, Star } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { motion } from "framer-motion";
+import { FloatingLeaves } from "@/components/TreeMotifs";
 
 export function Hero() {
   return (
@@ -14,6 +15,7 @@ export function Hero() {
         />
         <div className="absolute inset-0 bg-gradient-to-r from-foreground/90 via-foreground/70 to-foreground/30" />
       </div>
+      <FloatingLeaves className="z-[1]" />
 
       <div className="container mx-auto px-4 md:px-6 relative z-10">
         <div className="max-w-3xl">

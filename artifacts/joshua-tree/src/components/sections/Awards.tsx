@@ -8,7 +8,9 @@ export function Awards() {
     { title: "Best of North Fort Myers", year: "2024", icon: Trophy },
     { title: "Best of North Fort Myers", year: "2025", icon: Trophy },
     { title: "Best of Lehigh Acres", year: "2024", icon: Trophy },
+    { title: "Best of Lehigh Acres", year: "2025", icon: Trophy },
     { title: "Neighborhood Faves", year: "2024", icon: ThumbsUp },
+    { title: "Neighborhood Faves", year: "2025", icon: ThumbsUp },
   ];
 
   return (

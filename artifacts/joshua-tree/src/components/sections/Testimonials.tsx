@@ -7,12 +7,11 @@ export function Testimonials() {
   const [emblaRef, emblaApi] = useEmblaCarousel({ loop: true, align: "start" });
 
   useEffect(() => {
-    if (emblaApi) {
-      const autoplay = setInterval(() => {
-        emblaApi.scrollNext();
-      }, 5000);
-      return () => clearInterval(autoplay);
-    }
+    if (!emblaApi) return;
+    const autoplay = setInterval(() => {
+      emblaApi.scrollNext();
+    }, 5000);
+    return () => clearInterval(autoplay);
   }, [emblaApi]);
 
   const reviews = [
