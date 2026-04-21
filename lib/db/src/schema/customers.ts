@@ -46,3 +46,9 @@ export const propertiesTable = pgTable(
 
 export type Customer = typeof customersTable.$inferSelect;
 export type Property = typeof propertiesTable.$inferSelect;
+
+import { createInsertSchema, createSelectSchema } from "drizzle-zod";
+export const insertCustomerSchema = createInsertSchema(customersTable);
+export const selectCustomerSchema = createSelectSchema(customersTable);
+export const insertPropertySchema = createInsertSchema(propertiesTable);
+export const selectPropertySchema = createSelectSchema(propertiesTable);

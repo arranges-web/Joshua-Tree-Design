@@ -4,6 +4,7 @@ import cookieParser from "cookie-parser";
 import pinoHttp from "pino-http";
 import router from "./routes";
 import { logger } from "./lib/logger";
+import { getSessionSecret } from "./lib/security/sessionSecret";
 
 const app: Express = express();
 app.set("trust proxy", true);
@@ -28,7 +29,7 @@ app.use(
   }),
 );
 app.use(cors({ credentials: true, origin: true }));
-app.use(cookieParser());
+app.use(cookieParser(getSessionSecret()));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 

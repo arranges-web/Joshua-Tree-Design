@@ -91,3 +91,11 @@ export const maintenanceLogsTable = pgTable(
 export type Truck = typeof trucksTable.$inferSelect;
 export type Equipment = typeof equipmentTable.$inferSelect;
 export type MaintenanceLog = typeof maintenanceLogsTable.$inferSelect;
+
+import { createInsertSchema, createSelectSchema } from "drizzle-zod";
+export const insertTruckSchema = createInsertSchema(trucksTable);
+export const selectTruckSchema = createSelectSchema(trucksTable);
+export const insertEquipmentSchema = createInsertSchema(equipmentTable);
+export const selectEquipmentSchema = createSelectSchema(equipmentTable);
+export const insertMaintenanceLogSchema = createInsertSchema(maintenanceLogsTable);
+export const selectMaintenanceLogSchema = createSelectSchema(maintenanceLogsTable);

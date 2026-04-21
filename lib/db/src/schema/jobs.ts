@@ -142,3 +142,17 @@ export type Job = typeof jobsTable.$inferSelect;
 export type TreeInventory = typeof treeInventoryTable.$inferSelect;
 export type SafetyChecklist = typeof safetyChecklistsTable.$inferSelect;
 export type JobPhoto = typeof jobPhotosTable.$inferSelect;
+
+import { createInsertSchema, createSelectSchema } from "drizzle-zod";
+export const insertCrewSchema = createInsertSchema(crewsTable);
+export const selectCrewSchema = createSelectSchema(crewsTable);
+export const insertCrewMemberSchema = createInsertSchema(crewMembersTable);
+export const selectCrewMemberSchema = createSelectSchema(crewMembersTable);
+export const insertJobSchema = createInsertSchema(jobsTable);
+export const selectJobSchema = createSelectSchema(jobsTable);
+export const insertTreeInventorySchema = createInsertSchema(treeInventoryTable);
+export const selectTreeInventorySchema = createSelectSchema(treeInventoryTable);
+export const insertSafetyChecklistSchema = createInsertSchema(safetyChecklistsTable);
+export const selectSafetyChecklistSchema = createSelectSchema(safetyChecklistsTable);
+export const insertJobPhotoSchema = createInsertSchema(jobPhotosTable);
+export const selectJobPhotoSchema = createSelectSchema(jobPhotosTable);

@@ -92,3 +92,11 @@ export const invoicesTable = pgTable(
 export type Quote = typeof quotesTable.$inferSelect;
 export type QuoteLineItem = typeof quoteLineItemsTable.$inferSelect;
 export type Invoice = typeof invoicesTable.$inferSelect;
+
+import { createInsertSchema, createSelectSchema } from "drizzle-zod";
+export const insertQuoteSchema = createInsertSchema(quotesTable);
+export const selectQuoteSchema = createSelectSchema(quotesTable);
+export const insertQuoteLineItemSchema = createInsertSchema(quoteLineItemsTable);
+export const selectQuoteLineItemSchema = createSelectSchema(quoteLineItemsTable);
+export const insertInvoiceSchema = createInsertSchema(invoicesTable);
+export const selectInvoiceSchema = createSelectSchema(invoicesTable);

@@ -51,3 +51,7 @@ export const sectionPermissionsTable = pgTable(
 );
 
 export type SectionPermission = typeof sectionPermissionsTable.$inferSelect;
+
+import { createInsertSchema, createSelectSchema } from "drizzle-zod";
+export const insertSectionPermissionSchema = createInsertSchema(sectionPermissionsTable);
+export const selectSectionPermissionSchema = createSelectSchema(sectionPermissionsTable);

@@ -40,7 +40,7 @@ export const requireAuth: RequestHandler = async (
   next: NextFunction,
 ) => {
   const token =
-    (req.cookies?.[SESSION_COOKIE] as string | undefined) ??
+    (req.signedCookies?.[SESSION_COOKIE] as string | undefined) ??
     extractBearer(req.headers.authorization);
 
   if (!token) {

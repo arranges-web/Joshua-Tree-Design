@@ -1,4 +1,5 @@
 import { Router, type IRouter } from "express";
+import rateLimit from "express-rate-limit";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
 import {
@@ -24,7 +25,18 @@ const loginSchema = z.object({
   password: z.string().min(1),
 });
 
-router.post("/login", async (req, res) => {
+// Basic brute-force protection: cap login attempts per IP. Counts both
+// successes and failures (keeps the limiter logic simple and is fine for
+// an internal tool with a small known IP set).
+const loginRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "too_many_attempts" },
+});
+
+router.post("/login", loginRateLimiter, async (req, res) => {
   const parsed = loginSchema.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: "invalid_body" });
@@ -85,7 +97,7 @@ router.post("/login", async (req, res) => {
 });
 
 router.post("/logout", async (req, res) => {
-  const cookieToken = req.cookies?.[SESSION_COOKIE] as string | undefined;
+  const cookieToken = req.signedCookies?.[SESSION_COOKIE] as string | undefined;
   const bearerToken = extractBearer(req.headers.authorization);
   // Revoke whichever transport(s) the caller presented so logout works
   // for both browser (cookie) and mobile (Authorization: Bearer) clients.

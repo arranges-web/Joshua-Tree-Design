@@ -89,3 +89,13 @@ export type Role = typeof rolesTable.$inferSelect;
 export type Department = typeof departmentsTable.$inferSelect;
 export type User = typeof usersTable.$inferSelect;
 export type Session = typeof sessionsTable.$inferSelect;
+
+import { createInsertSchema, createSelectSchema } from "drizzle-zod";
+export const insertRoleSchema = createInsertSchema(rolesTable);
+export const selectRoleSchema = createSelectSchema(rolesTable);
+export const insertDepartmentSchema = createInsertSchema(departmentsTable);
+export const selectDepartmentSchema = createSelectSchema(departmentsTable);
+export const insertUserSchema = createInsertSchema(usersTable);
+export const selectUserSchema = createSelectSchema(usersTable);
+export const insertSessionSchema = createInsertSchema(sessionsTable);
+export const selectSessionSchema = createSelectSchema(sessionsTable);

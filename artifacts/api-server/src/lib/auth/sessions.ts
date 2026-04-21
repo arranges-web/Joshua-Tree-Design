@@ -64,6 +64,7 @@ export function sessionCookieOptions(expiresAt: Date) {
     httpOnly: true,
     sameSite: "lax" as const,
     secure: isProd,
+    signed: true,
     path: "/",
     expires: expiresAt,
   };
@@ -75,6 +76,7 @@ export function clearSessionCookieOptions() {
     httpOnly: true,
     sameSite: "lax" as const,
     secure: isProd,
+    signed: true,
     path: "/",
     maxAge: 0,
   };
