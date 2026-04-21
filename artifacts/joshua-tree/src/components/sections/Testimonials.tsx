@@ -46,15 +46,15 @@ export function Testimonials() {
               <span className="italic">1,400+</span> homeowners trust us.
             </h3>
           </div>
-          <div className="flex items-center gap-4 bg-gray-50 px-5 py-3 rounded-2xl w-fit border border-border">
-            <div>
-              <div className="flex text-accent mb-1">
-                {[...Array(5)].map((_, i) => <Star key={i} className="w-4 h-4 fill-accent" />)}
-              </div>
-              <p className="text-xs font-bold tracking-wide">4.9 Avg • Google</p>
+          <div className="inline-flex items-center gap-3 bg-gray-50 border border-border rounded-full px-4 py-2.5 w-fit">
+            <div className="flex text-accent">
+              {[...Array(5)].map((_, i) => <Star key={i} className="w-3.5 h-3.5 fill-accent" />)}
             </div>
-            <div className="w-px h-8 bg-border" />
-            <img src="https://upload.wikimedia.org/wikipedia/commons/c/c1/Google_%22G%22_logo.svg" alt="Google" className="w-7 h-7" />
+            <span className="font-display text-lg leading-none text-foreground">4.9</span>
+            <span className="w-1 h-1 rounded-full bg-foreground/25" />
+            <span className="text-xs font-semibold tracking-wide text-foreground/80">Google Reviews</span>
+            <span className="w-1 h-1 rounded-full bg-foreground/25" />
+            <span className="text-xs font-semibold tracking-wide text-primary">1,400+ verified</span>
           </div>
         </div>
 

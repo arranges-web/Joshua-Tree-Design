@@ -1,6 +1,6 @@
 import { motion } from "framer-motion";
 import { User, ClipboardList, CheckCircle } from "lucide-react";
-import { BranchDivider, CanopyPattern } from "@/components/TreeMotifs";
+import { BranchDivider } from "@/components/TreeMotifs";
 
 export function Process() {
   const steps = [
@@ -29,7 +29,6 @@ export function Process() {
 
   return (
     <section id="process" className="section-y bg-gray-50 relative overflow-hidden paper-grain">
-      <CanopyPattern className="absolute inset-x-0 top-0 h-24 text-primary" />
       <div className="container mx-auto px-4 md:px-6 relative z-10">
         <BranchDivider className="max-w-md mx-auto mb-8 md:mb-12" />
         <div className="text-center max-w-3xl mx-auto mb-12 md:mb-20">
