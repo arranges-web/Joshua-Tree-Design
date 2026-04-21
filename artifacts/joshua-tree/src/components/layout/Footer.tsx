@@ -8,7 +8,9 @@ export function Footer() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-12 lg:gap-8">
           
           <div className="space-y-6">
-            <img src="/logo.png" alt="Joshua Tree Inc." className="h-12 brightness-0 invert opacity-90" />
+            <div className="inline-flex bg-white rounded-2xl p-3 shadow-sm w-fit">
+              <img src="/logo.png" alt="Joshua Tree Inc." className="h-10" />
+            </div>
             <p className="text-white/70 leading-relaxed text-sm">
               Southwest Florida's trusted experts for hazardous tree removal, expert trimming, and emergency storm response. Serving the community for 14 years.
             </p>

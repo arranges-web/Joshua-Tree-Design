@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
@@ -33,6 +33,17 @@ export function EstimateTool() {
   const [step, setStep] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
+  const formCardRef = useRef<HTMLDivElement>(null);
+
+  const scrollFormIntoView = () => {
+    requestAnimationFrame(() => {
+      const el = formCardRef.current;
+      if (!el) return;
+      const navOffset = 96;
+      const top = el.getBoundingClientRect().top + window.scrollY - navOffset;
+      window.scrollTo({ top, behavior: "smooth" });
+    });
+  };
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
@@ -62,10 +73,14 @@ export function EstimateTool() {
     const isValid = await form.trigger(fieldsToValidate);
     if (isValid) {
       setStep(s => s + 1);
+      scrollFormIntoView();
     }
   };
 
-  const prevStep = () => setStep(s => s - 1);
+  const prevStep = () => {
+    setStep(s => s - 1);
+    scrollFormIntoView();
+  };
 
   const onSubmit = async (data: FormValues) => {
     setIsSubmitting(true);
@@ -98,7 +113,7 @@ export function EstimateTool() {
           </p>
         </div>
 
-        <div className="bg-white rounded-3xl shadow-xl overflow-hidden border border-border">
+        <div ref={formCardRef} className="bg-white rounded-3xl shadow-xl overflow-hidden border border-border scroll-mt-24">
           
           {/* Progress Bar */}
           {!isSuccess && (
