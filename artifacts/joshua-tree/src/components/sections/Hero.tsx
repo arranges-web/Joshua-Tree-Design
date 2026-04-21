@@ -2,7 +2,7 @@ import { ArrowRight, Phone, Star, ShieldCheck, Award, Clock, ChevronDown } from 
 import { Button } from "@/components/ui/button";
 import { motion } from "framer-motion";
 import { FloatingLeaves } from "@/components/TreeMotifs";
-import { Counter, StatTile, StampBadge, Eyebrow } from "@/components/BrandKit";
+import { Counter, StatTile, StampBadge } from "@/components/BrandKit";
 
 export function Hero() {
   return (

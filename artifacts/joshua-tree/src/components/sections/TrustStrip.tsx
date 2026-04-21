@@ -1,4 +1,4 @@
-import { Award, ShieldCheck, Clock, CheckCircle2, Star } from "lucide-react";
+import { Award, ShieldCheck, CheckCircle2, Star } from "lucide-react";
 import { Counter } from "@/components/BrandKit";
 
 export function TrustStrip() {
