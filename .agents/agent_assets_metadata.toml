@@ -1,0 +1,26 @@
+uploads = []
+outputs = []
+
+[[generated]]
+id = "FREmJ5wix1QVCE04mdk3X"
+uri = "file://artifacts/joshua-tree/public/hero-oak.png"
+type = "image"
+title = "Florida live oak canopy"
+
+[[generated]]
+id = "J2bT-J4IWLF6yygSzNqGA"
+uri = "file://artifacts/joshua-tree/public/arborist-palm.png"
+type = "image"
+title = "Arborist pruning palm"
+
+[[generated]]
+id = "waov428-SFblx3M-cIdFA"
+uri = "file://artifacts/joshua-tree/public/aerial-trees.png"
+type = "image"
+title = "Cape Coral aerial trees"
+
+[[generated]]
+id = "bSyTXKcUD5F5qol86XpWC"
+uri = "file://artifacts/joshua-tree/public/mangrove.png"
+type = "image"
+title = "Mangrove golden hour"
