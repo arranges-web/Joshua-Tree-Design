@@ -28,7 +28,7 @@ export function Process() {
   ];
 
   return (
-    <section className="py-24 bg-gray-50 relative overflow-hidden">
+    <section id="process" className="py-24 bg-gray-50 relative overflow-hidden">
       <CanopyPattern className="absolute inset-x-0 top-0 h-24 text-primary" />
       <div className="container mx-auto px-4 md:px-6 relative z-10">
         <BranchDivider className="max-w-md mx-auto mb-12" />

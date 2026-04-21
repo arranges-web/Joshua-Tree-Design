@@ -19,6 +19,7 @@ const formSchema = z.object({
   treeCount: z.string().min(1, "Required"),
   treeSize: z.string().min(1, "Required"),
   accessibility: z.string().min(1, "Required"),
+  hazards: z.string().min(1, "Required"),
   city: z.string().min(1, "Please select your city"),
   zipCode: z.string().min(5, "Invalid zip"),
   name: z.string().min(2, "Name is required"),
@@ -40,6 +41,7 @@ export function EstimateTool() {
       treeCount: "1",
       treeSize: "",
       accessibility: "",
+      hazards: "",
       city: "",
       zipCode: "",
       name: "",
@@ -54,7 +56,7 @@ export function EstimateTool() {
   const nextStep = async () => {
     let fieldsToValidate: any[] = [];
     if (step === 1) fieldsToValidate = ['serviceType'];
-    if (step === 2) fieldsToValidate = ['treeCount', 'treeSize', 'accessibility'];
+    if (step === 2) fieldsToValidate = ['treeCount', 'treeSize', 'accessibility', 'hazards'];
     if (step === 3) fieldsToValidate = ['city', 'zipCode'];
     
     const isValid = await form.trigger(fieldsToValidate);
@@ -268,6 +270,37 @@ export function EstimateTool() {
                                       </FormControl>
                                       <FormLabel className="flex flex-col cursor-pointer text-center rounded-xl border-2 p-4 font-semibold hover:bg-gray-50 peer-data-[state=checked]:border-primary peer-data-[state=checked]:bg-primary/5">
                                         <span className="text-sm">{acc.label}</span>
+                                      </FormLabel>
+                                    </FormItem>
+                                  ))}
+                                </RadioGroup>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+
+                          <FormField
+                            control={form.control}
+                            name="hazards"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel className="text-lg font-bold">Any Hazards Present?</FormLabel>
+                                <RadioGroup
+                                  onValueChange={field.onChange}
+                                  defaultValue={field.value}
+                                  className="grid grid-cols-1 md:grid-cols-3 gap-4"
+                                >
+                                  {[
+                                    { id: "none", label: "None visible" },
+                                    { id: "structures", label: "Near home/structures" },
+                                    { id: "powerlines", label: "Near power lines" },
+                                  ].map(h => (
+                                    <FormItem key={h.id} className="relative">
+                                      <FormControl>
+                                        <RadioGroupItem value={h.id} className="peer sr-only" />
+                                      </FormControl>
+                                      <FormLabel className="flex flex-col cursor-pointer text-center rounded-xl border-2 p-4 font-semibold hover:bg-gray-50 peer-data-[state=checked]:border-primary peer-data-[state=checked]:bg-primary/5">
+                                        <span className="text-sm">{h.label}</span>
                                       </FormLabel>
                                     </FormItem>
                                   ))}
