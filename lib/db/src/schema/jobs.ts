@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import {
   pgTable,
   serial,
@@ -9,6 +10,7 @@ import {
   pgEnum,
   primaryKey,
   index,
+  check,
 } from "drizzle-orm/pg-core";
 import { usersTable } from "./users";
 import { propertiesTable } from "./customers";
@@ -82,12 +84,14 @@ export const treeInventoryTable = pgTable(
   "tree_inventory",
   {
     id: serial("id").primaryKey(),
+    // Per spec: a tree inventory record is associated with a job OR a
+    // property (or both). At least one must be non-null — enforced below.
     jobId: integer("job_id").references(() => jobsTable.id, {
       onDelete: "set null",
     }),
-    propertyId: integer("property_id")
-      .notNull()
-      .references(() => propertiesTable.id, { onDelete: "cascade" }),
+    propertyId: integer("property_id").references(() => propertiesTable.id, {
+      onDelete: "cascade",
+    }),
     species: text("species").notNull(),
     dbhInches: doublePrecision("dbh_inches"),
     heightFt: doublePrecision("height_ft"),
@@ -97,6 +101,10 @@ export const treeInventoryTable = pgTable(
   (t) => [
     index("tree_inventory_job_id_idx").on(t.jobId),
     index("tree_inventory_property_id_idx").on(t.propertyId),
+    check(
+      "tree_inventory_job_or_property_chk",
+      sql`${t.jobId} IS NOT NULL OR ${t.propertyId} IS NOT NULL`,
+    ),
   ],
 );
 

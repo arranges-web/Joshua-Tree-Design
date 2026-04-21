@@ -1,0 +1,2 @@
+ALTER TABLE "tree_inventory" ALTER COLUMN "property_id" DROP NOT NULL;--> statement-breakpoint
+ALTER TABLE "tree_inventory" ADD CONSTRAINT "tree_inventory_job_or_property_chk" CHECK ("tree_inventory"."job_id" IS NOT NULL OR "tree_inventory"."property_id" IS NOT NULL);

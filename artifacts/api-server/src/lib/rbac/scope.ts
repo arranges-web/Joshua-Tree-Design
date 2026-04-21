@@ -39,10 +39,13 @@ export function scopeJobs(user: AuthenticatedUser): SQL | undefined {
     );
   }
   if (user.role === "SALES") {
-    // Sales sees jobs tied to customers they own (joined via property → customer)
+    // Per the FSM brief, sales sees jobs ONLY via quotes they own — not
+    // every job for a customer they happen to own. We resolve a job's
+    // visibility through a quote whose owner_user_id is this rep, matched
+    // on the same property the job is performed at.
     return inArray(
       jobsTable.propertyId,
-      sql<number[]>`(SELECT p.id FROM properties p JOIN customers c ON c.id = p.customer_id WHERE c.owner_user_id = ${user.id})`,
+      sql<number[]>`(SELECT ${quotesTable.propertyId} FROM ${quotesTable} WHERE ${quotesTable.ownerUserId} = ${user.id} AND ${quotesTable.propertyId} IS NOT NULL)`,
     );
   }
   return sql`false`;
