@@ -45,10 +45,18 @@ export function Footer() {
           <div>
             <h4 className="text-lg font-serif font-medium mb-6">Quick Links</h4>
             <ul className="space-y-3">
-              {['Services', 'Why Choose Us', 'Process', 'Reviews', 'Virtual Consultations', 'FAQ'].map((link) => (
-                <li key={link}>
-                  <a href={`#${link.toLowerCase().replace(/\s+/g, '-')}`} className="text-white/70 hover:text-primary transition-colors text-sm">
-                    {link}
+              {[
+                { label: 'Services', href: '#services' },
+                { label: 'Why Choose Us', href: '#why-choose-us' },
+                { label: 'Process', href: '#process' },
+                { label: 'Reviews', href: '#reviews' },
+                { label: 'Virtual Consultations', href: '#virtual-consultations' },
+                { label: 'FAQ', href: '#faq' },
+                { label: 'Free Estimate', href: '#estimate' },
+              ].map((link) => (
+                <li key={link.href}>
+                  <a href={link.href} className="text-white/70 hover:text-primary transition-colors text-sm">
+                    {link.label}
                   </a>
                 </li>
               ))}

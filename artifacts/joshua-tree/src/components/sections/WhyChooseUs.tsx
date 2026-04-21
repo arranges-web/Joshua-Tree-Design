@@ -36,23 +36,25 @@ export function WhyChooseUs() {
   ];
 
   return (
-    <section id="why-choose-us" className="py-24 bg-white relative">
+    <section id="why-choose-us" className="section-y bg-white relative">
       <div className="container mx-auto px-4 md:px-6">
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
-          
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 lg:gap-16 items-center">
+
           <motion.div
-            initial={{ opacity: 0, x: -30 }}
+            initial={{ opacity: 0, x: -20 }}
             whileInView={{ opacity: 1, x: 0 }}
             viewport={{ once: true }}
-            transition={{ duration: 0.6 }}
+            transition={{ duration: 0.5 }}
           >
-            <h2 className="text-sm font-bold tracking-wider text-primary uppercase mb-3">Why Choose Joshua Tree Inc.?</h2>
-            <h3 className="text-4xl md:text-5xl font-serif font-bold text-foreground mb-6 leading-tight">The Difference That Makes A Difference</h3>
-            <p className="text-lg text-foreground/70 mb-10 leading-relaxed">
-              We're not just another tree service company—we're Southwest Florida's most trusted experts in tree care. Your yard is more than just a space—it's where life happens.
+            <h2 className="text-[11px] font-bold tracking-[0.18em] text-primary uppercase mb-4">Why Joshua Tree</h2>
+            <h3 className="font-display text-4xl md:text-6xl text-foreground mb-4 text-balance">
+              The difference is in the <span className="italic text-primary">details</span>.
+            </h3>
+            <p className="text-base md:text-lg text-foreground/70 mb-8 leading-relaxed">
+              We're not just another tree service. We're SWFL's most trusted experts — and your yard is where life happens.
             </p>
 
-            <div className="space-y-6">
+            <div className="space-y-4 md:space-y-5">
               {reasons.map((reason, i) => (
                 <motion.div 
                   key={i} 
@@ -62,12 +64,12 @@ export function WhyChooseUs() {
                   viewport={{ once: true }}
                   transition={{ delay: i * 0.1, duration: 0.4 }}
                 >
-                  <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
-                    <reason.icon className="w-6 h-6 text-primary" />
+                  <div className="w-11 h-11 rounded-xl bg-primary/10 flex items-center justify-center shrink-0 border border-primary/15">
+                    <reason.icon className="w-5 h-5 text-primary" />
                   </div>
                   <div>
-                    <h4 className="font-bold text-lg text-foreground mb-1">{reason.title}</h4>
-                    <p className="text-foreground/70">{reason.description}</p>
+                    <h4 className="font-display text-xl text-foreground leading-tight">{reason.title}</h4>
+                    <p className="text-foreground/70 text-sm mt-0.5">{reason.description}</p>
                   </div>
                 </motion.div>
               ))}
@@ -79,7 +81,7 @@ export function WhyChooseUs() {
             whileInView={{ opacity: 1, x: 0 }}
             viewport={{ once: true }}
             transition={{ duration: 0.6 }}
-            className="relative h-[600px] rounded-3xl overflow-hidden shadow-2xl"
+            className="relative h-[420px] md:h-[560px] lg:h-[640px] rounded-3xl overflow-hidden shadow-2xl"
           >
             <img 
               src="/arborist-palm.png" 
@@ -89,7 +91,7 @@ export function WhyChooseUs() {
             <div className="absolute inset-0 bg-gradient-to-t from-foreground/80 via-transparent to-transparent" />
             <div className="absolute bottom-0 left-0 right-0 p-8">
               <div className="bg-white/10 backdrop-blur-md border border-white/20 p-6 rounded-2xl">
-                <p className="text-white font-medium text-lg italic">
+                <p className="text-white font-display text-xl md:text-2xl italic leading-snug">
                   "Nothing makes us prouder than seeing our customers enjoy safer, more beautiful landscapes."
                 </p>
               </div>

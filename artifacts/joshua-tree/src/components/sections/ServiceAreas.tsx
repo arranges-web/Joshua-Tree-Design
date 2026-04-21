@@ -1,52 +1,53 @@
 import { motion } from "framer-motion";
 import { MapPin } from "lucide-react";
+import { Eyebrow, ProofChip } from "@/components/BrandKit";
+import { SwflMap } from "@/components/BrandKit";
 
 export function ServiceAreas() {
-  const areas = [
-    "Cape Coral",
-    "Fort Myers",
-    "Lehigh Acres",
-    "Estero",
-    "Bonita Springs",
-    "Naples",
-    "Port Charlotte",
-    "Sarasota",
-    "Venice"
-  ];
+  const areas = ["Cape Coral", "Fort Myers", "Lehigh Acres", "Estero", "Bonita Springs", "Naples", "Port Charlotte", "Sarasota", "Venice"];
 
   return (
-    <section className="py-24 bg-gray-50 border-t border-border">
+    <section className="section-y bg-gray-50 border-t border-border canopy-grad">
       <div className="container mx-auto px-4 md:px-6">
-        <div className="flex flex-col lg:flex-row gap-12 items-center">
-          
-          <div className="lg:w-1/3">
-            <h2 className="text-sm font-bold tracking-wider text-primary uppercase mb-3 flex items-center gap-2">
-              <MapPin className="w-4 h-4" /> Service Areas
-            </h2>
-            <h3 className="text-4xl font-serif font-bold text-foreground mb-6">Serving Southwest Florida</h3>
-            <p className="text-lg text-foreground/70 mb-6">
-              For more than a decade, we've been the trusted tree care experts for homeowners and businesses across the region—ensuring every yard stays vibrant, healthy, and storm-ready.
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 items-center">
+          <div className="lg:col-span-5">
+            <Eyebrow className="mb-4">Service Areas</Eyebrow>
+            <h3 className="font-display text-4xl md:text-5xl text-foreground mb-4 text-balance">Rooted in Southwest Florida.</h3>
+            <p className="text-foreground/70 mb-6 leading-relaxed">
+              For more than a decade we've cared for trees from Sarasota down to Naples — keeping yards healthy, beautiful, and storm-ready.
             </p>
-          </div>
-
-          <div className="lg:w-2/3 w-full">
-            <div className="flex flex-wrap gap-3 justify-center lg:justify-start">
+            <div className="flex flex-wrap gap-2 mb-6">
               {areas.map((area, i) => (
-                <motion.div
+                <motion.span
                   key={area}
-                  initial={{ opacity: 0, scale: 0.9 }}
-                  whileInView={{ opacity: 1, scale: 1 }}
+                  initial={{ opacity: 0, y: 6 }}
+                  whileInView={{ opacity: 1, y: 0 }}
                   viewport={{ once: true }}
-                  transition={{ delay: i * 0.05 }}
-                  className="bg-white border border-border rounded-full px-6 py-3 shadow-sm hover:shadow-md hover:border-primary/30 transition-all text-foreground font-medium flex items-center gap-2"
+                  transition={{ delay: i * 0.04 }}
+                  className="bg-white border border-border rounded-full px-3.5 py-1.5 text-sm font-medium text-foreground/85 inline-flex items-center gap-1.5 hover:border-primary/40 hover:text-primary transition-colors"
                 >
-                  <MapPin className="w-4 h-4 text-primary/50" />
+                  <MapPin className="w-3 h-3 text-primary/60" />
                   {area}
-                </motion.div>
+                </motion.span>
               ))}
             </div>
+            <div className="flex gap-2">
+              <ProofChip tone="green">Lee County</ProofChip>
+              <ProofChip tone="green">Collier County</ProofChip>
+              <ProofChip tone="green">Charlotte County</ProofChip>
+            </div>
           </div>
-
+          <motion.div
+            initial={{ opacity: 0, scale: 0.96 }}
+            whileInView={{ opacity: 1, scale: 1 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.5 }}
+            className="lg:col-span-7"
+          >
+            <div className="rounded-3xl bg-white border border-border shadow-xl overflow-hidden p-2">
+              <SwflMap className="w-full h-auto" />
+            </div>
+          </motion.div>
         </div>
       </div>
     </section>

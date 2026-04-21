@@ -4,9 +4,9 @@ import { Button } from "@/components/ui/button";
 
 export function VirtualConsultations() {
   return (
-    <section id="virtual-consultations" className="py-24 bg-white relative overflow-hidden">
+    <section id="virtual-consultations" className="section-y bg-white relative overflow-hidden">
       <div className="container mx-auto px-4 md:px-6">
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 lg:gap-16 items-center">
           <motion.div
             initial={{ opacity: 0, x: -30 }}
             whileInView={{ opacity: 1, x: 0 }}
@@ -59,11 +59,11 @@ export function VirtualConsultations() {
               NEW: VIRTUAL CONSULTATIONS
             </div>
             
-            <h2 className="text-4xl md:text-5xl font-serif font-bold text-foreground mb-6 leading-tight">
-              Expert Tree Care Guidance From Anywhere
+            <h2 className="font-display text-4xl md:text-6xl text-foreground mb-5 text-balance">
+              Expert care, <span className="italic text-blue-700">from anywhere</span>.
             </h2>
-            
-            <p className="text-lg text-foreground/70 mb-8 leading-relaxed">
+
+            <p className="text-base md:text-lg text-foreground/70 mb-8 leading-relaxed">
               Your time is valuable. Connect with our ISA-Certified Arborists from your yard using a video call. Walk your property with us or send photos for expert analysis—no on-site visit required.
             </p>
 

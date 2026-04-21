@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 
 export function FinalCTA() {
   return (
-    <section className="py-24 relative overflow-hidden">
+    <section className="section-y relative overflow-hidden">
       <div className="absolute inset-0 z-0">
         <img 
           src="/hero-oak.png" 
@@ -17,21 +17,21 @@ export function FinalCTA() {
 
       <div className="container mx-auto px-4 md:px-6 relative z-10">
         <div className="max-w-4xl mx-auto text-center bg-white/5 backdrop-blur-md border border-white/10 rounded-3xl p-8 md:p-16 shadow-2xl">
-          <motion.h2 
+          <motion.h2
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
-            className="text-4xl md:text-5xl font-serif font-bold text-white mb-6"
+            className="font-display text-4xl md:text-6xl text-white mb-5 text-balance"
           >
-            Your Yard Deserves Expert Care.
+            Your yard deserves <span className="italic text-accent">expert care</span>.
           </motion.h2>
-          
-          <motion.p 
+
+          <motion.p
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
             transition={{ delay: 0.1 }}
-            className="text-xl text-white/80 mb-10 max-w-2xl mx-auto"
+            className="text-base md:text-lg text-white/80 mb-8 max-w-2xl mx-auto"
           >
             Don't wait until a small issue turns into costly damage. Experience the Joshua Tree Inc. difference today.
           </motion.p>

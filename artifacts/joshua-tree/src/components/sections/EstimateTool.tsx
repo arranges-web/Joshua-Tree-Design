@@ -87,14 +87,14 @@ export function EstimateTool() {
   const cities = ["Cape Coral", "Fort Myers", "Lehigh Acres", "Estero", "Bonita Springs", "Naples", "Port Charlotte", "Sarasota", "Venice"];
 
   return (
-    <section id="estimate" className="py-24 bg-gray-50">
+    <section id="estimate" className="section-y bg-gray-50">
       <div className="container mx-auto px-4 md:px-6 max-w-4xl">
         
-        <div className="text-center mb-12">
-          <h2 className="text-sm font-bold tracking-wider text-primary uppercase mb-3">Free Estimate</h2>
-          <h3 className="text-4xl md:text-5xl font-serif font-bold text-foreground mb-4">Request a Quote</h3>
-          <p className="text-lg text-foreground/70">
-            Tell us about your project. It takes less than 2 minutes.
+        <div className="text-center mb-10 md:mb-12">
+          <h2 className="text-[11px] font-bold tracking-[0.18em] text-primary uppercase mb-3">Free Estimate</h2>
+          <h3 className="font-display text-4xl md:text-6xl text-foreground mb-3 text-balance">Request your <span className="italic text-primary">free quote</span>.</h3>
+          <p className="text-base md:text-lg text-foreground/70">
+            Tell us about your project — it takes less than 2 minutes.
           </p>
         </div>
 

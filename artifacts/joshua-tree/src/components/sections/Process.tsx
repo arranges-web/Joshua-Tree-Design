@@ -28,41 +28,41 @@ export function Process() {
   ];
 
   return (
-    <section id="process" className="py-24 bg-gray-50 relative overflow-hidden">
+    <section id="process" className="section-y bg-gray-50 relative overflow-hidden paper-grain">
       <CanopyPattern className="absolute inset-x-0 top-0 h-24 text-primary" />
       <div className="container mx-auto px-4 md:px-6 relative z-10">
-        <BranchDivider className="max-w-md mx-auto mb-12" />
-        <div className="text-center max-w-3xl mx-auto mb-20">
-          <h2 className="text-sm font-bold tracking-wider text-primary uppercase mb-3">Our Simple Process</h2>
-          <h3 className="text-4xl md:text-5xl font-serif font-bold text-foreground mb-6">Tree Care Made Easy</h3>
-          <p className="text-lg text-foreground/70">
-            From the first call to the final cleanup, we make taking care of your trees a stress-free experience.
+        <BranchDivider className="max-w-md mx-auto mb-8 md:mb-12" />
+        <div className="text-center max-w-3xl mx-auto mb-12 md:mb-20">
+          <h2 className="text-[11px] font-bold tracking-[0.18em] text-primary uppercase mb-3">Our Simple Process</h2>
+          <h3 className="font-display text-4xl md:text-6xl text-foreground mb-4 text-balance">
+            Tree care, <span className="italic text-primary">made easy</span>.
+          </h3>
+          <p className="text-base md:text-lg text-foreground/70 max-w-xl mx-auto">
+            From the first call to the final cleanup — we make every step stress-free.
           </p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-12 relative">
-          {/* Connecting line for desktop */}
-          <div className="hidden md:block absolute top-[50px] left-[15%] right-[15%] h-0.5 bg-gradient-to-r from-primary/10 via-primary/30 to-primary/10 z-0" />
-          
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 md:gap-12 relative">
+          <div className="hidden md:block absolute top-[44px] left-[15%] right-[15%] h-px bg-[repeating-linear-gradient(to_right,hsl(var(--primary)/0.4)_0_8px,transparent_8px_16px)] z-0" />
+
           {steps.map((step, i) => (
-            <motion.div 
+            <motion.div
               key={i}
               initial={{ opacity: 0, y: 20 }}
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
-              transition={{ delay: i * 0.2, duration: 0.5 }}
+              transition={{ delay: i * 0.15, duration: 0.5 }}
               className="relative z-10 flex flex-col items-center text-center"
             >
-              <div className="w-24 h-24 rounded-full bg-white shadow-xl flex items-center justify-center mb-8 border-4 border-white relative group">
-                <div className="absolute inset-0 rounded-full bg-primary/10 scale-0 group-hover:scale-100 transition-transform duration-300" />
-                <step.icon className="w-10 h-10 text-primary relative z-10" />
-                <div className="absolute -top-3 -right-3 w-8 h-8 rounded-full bg-accent text-white flex items-center justify-center font-bold text-sm shadow-md">
+              <div className="w-20 h-20 md:w-24 md:h-24 rounded-full bg-white shadow-xl flex items-center justify-center mb-5 md:mb-7 border-4 border-white relative group">
+                <step.icon className="w-8 h-8 md:w-10 md:h-10 text-primary relative z-10" />
+                <div className="absolute -top-2 -right-2 md:-top-3 md:-right-3 px-2.5 h-7 md:h-8 rounded-full bg-accent text-white flex items-center justify-center font-display text-base shadow-md">
                   {step.num}
                 </div>
               </div>
-              <h4 className="text-2xl font-serif font-bold mb-2">{step.title}</h4>
-              <p className="text-primary font-medium mb-4">{step.subtitle}</p>
-              <p className="text-foreground/70 leading-relaxed max-w-sm">
+              <h4 className="font-display text-2xl md:text-3xl mb-1">{step.title}</h4>
+              <p className="text-primary font-semibold text-sm mb-3">{step.subtitle}</p>
+              <p className="text-foreground/70 leading-relaxed text-sm max-w-xs">
                 {step.desc}
               </p>
             </motion.div>

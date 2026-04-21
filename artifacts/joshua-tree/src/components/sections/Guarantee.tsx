@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 
 export function Guarantee() {
   return (
-    <section className="py-24 bg-foreground text-white relative overflow-hidden">
+    <section className="section-y bg-foreground text-white relative overflow-hidden">
       <div className="absolute inset-0 z-0 opacity-20">
         <img 
           src="/hero-oak.png" 
@@ -25,21 +25,21 @@ export function Guarantee() {
             <ShieldCheck className="w-10 h-10 text-white" />
           </motion.div>
           
-          <motion.h2 
+          <motion.h2
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
-            className="text-4xl md:text-5xl font-serif font-bold mb-6"
+            className="font-display text-4xl md:text-6xl mb-5 text-balance"
           >
-            Our 100% Satisfaction Guarantee
+            Our <span className="italic text-accent">100%</span> satisfaction guarantee.
           </motion.h2>
-          
-          <motion.p 
+
+          <motion.p
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
             transition={{ delay: 0.1 }}
-            className="text-xl text-white/80 mb-12 leading-relaxed"
+            className="text-base md:text-lg text-white/75 mb-10 leading-relaxed max-w-2xl mx-auto"
           >
             At Joshua Tree Inc., we stand behind our work. Our goal is simple: we're not happy until you are. Whether it's tree removal, pruning, or storm prep, we ensure that every job meets the highest standards.
           </motion.p>
