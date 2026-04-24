@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Link, useLocation } from "wouter";
 import {
   useListLeads,
@@ -21,13 +21,35 @@ import { useToast } from "@/hooks/use-toast";
 import { Inbox, Wand2, ArrowRight, X } from "lucide-react";
 import { StatusBadge } from "@/lib/data-table";
 
+// "Open" = not yet handled — the default triage view.
+const OPEN_STATUSES = new Set(["NEW", "CONTACTED"]);
+
 const STATUS_OPTIONS = [
-  "ALL",
-  "NEW",
-  "CONTACTED",
-  "QUOTED",
-  "CONVERTED",
-  "DISMISSED",
+  { value: "OPEN", label: "Open (new + contacted)" },
+  { value: "ALL", label: "All" },
+  { value: "NEW", label: "New" },
+  { value: "CONTACTED", label: "Contacted" },
+  { value: "QUOTED", label: "Quoted" },
+  { value: "CONVERTED", label: "Converted" },
+  { value: "DISMISSED", label: "Dismissed" },
+] as const;
+
+const SERVICE_OPTIONS = [
+  { value: "ALL", label: "All services" },
+  { value: "TREE_REMOVAL", label: "Tree removal" },
+  { value: "TRIMMING_PRUNING", label: "Trimming / pruning" },
+  { value: "MANGROVE_CARE", label: "Mangrove care" },
+  { value: "STUMP_GRINDING", label: "Stump grinding" },
+  { value: "EMERGENCY_STORM", label: "Emergency storm" },
+  { value: "CRANE_ASSISTED", label: "Crane assisted" },
+] as const;
+
+const AGE_OPTIONS = [
+  { value: "ALL", label: "Any age" },
+  { value: "1", label: "Last 24 hours" },
+  { value: "3", label: "Last 3 days" },
+  { value: "7", label: "Last 7 days" },
+  { value: "30", label: "Last 30 days" },
 ] as const;
 
 function formatService(s: string): string {
@@ -47,20 +69,48 @@ function formatDate(d: Date | string | null | undefined): string {
   });
 }
 
+function ageInDays(d: Date | string): number {
+  const created = typeof d === "string" ? new Date(d) : d;
+  return (Date.now() - created.getTime()) / (1000 * 60 * 60 * 24);
+}
+
 export function Leads() {
   const [statusFilter, setStatusFilter] =
-    useState<(typeof STATUS_OPTIONS)[number]>("NEW");
-  const queryParams =
-    statusFilter === "ALL" ? undefined : { status: statusFilter };
-  const { data, isLoading } = useListLeads(queryParams);
+    useState<(typeof STATUS_OPTIONS)[number]["value"]>("OPEN");
+  const [serviceFilter, setServiceFilter] =
+    useState<(typeof SERVICE_OPTIONS)[number]["value"]>("ALL");
+  const [ageFilter, setAgeFilter] =
+    useState<(typeof AGE_OPTIONS)[number]["value"]>("ALL");
+
+  // Fetch a single status from the API when a single status is picked;
+  // otherwise fetch everything and filter client-side. Keeps the API
+  // surface simple while still scoping the network for narrow filters.
+  const apiStatus =
+    statusFilter !== "OPEN" && statusFilter !== "ALL"
+      ? statusFilter
+      : undefined;
+  const { data, isLoading } = useListLeads(
+    apiStatus ? { status: apiStatus } : undefined,
+  );
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const [, setLocation] = useLocation();
   const convertMutation = useConvertLeadToQuote();
   const updateMutation = useUpdateLead();
 
-  const leads: Lead[] = data?.leads ?? [];
-  const newCount = leads.filter((l) => l.status === "NEW").length;
+  const allLeads: Lead[] = data?.leads ?? [];
+
+  const visibleLeads = useMemo(() => {
+    return allLeads.filter((l) => {
+      if (statusFilter === "OPEN" && !OPEN_STATUSES.has(l.status)) return false;
+      if (serviceFilter !== "ALL" && l.service !== serviceFilter) return false;
+      if (ageFilter !== "ALL") {
+        const max = Number(ageFilter);
+        if (ageInDays(l.createdAt) > max) return false;
+      }
+      return true;
+    });
+  }, [allLeads, statusFilter, serviceFilter, ageFilter]);
 
   const convert = (lead: Lead) => {
     convertMutation.mutate(
@@ -107,35 +157,70 @@ export function Leads() {
           <h1 className="font-serif text-3xl">Leads inbox</h1>
           <p className="text-sm text-muted-foreground">
             New service requests from the website, portal, and phone.
-            {statusFilter !== "NEW" && newCount > 0 && (
-              <span className="ml-1.5 inline-flex items-center gap-1 text-amber-700">
-                <Inbox className="h-3.5 w-3.5" />
-                {newCount} unhandled
-              </span>
-            )}
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <span className="text-xs font-mono uppercase tracking-wider text-muted-foreground">
-            Status
-          </span>
-          <Select
-            value={statusFilter}
-            onValueChange={(v) =>
-              setStatusFilter(v as (typeof STATUS_OPTIONS)[number])
-            }
-          >
-            <SelectTrigger className="w-[160px]">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {STATUS_OPTIONS.map((s) => (
-                <SelectItem key={s} value={s}>
-                  {s.charAt(0) + s.slice(1).toLowerCase()}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+        <div className="flex flex-wrap items-end gap-3">
+          <FilterField label="Status">
+            <Select
+              value={statusFilter}
+              onValueChange={(v) =>
+                setStatusFilter(
+                  v as (typeof STATUS_OPTIONS)[number]["value"],
+                )
+              }
+            >
+              <SelectTrigger className="w-[200px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {STATUS_OPTIONS.map((s) => (
+                  <SelectItem key={s.value} value={s.value}>
+                    {s.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </FilterField>
+          <FilterField label="Service">
+            <Select
+              value={serviceFilter}
+              onValueChange={(v) =>
+                setServiceFilter(
+                  v as (typeof SERVICE_OPTIONS)[number]["value"],
+                )
+              }
+            >
+              <SelectTrigger className="w-[180px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {SERVICE_OPTIONS.map((s) => (
+                  <SelectItem key={s.value} value={s.value}>
+                    {s.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </FilterField>
+          <FilterField label="Age">
+            <Select
+              value={ageFilter}
+              onValueChange={(v) =>
+                setAgeFilter(v as (typeof AGE_OPTIONS)[number]["value"])
+              }
+            >
+              <SelectTrigger className="w-[160px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {AGE_OPTIONS.map((a) => (
+                  <SelectItem key={a.value} value={a.value}>
+                    {a.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </FilterField>
         </div>
       </div>
 
@@ -146,18 +231,14 @@ export function Leads() {
               <Skeleton key={i} className="h-20 w-full" />
             ))}
           </div>
-        ) : leads.length === 0 ? (
+        ) : visibleLeads.length === 0 ? (
           <div className="p-12 text-center text-sm text-muted-foreground">
             <Inbox className="mx-auto mb-2 h-8 w-8 opacity-40" />
-            <div>
-              {statusFilter === "ALL"
-                ? "No leads have come in yet."
-                : `No ${statusFilter.toLowerCase()} leads right now.`}
-            </div>
+            <div>No leads match the current filters.</div>
           </div>
         ) : (
           <ul className="divide-y">
-            {leads.map((l) => (
+            {visibleLeads.map((l) => (
               <li
                 key={l.id}
                 className="flex flex-col gap-3 p-4 hover:bg-muted/30 md:flex-row md:items-start md:justify-between"
@@ -243,6 +324,23 @@ export function Leads() {
           </ul>
         )}
       </div>
+    </div>
+  );
+}
+
+function FilterField({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="flex flex-col gap-1">
+      <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+        {label}
+      </span>
+      {children}
     </div>
   );
 }

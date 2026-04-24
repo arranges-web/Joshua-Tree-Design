@@ -411,9 +411,20 @@ export interface Property {
   notes?: string | null;
 }
 
+export type CustomerProfileResponseOwner = {
+  id: number;
+  fullName: string;
+  email: string;
+} | null;
+
 export type CustomerProfileResponseJobs = {
   upcoming: Job[];
   past: Job[];
+};
+
+export type CustomerProfileResponseCrewsItem = {
+  id: number;
+  name: string;
 };
 
 export type CustomerProfileResponseTotals = {
@@ -425,11 +436,14 @@ export type CustomerProfileResponseTotals = {
 
 export interface CustomerProfileResponse {
   customer: Customer;
+  owner: CustomerProfileResponseOwner;
   properties: Property[];
   jobs: CustomerProfileResponseJobs;
   quotes: Quote[];
   invoices: Invoice[];
   leads: Lead[];
+  /** Crews referenced by any job in this profile, for client-side name lookup. */
+  crews: CustomerProfileResponseCrewsItem[];
   totals: CustomerProfileResponseTotals;
 }
 

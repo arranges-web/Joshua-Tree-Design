@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useSearch, useLocation } from "wouter";
 import {
   useListJobs,
   useCreateJob,
@@ -69,9 +70,29 @@ const STATUSES = ["SCHEDULED", "IN_PROGRESS", "COMPLETE", "CANCELLED"] as const;
 
 export function Jobs() {
   const { data, isLoading } = useListJobs();
+  const search = useSearch();
+  const [, setLocation] = useLocation();
   const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [initialPropertyId, setInitialPropertyId] = useState<number | null>(
+    null,
+  );
   const state = useDataTable<SortKey>("scheduledFor", "desc", 50);
   const [statusFilter, setStatusFilter] = useState<string>("ALL");
+
+  // Open the new-job dialog with a property pre-filled when arriving from
+  // a customer profile via /jobs?newJobForProperty=<id>.
+  useEffect(() => {
+    const params = new URLSearchParams(search);
+    const raw = params.get("newJobForProperty");
+    const n = raw ? Number(raw) : NaN;
+    if (Number.isFinite(n) && n > 0) {
+      setInitialPropertyId(n);
+      setIsCreateOpen(true);
+      params.delete("newJobForProperty");
+      const qs = params.toString();
+      setLocation(`/jobs${qs ? `?${qs}` : ""}`, { replace: true });
+    }
+  }, [search, setLocation]);
 
   const allRows: Job[] = data?.jobs ?? [];
 
@@ -100,7 +121,11 @@ export function Jobs() {
         </div>
         <JobFormDialog
           isOpen={isCreateOpen}
-          setIsOpen={setIsCreateOpen}
+          setIsOpen={(v) => {
+            setIsCreateOpen(v);
+            if (!v) setInitialPropertyId(null);
+          }}
+          initialPropertyId={initialPropertyId}
           trigger={
             <Button>
               <Plus className="mr-2 h-4 w-4" />
@@ -253,6 +278,7 @@ function JobFormDialog({
   trigger,
   isOpen: controlledIsOpen,
   setIsOpen: controlledSetIsOpen,
+  initialPropertyId,
 }: {
   job?: {
     id: number;
@@ -267,6 +293,7 @@ function JobFormDialog({
   trigger?: React.ReactNode;
   isOpen?: boolean;
   setIsOpen?: (v: boolean) => void;
+  initialPropertyId?: number | null;
 }) {
   const [internalIsOpen, setInternalIsOpen] = useState(false);
   const isOpen =
@@ -279,7 +306,9 @@ function JobFormDialog({
   const updateMutation = useUpdateJob();
 
   const [formData, setFormData] = useState({
-    propertyId: job?.propertyId?.toString() || "",
+    propertyId:
+      job?.propertyId?.toString() ||
+      (initialPropertyId != null ? String(initialPropertyId) : ""),
     crewId: job?.crewId?.toString() || "",
     status: job?.status || "SCHEDULED",
     scheduledFor: job?.scheduledFor
@@ -291,6 +320,18 @@ function JobFormDialog({
     totalDollars: job ? (job.totalCents / 100).toString() : "0",
     notes: job?.notes || "",
   });
+
+  // If the dialog was opened with a pre-selected property (e.g. clicking
+  // "Add job at this property" from a customer profile), seed the field.
+  useEffect(() => {
+    if (!job && isOpen && initialPropertyId != null) {
+      setFormData((prev) =>
+        prev.propertyId === String(initialPropertyId)
+          ? prev
+          : { ...prev, propertyId: String(initialPropertyId) },
+      );
+    }
+  }, [isOpen, initialPropertyId, job]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();

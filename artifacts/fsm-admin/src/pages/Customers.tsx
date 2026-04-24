@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link } from "wouter";
+import { useLocation } from "wouter";
 import { useListCustomers, useCreateCustomer, useUpdateCustomer, useDeleteCustomer, getListCustomersQueryKey, useListEmployees, type Customer } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -65,25 +65,7 @@ export function Customers() {
             </TableHeader>
             <TableBody>
               {rows.map((c) => (
-                <TableRow key={c.id} className="text-sm">
-                  <TableCell className="font-medium">
-                    <Link
-                      href={`/customers/${c.id}`}
-                      className="text-primary underline-offset-4 hover:underline"
-                    >
-                      {c.fullName}
-                    </Link>
-                  </TableCell>
-                  <TableCell className="font-mono text-xs">{c.email || "—"}</TableCell>
-                  <TableCell className="font-mono text-xs">{c.phone || "—"}</TableCell>
-                  <TableCell className="text-muted-foreground">{c.billingAddress || "—"}</TableCell>
-                  <TableCell>
-                    <div className="flex items-center justify-end gap-1">
-                      <CustomerFormDialog customer={c} trigger={<Button variant="ghost" size="icon" className="h-8 w-8"><Edit className="h-4 w-4" /></Button>} />
-                      <DeleteCustomer id={c.id} />
-                    </div>
-                  </TableCell>
-                </TableRow>
+                <CustomerRow key={c.id} customer={c} />
               ))}
             </TableBody>
           </Table>
@@ -91,6 +73,41 @@ export function Customers() {
         <Pager state={state} totalPages={totalPages} total={total} />
       </div>
     </div>
+  );
+}
+
+// Whole-row click navigates to the customer profile, while inline action
+// buttons (edit, delete) stop propagation so they don't double-fire.
+function CustomerRow({ customer: c }: { customer: Customer }) {
+  const [, setLocation] = useLocation();
+  return (
+    <TableRow
+      className="cursor-pointer text-sm transition-colors hover:bg-muted/40"
+      onClick={() => setLocation(`/customers/${c.id}`)}
+    >
+      <TableCell className="font-medium text-primary">{c.fullName}</TableCell>
+      <TableCell className="font-mono text-xs">{c.email || "—"}</TableCell>
+      <TableCell className="font-mono text-xs">{c.phone || "—"}</TableCell>
+      <TableCell className="text-muted-foreground">
+        {c.billingAddress || "—"}
+      </TableCell>
+      <TableCell>
+        <div
+          className="flex items-center justify-end gap-1"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <CustomerFormDialog
+            customer={c}
+            trigger={
+              <Button variant="ghost" size="icon" className="h-8 w-8">
+                <Edit className="h-4 w-4" />
+              </Button>
+            }
+          />
+          <DeleteCustomer id={c.id} />
+        </div>
+      </TableCell>
+    </TableRow>
   );
 }
 

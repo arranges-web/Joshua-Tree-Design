@@ -111,6 +111,13 @@ export const GetCustomerProfileResponse = zod.object({
     ownerUserId: zod.number(),
     createdAt: zod.coerce.date(),
   }),
+  owner: zod
+    .object({
+      id: zod.number(),
+      fullName: zod.string(),
+      email: zod.string(),
+    })
+    .nullable(),
   properties: zod.array(
     zod.object({
       id: zod.number(),
@@ -191,6 +198,16 @@ export const GetCustomerProfileResponse = zod.object({
       propertyAddress: zod.string().nullish(),
     }),
   ),
+  crews: zod
+    .array(
+      zod.object({
+        id: zod.number(),
+        name: zod.string(),
+      }),
+    )
+    .describe(
+      "Crews referenced by any job in this profile, for client-side name lookup.",
+    ),
   totals: zod.object({
     lifetimeRevenueCents: zod.number(),
     openQuoteCents: zod.number(),

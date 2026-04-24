@@ -5,9 +5,11 @@ import {
   customersTable,
   propertiesTable,
   jobsTable,
+  crewsTable,
   quotesTable,
   invoicesTable,
   serviceRequestsTable,
+  usersTable,
 } from "@workspace/db";
 import {
   CreateCustomerBody,
@@ -64,6 +66,21 @@ router.get(
       return;
     }
 
+    // Owner rep — sales rep this customer is assigned to.
+    const owner = customer.ownerUserId
+      ? (
+          await db
+            .select({
+              id: usersTable.id,
+              fullName: usersTable.fullName,
+              email: usersTable.email,
+            })
+            .from(usersTable)
+            .where(eq(usersTable.id, customer.ownerUserId))
+            .limit(1)
+        )[0] ?? null
+      : null;
+
     const properties = await db
       .select()
       .from(propertiesTable)
@@ -72,20 +89,46 @@ router.get(
 
     const propIds = properties.map((p) => p.id);
 
+    // Pull jobs for any of this customer's properties. Sort upcoming
+    // soonest-first by scheduledFor; past most-recent-first by completedAt
+    // (falling back to createdAt when those columns are null).
     const jobs = propIds.length
       ? await db
           .select()
           .from(jobsTable)
           .where(inArray(jobsTable.propertyId, propIds))
-          .orderBy(desc(jobsTable.createdAt))
       : [];
 
-    const upcoming = jobs.filter(
-      (j) => j.status === "SCHEDULED" || j.status === "IN_PROGRESS",
+    const upcoming = jobs
+      .filter((j) => j.status === "SCHEDULED" || j.status === "IN_PROGRESS")
+      .sort((a, b) => {
+        const ta = a.scheduledFor ? new Date(a.scheduledFor).getTime() : Infinity;
+        const tb = b.scheduledFor ? new Date(b.scheduledFor).getTime() : Infinity;
+        return ta - tb;
+      });
+    const past = jobs
+      .filter((j) => j.status === "COMPLETE" || j.status === "CANCELLED")
+      .sort((a, b) => {
+        const ta = a.completedAt
+          ? new Date(a.completedAt).getTime()
+          : new Date(a.createdAt).getTime();
+        const tb = b.completedAt
+          ? new Date(b.completedAt).getTime()
+          : new Date(b.createdAt).getTime();
+        return tb - ta;
+      });
+
+    // Crew lookup so the UI can render crew names alongside each job
+    // without making a second list-crews call.
+    const crewIds = Array.from(
+      new Set(jobs.map((j) => j.crewId).filter((c): c is number => c != null)),
     );
-    const past = jobs.filter(
-      (j) => j.status === "COMPLETE" || j.status === "CANCELLED",
-    );
+    const crews = crewIds.length
+      ? await db
+          .select({ id: crewsTable.id, name: crewsTable.name })
+          .from(crewsTable)
+          .where(inArray(crewsTable.id, crewIds))
+      : [];
 
     const quotes = await db
       .select()
@@ -122,11 +165,13 @@ router.get(
 
     res.json({
       customer: shapeCustomerForRole(customer, user.role),
+      owner,
       properties,
       jobs: { upcoming, past },
       quotes,
       invoices,
       leads,
+      crews,
       totals: {
         lifetimeRevenueCents,
         openQuoteCents,

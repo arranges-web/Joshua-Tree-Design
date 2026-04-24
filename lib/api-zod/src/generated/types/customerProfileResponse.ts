@@ -6,7 +6,9 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { Customer } from "./customer";
+import type { CustomerProfileResponseCrewsItem } from "./customerProfileResponseCrewsItem";
 import type { CustomerProfileResponseJobs } from "./customerProfileResponseJobs";
+import type { CustomerProfileResponseOwner } from "./customerProfileResponseOwner";
 import type { CustomerProfileResponseTotals } from "./customerProfileResponseTotals";
 import type { Invoice } from "./invoice";
 import type { Lead } from "./lead";
@@ -15,10 +17,13 @@ import type { Quote } from "./quote";
 
 export interface CustomerProfileResponse {
   customer: Customer;
+  owner: CustomerProfileResponseOwner;
   properties: Property[];
   jobs: CustomerProfileResponseJobs;
   quotes: Quote[];
   invoices: Invoice[];
   leads: Lead[];
+  /** Crews referenced by any job in this profile, for client-side name lookup. */
+  crews: CustomerProfileResponseCrewsItem[];
   totals: CustomerProfileResponseTotals;
 }

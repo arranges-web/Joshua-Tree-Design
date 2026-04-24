@@ -4,9 +4,6 @@ import {
   useGetCustomerProfile,
   useConvertLeadToQuote,
   useUpdateLead,
-  getGetCustomerProfileQueryKey,
-  getListLeadsQueryKey,
-  getListQuotesQueryKey,
   type Lead,
   type Job,
   type Quote,
@@ -38,6 +35,8 @@ import {
   ArrowRight,
   Trees,
   Wand2,
+  Plus,
+  UserCircle,
 } from "lucide-react";
 import { StatusBadge } from "@/lib/data-table";
 
@@ -72,13 +71,18 @@ export function CustomerProfile() {
   const id = Number(params.id);
   const { data, isLoading, error } = useGetCustomerProfile(id);
 
-  // Hooks must run on every render (no conditionals) — derive the property
-  // map up front and let downstream callers handle the empty case.
+  // Hooks must run on every render — derive lookups up front so the
+  // early-return branches below don't change hook order.
   const propertyMap = useMemo(() => {
     const m = new Map<number, Property>();
     for (const p of data?.properties ?? []) m.set(p.id, p);
     return m;
   }, [data?.properties]);
+  const crewMap = useMemo(() => {
+    const m = new Map<number, string>();
+    for (const c of data?.crews ?? []) m.set(c.id, c.name);
+    return m;
+  }, [data?.crews]);
 
   if (isLoading) {
     return (
@@ -111,7 +115,8 @@ export function CustomerProfile() {
     );
   }
 
-  const { customer, properties, jobs, quotes, invoices, leads, totals } = data;
+  const { customer, owner, properties, jobs, quotes, invoices, leads, totals } =
+    data;
 
   return (
     <div className="space-y-6">
@@ -131,16 +136,22 @@ export function CustomerProfile() {
           <h1 className="font-serif text-3xl">{customer.fullName}</h1>
           <div className="mt-2 flex flex-wrap items-center gap-x-5 gap-y-1 text-sm text-muted-foreground">
             {customer.email && (
-              <span className="inline-flex items-center gap-1.5">
+              <a
+                href={`mailto:${customer.email}`}
+                className="inline-flex items-center gap-1.5 underline-offset-4 hover:text-foreground hover:underline"
+              >
                 <Mail className="h-3.5 w-3.5" />
                 <span className="font-mono text-xs">{customer.email}</span>
-              </span>
+              </a>
             )}
             {customer.phone && (
-              <span className="inline-flex items-center gap-1.5">
+              <a
+                href={`tel:${customer.phone.replace(/[^+\d]/g, "")}`}
+                className="inline-flex items-center gap-1.5 underline-offset-4 hover:text-foreground hover:underline"
+              >
                 <Phone className="h-3.5 w-3.5" />
                 <span className="font-mono text-xs">{customer.phone}</span>
-              </span>
+              </a>
             )}
             {customer.billingAddress && (
               <span className="inline-flex items-center gap-1.5">
@@ -148,6 +159,15 @@ export function CustomerProfile() {
                 <span>{customer.billingAddress}</span>
               </span>
             )}
+            <span className="inline-flex items-center gap-1.5">
+              <UserCircle className="h-3.5 w-3.5" />
+              <span>
+                Owner rep:{" "}
+                <span className="font-medium text-foreground">
+                  {owner ? owner.fullName : "Unassigned"}
+                </span>
+              </span>
+            </span>
           </div>
         </div>
       </div>
@@ -195,6 +215,7 @@ export function CustomerProfile() {
               upcoming={jobs.upcoming.slice(0, 3)}
               past={jobs.past.slice(0, 3)}
               propertyMap={propertyMap}
+              crewMap={crewMap}
               compact
             />
           </div>
@@ -210,6 +231,7 @@ export function CustomerProfile() {
             upcoming={jobs.upcoming}
             past={jobs.past}
             propertyMap={propertyMap}
+            crewMap={crewMap}
           />
         </TabsContent>
 
@@ -218,7 +240,7 @@ export function CustomerProfile() {
         </TabsContent>
 
         <TabsContent value="leads" className="mt-4">
-          <LeadsForCustomer customerId={customer.id} leads={leads} />
+          <LeadsForCustomer leads={leads} />
         </TabsContent>
       </Tabs>
     </div>
@@ -259,6 +281,7 @@ function PropertyList({
   properties: Property[];
   compact?: boolean;
 }) {
+  const [, setLocation] = useLocation();
   return (
     <Card>
       <CardHeader className="pb-2">
@@ -279,15 +302,27 @@ function PropertyList({
                 key={p.id}
                 className="flex items-start justify-between gap-3 py-2.5 text-sm"
               >
-                <div>
+                <div className="min-w-0">
                   <div className="font-medium">{p.address}</div>
                   <div className="text-xs text-muted-foreground">
                     {p.city}, {p.zip}
                   </div>
                 </div>
-                <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
-                  #{p.id}
-                </span>
+                <div className="flex shrink-0 items-center gap-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() =>
+                      setLocation(`/jobs?newJobForProperty=${p.id}`)
+                    }
+                  >
+                    <Plus className="mr-1 h-3.5 w-3.5" />
+                    Add job
+                  </Button>
+                  <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+                    #{p.id}
+                  </span>
+                </div>
               </li>
             ))}
           </ul>
@@ -301,26 +336,36 @@ function JobsList({
   upcoming,
   past,
   propertyMap,
+  crewMap,
   compact,
 }: {
   upcoming: Job[];
   past: Job[];
   propertyMap: Map<number, Property>;
+  crewMap: Map<number, string>;
   compact?: boolean;
 }) {
   const renderRow = (j: Job) => {
     const prop = propertyMap.get(j.propertyId);
+    const crewName =
+      j.crewId != null ? crewMap.get(j.crewId) ?? `Crew #${j.crewId}` : null;
     return (
       <li
         key={j.id}
         className="flex items-start justify-between gap-3 py-2.5 text-sm"
       >
         <div className="min-w-0">
-          <div className="truncate font-medium">
+          <Link
+            href="/jobs"
+            className="block truncate font-medium text-primary underline-offset-4 hover:underline"
+          >
+            Job #{j.id} ·{" "}
             {prop ? prop.address : `Property #${j.propertyId}`}
-          </div>
+          </Link>
           <div className="truncate text-xs text-muted-foreground">
-            {j.notes || "No notes"} · {formatDate(j.scheduledFor ?? j.createdAt)}
+            {crewName ? `${crewName} · ` : ""}
+            {formatDate(j.scheduledFor ?? j.createdAt)}
+            {j.notes ? ` · ${j.notes}` : ""}
           </div>
         </div>
         <div className="flex shrink-0 flex-col items-end gap-1">
@@ -470,13 +515,7 @@ function InvoicesList({
   );
 }
 
-function LeadsForCustomer({
-  customerId: _customerId,
-  leads,
-}: {
-  customerId: number;
-  leads: Lead[];
-}) {
+function LeadsForCustomer({ leads }: { leads: Lead[] }) {
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const [, setLocation] = useLocation();
@@ -487,11 +526,11 @@ function LeadsForCustomer({
     convertMutation.mutate(
       { id: lead.id },
       {
-        onSuccess: (data) => {
+        onSuccess: (resp) => {
           queryClient.invalidateQueries();
           toast({
             title: "Draft quote created",
-            description: `Quote #${data.quote.id} is ready to fill in.`,
+            description: `Quote #${resp.quote.id} is ready to fill in.`,
           });
           setLocation(`/quotes`);
         },
@@ -604,8 +643,3 @@ function LeadsForCustomer({
     </Card>
   );
 }
-
-// Reference unused imports cleanly so TS doesn't strip them in some builds.
-void getGetCustomerProfileQueryKey;
-void getListLeadsQueryKey;
-void getListQuotesQueryKey;
