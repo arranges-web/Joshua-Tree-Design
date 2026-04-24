@@ -278,7 +278,7 @@ export async function populateData(): Promise<void> {
     { propertyId: quintP1.id,  crewId: beta.id,   status: "SCHEDULED",   scheduledFor: daysFromNow(12), totalCents: 95_000,  notes: "Cypress crown raising — 4 ft clearance" },
     { propertyId: rachelP1.id, crewId: gamma.id,  status: "SCHEDULED",   scheduledFor: daysFromNow(14), totalCents: 75_000,  notes: "Palm trimming, hurricane prep" },
     { propertyId: derekP1.id,  crewId: alpha.id,  status: "SCHEDULED",   scheduledFor: daysFromNow(18), totalCents: 340_000, notes: "Mangrove trim — DEP permit active" },
-    { propertyId: hankP2.id,   crewId: gamma.id,  status: "SCHEDULED",   scheduledFor: daysFromNow(21), totalCents: 115_000, notes: "Laurel oak limb removal — over fence line" },
+    { propertyId: harrietP1.id, crewId: gamma.id,  status: "SCHEDULED",   scheduledFor: daysFromNow(21), totalCents: 115_000, notes: "Laurel oak limb removal — over fence line" },
     // IN_PROGRESS (today / active)
     { propertyId: lisaP2.id,   crewId: beta.id,   status: "IN_PROGRESS", scheduledFor: daysFromNow(0),  totalCents: 210_000, notes: "Storm cleanup — 4 downed limbs over pool" },
     { propertyId: mayaP2.id,   crewId: gamma.id,  status: "IN_PROGRESS", scheduledFor: daysFromNow(0),  totalCents: 165_000, notes: "Crane-assisted removal — 70 ft Laurel oak" },
