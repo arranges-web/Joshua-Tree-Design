@@ -104,15 +104,18 @@ router.get(
   requireAuth,
   requireSection("admin.permissions", "view"),
   async (_req, res) => {
-    const dbRows = await db
-      .select({
-        roleKey: rolesTable.key,
-        sectionKey: sectionPermissionsTable.sectionKey,
-        canView: sectionPermissionsTable.canView,
-        canEdit: sectionPermissionsTable.canEdit,
-      })
-      .from(sectionPermissionsTable)
-      .innerJoin(rolesTable, eq(sectionPermissionsTable.roleId, rolesTable.id));
+    const [roleRows, dbRows] = await Promise.all([
+      db.select().from(rolesTable),
+      db
+        .select({
+          roleKey: rolesTable.key,
+          sectionKey: sectionPermissionsTable.sectionKey,
+          canView: sectionPermissionsTable.canView,
+          canEdit: sectionPermissionsTable.canEdit,
+        })
+        .from(sectionPermissionsTable)
+        .innerJoin(rolesTable, eq(sectionPermissionsTable.roleId, rolesTable.id)),
+    ]);
 
     const overrides = new Map<string, { canView: boolean; canEdit: boolean }>();
     for (const r of dbRows) {
@@ -127,6 +130,7 @@ router.get(
       sectionKey: string;
       canView: boolean;
       canEdit: boolean;
+      isOverride: boolean;
     }> = [];
     for (const role of ROLE_KEYS) {
       for (const section of SECTION_KEYS) {
@@ -137,11 +141,17 @@ router.get(
           sectionKey: section,
           canView: o ? o.canView : def.canView,
           canEdit: o ? o.canEdit : def.canEdit,
+          isOverride: !!o,
         });
       }
     }
+
+    const orderedRoles = ROLE_KEYS.map((key) =>
+      roleRows.find((r) => r.key === key),
+    ).filter(Boolean);
+
     res.json({
-      roles: ROLE_KEYS,
+      roles: orderedRoles,
       sections: SECTION_KEYS,
       cells,
     });

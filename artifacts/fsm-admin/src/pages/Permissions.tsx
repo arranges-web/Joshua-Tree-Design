@@ -1,45 +1,198 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import {
   useGetPermissionMatrix,
   useUpdateSectionPermission,
   getGetPermissionMatrixQueryKey,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
-import { Eye, Pencil, ShieldCheck, Ban } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Eye, Pencil, Ban, ShieldCheck, CheckCheck } from "lucide-react";
+import { cn } from "@/lib/utils";
 
-function formatLabel(key: string | undefined | null) {
-  if (!key) return "";
-  return key
-    .split(/[._-]/)
-    .map((p) => p.charAt(0).toUpperCase() + p.slice(1).toLowerCase())
-    .join(" ");
+type AccessLevel = "none" | "view" | "edit";
+
+function toAccessLevel(canView: boolean, canEdit: boolean): AccessLevel {
+  if (canEdit) return "edit";
+  if (canView) return "view";
+  return "none";
 }
 
-function sectionGroupLabel(key: string | undefined | null) {
-  if (!key) return "Other";
-  const prefix = key.split(".")[0];
-  const map: Record<string, string> = {
-    dashboard: "Dashboard",
-    customers: "Customers",
-    jobs: "Jobs",
-    quotes: "Quotes",
-    invoices: "Invoices",
-    fleet: "Fleet & Shop",
-    admin: "People & Access",
-    field: "Field Crew",
-    sales: "Sales",
-    reports: "Reports",
-  };
-  return map[prefix] ?? formatLabel(prefix);
-}
-
-interface CellState {
+function fromAccessLevel(level: AccessLevel): {
   canView: boolean;
   canEdit: boolean;
+} {
+  if (level === "edit") return { canView: true, canEdit: true };
+  if (level === "view") return { canView: true, canEdit: false };
+  return { canView: false, canEdit: false };
+}
+
+function nextLevel(current: AccessLevel): AccessLevel {
+  if (current === "none") return "view";
+  if (current === "view") return "edit";
+  return "none";
+}
+
+const SECTION_META: Record<
+  string,
+  { label: string; description: string; group: string }
+> = {
+  "dashboard.global": {
+    label: "Dashboard",
+    description: "Company-wide KPI overview and activity feed",
+    group: "General",
+  },
+  customers: {
+    label: "Customers",
+    description: "Customer profiles, properties, and contact history",
+    group: "General",
+  },
+  jobs: {
+    label: "Jobs",
+    description: "Work orders from scheduling through completion",
+    group: "General",
+  },
+  quotes: {
+    label: "Quotes",
+    description: "Price estimates and proposal management",
+    group: "Sales",
+  },
+  invoices: {
+    label: "Invoices",
+    description: "Billing, payments, and accounts receivable",
+    group: "Sales",
+  },
+  "sales.calendar": {
+    label: "Sales Calendar",
+    description: "Appointments, follow-ups, and sales scheduling",
+    group: "Sales",
+  },
+  leads: {
+    label: "Leads",
+    description: "Inbound inquiries and new prospect pipeline",
+    group: "Sales",
+  },
+  "reports.financials": {
+    label: "Financial Reports",
+    description: "Revenue, margin, and financial performance data",
+    group: "Sales",
+  },
+  "fleet.trucks": {
+    label: "Trucks",
+    description: "Truck fleet roster, status, and assignments",
+    group: "Fleet & Shop",
+  },
+  "fleet.equipment": {
+    label: "Equipment",
+    description: "Tools and equipment inventory",
+    group: "Fleet & Shop",
+  },
+  "fleet.maintenance": {
+    label: "Maintenance",
+    description: "Service records and scheduled maintenance",
+    group: "Fleet & Shop",
+  },
+  "field.job_site": {
+    label: "Job Site",
+    description: "On-site checklists and work instructions",
+    group: "Field Crew",
+  },
+  "field.photos": {
+    label: "Site Photos",
+    description: "Before/after and progress photo capture",
+    group: "Field Crew",
+  },
+  "field.safety": {
+    label: "Safety",
+    description: "Hazard reports and safety compliance forms",
+    group: "Field Crew",
+  },
+  "admin.users": {
+    label: "Users",
+    description: "Employee accounts and role assignments",
+    group: "People & Access",
+  },
+  "admin.permissions": {
+    label: "Permissions",
+    description: "Role-based access control configuration",
+    group: "People & Access",
+  },
+};
+
+const GROUP_ORDER = [
+  "General",
+  "Sales",
+  "Fleet & Shop",
+  "Field Crew",
+  "People & Access",
+];
+
+function sectionMeta(key: string) {
+  return (
+    SECTION_META[key] ?? {
+      label: key,
+      description: "",
+      group: "Other",
+    }
+  );
+}
+
+const ACCESS_CONFIG = {
+  none: {
+    label: "No Access",
+    icon: Ban,
+    className:
+      "bg-muted text-muted-foreground hover:bg-muted/60",
+  },
+  view: {
+    label: "View",
+    icon: Eye,
+    className:
+      "bg-sky-100 text-sky-700 hover:bg-sky-200 dark:bg-sky-900/40 dark:text-sky-300",
+  },
+  edit: {
+    label: "Edit",
+    icon: Pencil,
+    className:
+      "bg-emerald-100 text-emerald-700 hover:bg-emerald-200 dark:bg-emerald-900/40 dark:text-emerald-300",
+  },
+} as const;
+
+function AccessBadge({
+  level,
+  onClick,
+  disabled,
+  isOverride,
+}: {
+  level: AccessLevel;
+  onClick: () => void;
+  disabled: boolean;
+  isOverride: boolean;
+}) {
+  const config = ACCESS_CONFIG[level];
+  const Icon = config.icon;
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={onClick}
+      className={cn(
+        "inline-flex cursor-pointer items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-60",
+        config.className,
+        isOverride && "ring-1 ring-offset-1 ring-amber-400 dark:ring-amber-500",
+      )}
+      title={
+        isOverride
+          ? "Custom override · click to cycle: No Access → View → Edit"
+          : "Click to cycle: No Access → View → Edit"
+      }
+    >
+      <Icon className="h-3 w-3" />
+      {config.label}
+    </button>
+  );
 }
 
 export function Permissions() {
@@ -47,107 +200,116 @@ export function Permissions() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const updateMutation = useUpdateSectionPermission();
-
-  const apply = (
-    roleKey: string,
-    sectionKey: string,
-    next: CellState,
-  ) => {
-    updateMutation.mutate(
-      { data: { roleKey, sectionKey, ...next } },
-      {
-        onSuccess: () => {
-          queryClient.invalidateQueries({
-            queryKey: getGetPermissionMatrixQueryKey(),
-          });
-        },
-        onError: () =>
-          toast({
-            title: "Couldn't save change",
-            variant: "destructive",
-          }),
-      },
-    );
-  };
+  const [saved, setSaved] = useState(false);
 
   const roles = useMemo(
     () =>
       (data?.roles ?? [])
         .filter((r) => r?.key)
-        .map((r) => ({
-          key: r.key,
-          label: r.label || formatLabel(r.key),
-        })),
+        .map((r) => ({ id: r.id, key: r.key, label: r.label })),
     [data?.roles],
   );
+
   const sections = (data?.sections ?? []).filter(Boolean);
   const cells = data?.cells ?? [];
 
   const cellMap = useMemo(() => {
-    const m = new Map<string, CellState>();
+    const m = new Map<
+      string,
+      { canView: boolean; canEdit: boolean; isOverride: boolean }
+    >();
     for (const c of cells) {
       m.set(`${c.roleKey}::${c.sectionKey}`, {
         canView: c.canView,
         canEdit: c.canEdit,
+        isOverride: c.isOverride,
       });
     }
     return m;
   }, [cells]);
 
-  const getCell = (roleKey: string, sectionKey: string): CellState =>
+  const getCell = (roleKey: string, sectionKey: string) =>
     cellMap.get(`${roleKey}::${sectionKey}`) ?? {
       canView: false,
       canEdit: false,
+      isOverride: false,
     };
+
+  const apply = (
+    roleKey: string,
+    sectionKey: string,
+    canView: boolean,
+    canEdit: boolean,
+  ) => {
+    updateMutation.mutate(
+      { data: { roleKey, sectionKey, canView, canEdit } },
+      {
+        onSuccess: () => {
+          queryClient.invalidateQueries({
+            queryKey: getGetPermissionMatrixQueryKey(),
+          });
+          setSaved(true);
+          setTimeout(() => setSaved(false), 2000);
+        },
+        onError: () =>
+          toast({ title: "Couldn't save change", variant: "destructive" }),
+      },
+    );
+  };
+
+  const cycleCell = (roleKey: string, sectionKey: string) => {
+    const cell = getCell(roleKey, sectionKey);
+    const next = fromAccessLevel(nextLevel(toAccessLevel(cell.canView, cell.canEdit)));
+    apply(roleKey, sectionKey, next.canView, next.canEdit);
+  };
+
+  const bulkApply = (roleKey: string, level: AccessLevel) => {
+    const { canView, canEdit } = fromAccessLevel(level);
+    for (const s of sections) {
+      apply(roleKey, s, canView, canEdit);
+    }
+  };
 
   const grouped = useMemo(() => {
     const g = new Map<string, string[]>();
     for (const s of sections) {
-      const label = sectionGroupLabel(s);
-      if (!g.has(label)) g.set(label, []);
-      g.get(label)!.push(s);
+      const group = sectionMeta(s).group;
+      if (!g.has(group)) g.set(group, []);
+      g.get(group)!.push(s);
     }
-    return Array.from(g.entries());
+    const ordered: Array<[string, string[]]> = [];
+    for (const grp of GROUP_ORDER) {
+      if (g.has(grp)) ordered.push([grp, g.get(grp)!]);
+    }
+    for (const [k, v] of g) {
+      if (!GROUP_ORDER.includes(k)) ordered.push([k, v]);
+    }
+    return ordered;
   }, [sections]);
-
-  const setRow = (sectionKey: string, mode: "view" | "edit" | "clear") => {
-    for (const role of roles) {
-      const next: CellState =
-        mode === "view"
-          ? { canView: true, canEdit: false }
-          : mode === "edit"
-            ? { canView: true, canEdit: true }
-            : { canView: false, canEdit: false };
-      apply(role.key, sectionKey, next);
-    }
-  };
-
-  const setColumn = (roleKey: string, mode: "view" | "edit" | "clear") => {
-    for (const s of sections) {
-      const next: CellState =
-        mode === "view"
-          ? { canView: true, canEdit: false }
-          : mode === "edit"
-            ? { canView: true, canEdit: true }
-            : { canView: false, canEdit: false };
-      apply(roleKey, s, next);
-    }
-  };
 
   if (isLoading) {
     return (
       <div className="space-y-6">
         <h1 className="font-serif text-3xl">Permissions</h1>
-        <div className="space-y-2">
-          {Array.from({ length: 8 }).map((_, i) => (
-            <Skeleton key={i} className="h-12 w-full" />
+        <div className="space-y-3">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <Skeleton key={i} className="h-14 w-full rounded-lg" />
           ))}
         </div>
       </div>
     );
   }
 
-  if (!data) return <div>Failed to load matrix.</div>;
+  if (!data || roles.length === 0) {
+    return (
+      <div className="space-y-4">
+        <h1 className="font-serif text-3xl">Permissions</h1>
+        <p className="text-sm text-destructive">
+          Failed to load permissions matrix. Check API connection.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -156,209 +318,136 @@ export function Permissions() {
           <div className="text-[10px] font-mono uppercase tracking-[0.18em] text-muted-foreground">
             Access Control
           </div>
-          <h1 className="font-serif text-3xl">Permissions matrix</h1>
-          <p className="text-sm text-muted-foreground">
-            Click <Eye className="inline h-3.5 w-3.5" /> to grant view, or{" "}
-            <Pencil className="inline h-3.5 w-3.5" /> for edit. Use the row /
-            column buttons for bulk changes.
+          <h1 className="font-serif text-3xl">Permissions</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Select a role to see and adjust what it can access. Click any badge
+            to cycle through No Access → View → Edit.
           </p>
         </div>
         <div className="flex items-center gap-2 rounded-md border bg-card px-3 py-2 text-xs">
-          <ShieldCheck className="h-4 w-4 text-primary" />
-          <span className="font-mono uppercase tracking-wider text-muted-foreground">
-            Auto-saves
-          </span>
+          {saved ? (
+            <>
+              <CheckCheck className="h-4 w-4 text-emerald-500" />
+              <span className="font-mono uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
+                Saved
+              </span>
+            </>
+          ) : (
+            <>
+              <ShieldCheck className="h-4 w-4 text-primary" />
+              <span className="font-mono uppercase tracking-wider text-muted-foreground">
+                Auto-saves
+              </span>
+            </>
+          )}
         </div>
       </div>
 
-      <div className="overflow-x-auto rounded-lg border bg-card shadow-sm">
-        <table className="w-full border-collapse text-sm">
-          <thead className="sticky top-0 z-10 bg-card">
-            <tr className="border-b">
-              <th className="sticky left-0 z-20 w-[280px] bg-card px-4 py-3 text-left font-medium">
-                Section
-              </th>
-              {roles.map((r) => (
-                <th
-                  key={r.key}
-                  className="min-w-[180px] border-l px-3 py-3 text-center"
-                >
-                  <div className="font-serif text-base">{r.label}</div>
-                  <div className="mt-1 flex items-center justify-center gap-1">
-                    <BulkBtn
-                      label="View all"
-                      icon={Eye}
-                      onClick={() => setColumn(r.key, "view")}
-                    />
-                    <BulkBtn
-                      label="Edit all"
-                      icon={Pencil}
-                      onClick={() => setColumn(r.key, "edit")}
-                      tone="accent"
-                    />
-                    <BulkBtn
-                      label="Clear"
-                      icon={Ban}
-                      onClick={() => setColumn(r.key, "clear")}
-                      tone="muted"
-                    />
-                  </div>
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {grouped.map(([groupLabel, groupSections]) => (
-              <RowGroup
-                key={groupLabel}
-                label={groupLabel}
-                roles={roles}
-                sections={groupSections}
-                getCell={getCell}
-                apply={apply}
-                setRow={setRow}
-                disabled={updateMutation.isPending}
-              />
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
-}
+      <Tabs defaultValue={roles[0]?.key} className="space-y-4">
+        <TabsList className="h-auto flex-wrap gap-1 bg-muted/50 p-1">
+          {roles.map((role) => (
+            <TabsTrigger
+              key={role.key}
+              value={role.key}
+              className="px-5 py-2 text-sm font-medium"
+            >
+              {role.label}
+            </TabsTrigger>
+          ))}
+        </TabsList>
 
-function BulkBtn({
-  label,
-  icon: Icon,
-  onClick,
-  tone = "primary",
-}: {
-  label: string;
-  icon: typeof Eye;
-  onClick: () => void;
-  tone?: "primary" | "accent" | "muted";
-}) {
-  const toneCls =
-    tone === "accent"
-      ? "hover:bg-accent hover:text-accent-foreground"
-      : tone === "muted"
-        ? "hover:bg-muted"
-        : "hover:bg-primary hover:text-primary-foreground";
-  return (
-    <Button
-      type="button"
-      size="sm"
-      variant="ghost"
-      title={label}
-      className={`h-6 px-1.5 text-[10px] font-mono uppercase tracking-wider text-muted-foreground ${toneCls}`}
-      onClick={onClick}
-    >
-      <Icon className="h-3 w-3" />
-    </Button>
-  );
-}
-
-function RowGroup({
-  label,
-  roles,
-  sections,
-  getCell,
-  apply,
-  setRow,
-  disabled,
-}: {
-  label: string;
-  roles: Array<{ key: string; label?: string | null }>;
-  sections: string[];
-  getCell: (r: string, s: string) => CellState;
-  apply: (r: string, s: string, n: CellState) => void;
-  setRow: (s: string, mode: "view" | "edit" | "clear") => void;
-  disabled: boolean;
-}) {
-  return (
-    <>
-      <tr className="bg-muted/40">
-        <td
-          colSpan={1 + roles.length}
-          className="px-4 py-2 font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground"
-        >
-          {label}
-        </td>
-      </tr>
-      {sections.map((section) => (
-        <tr key={section} className="border-t hover:bg-muted/30">
-          <td className="sticky left-0 z-10 bg-inherit px-4 py-2">
-            <div className="flex items-center justify-between gap-2">
-              <span className="font-medium">
-                {formatLabel(section.split(".").slice(1).join(".") || section)}
+        {roles.map((role) => (
+          <TabsContent key={role.key} value={role.key} className="space-y-4">
+            <div className="flex flex-wrap items-center gap-2 rounded-lg border bg-card px-4 py-3">
+              <span className="mr-1 text-xs font-medium text-muted-foreground">
+                Bulk set all sections:
               </span>
-              <div className="flex items-center gap-1">
-                <BulkBtn
-                  label="Grant view to all roles"
-                  icon={Eye}
-                  onClick={() => setRow(section, "view")}
-                />
-                <BulkBtn
-                  label="Grant edit to all roles"
-                  icon={Pencil}
-                  onClick={() => setRow(section, "edit")}
-                  tone="accent"
-                />
-                <BulkBtn
-                  label="Revoke from all roles"
-                  icon={Ban}
-                  onClick={() => setRow(section, "clear")}
-                  tone="muted"
-                />
-              </div>
-            </div>
-          </td>
-          {roles.map((role) => {
-            const cell = getCell(role.key, section);
-            return (
-              <td
-                key={`${section}-${role.key}`}
-                className="border-l px-3 py-2 text-center"
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 gap-1.5 px-3 text-xs"
+                disabled={updateMutation.isPending}
+                onClick={() => bulkApply(role.key, "edit")}
               >
-                <div className="flex items-center justify-center gap-3">
-                  <label
-                    className="flex cursor-pointer items-center gap-1"
-                    title="View"
-                  >
-                    <Checkbox
-                      checked={cell.canView}
-                      disabled={disabled}
-                      onCheckedChange={() =>
-                        apply(role.key, section, {
-                          canView: !cell.canView,
-                          canEdit: !cell.canView ? cell.canEdit : false,
-                        })
-                      }
-                    />
-                    <Eye className="h-3.5 w-3.5 text-muted-foreground" />
-                  </label>
-                  <label
-                    className="flex cursor-pointer items-center gap-1"
-                    title="Edit"
-                  >
-                    <Checkbox
-                      checked={cell.canEdit}
-                      disabled={disabled}
-                      onCheckedChange={() =>
-                        apply(role.key, section, {
-                          canView: !cell.canEdit ? true : cell.canView,
-                          canEdit: !cell.canEdit,
-                        })
-                      }
-                    />
-                    <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
-                  </label>
+                <Pencil className="h-3 w-3" />
+                Full Access
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 gap-1.5 px-3 text-xs"
+                disabled={updateMutation.isPending}
+                onClick={() => bulkApply(role.key, "view")}
+              >
+                <Eye className="h-3 w-3" />
+                View Only
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 gap-1.5 px-3 text-xs text-muted-foreground"
+                disabled={updateMutation.isPending}
+                onClick={() => bulkApply(role.key, "none")}
+              >
+                <Ban className="h-3 w-3" />
+                No Access
+              </Button>
+            </div>
+
+            <div className="space-y-4">
+              {grouped.map(([groupLabel, groupSections]) => (
+                <div
+                  key={groupLabel}
+                  className="overflow-hidden rounded-lg border bg-card shadow-sm"
+                >
+                  <div className="border-b bg-muted/40 px-4 py-2">
+                    <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+                      {groupLabel}
+                    </span>
+                  </div>
+                  <div className="divide-y">
+                    {groupSections.map((section) => {
+                      const meta = sectionMeta(section);
+                      const cell = getCell(role.key, section);
+                      const level = toAccessLevel(cell.canView, cell.canEdit);
+                      return (
+                        <div
+                          key={section}
+                          className="flex items-center justify-between gap-4 px-4 py-3 hover:bg-muted/20"
+                        >
+                          <div className="min-w-0">
+                            <div className="text-sm font-medium">
+                              {meta.label}
+                            </div>
+                            {meta.description && (
+                              <div className="mt-0.5 text-xs text-muted-foreground">
+                                {meta.description}
+                              </div>
+                            )}
+                          </div>
+                          <div className="shrink-0">
+                            <AccessBadge
+                              level={level}
+                              onClick={() => cycleCell(role.key, section)}
+                              disabled={updateMutation.isPending}
+                              isOverride={cell.isOverride}
+                            />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
-              </td>
-            );
-          })}
-        </tr>
-      ))}
-    </>
+              ))}
+            </div>
+
+            <div className="flex items-center gap-2 pt-1 text-[11px] text-muted-foreground">
+              <span className="inline-flex h-3 w-3 shrink-0 rounded-full bg-amber-50 ring-1 ring-amber-400 dark:bg-amber-900/20 dark:ring-amber-500" />
+              <span>Amber ring indicates a custom override from the role default.</span>
+            </div>
+          </TabsContent>
+        ))}
+      </Tabs>
+    </div>
   );
 }
