@@ -47,7 +47,51 @@ interface TwilioCreds {
 }
 
 async function loadTwilioCreds(): Promise<TwilioCreds | null> {
-  // 1. Raw env vars — easiest to detect, useful for local manual setup.
+  // 1. Replit Connectors API (REQUIRED PRIMARY PATH).
+  // Per the architectural constraint, Twilio is wired through Replit's
+  // managed connector flow — that's how the user provisions credentials
+  // from the Integrations panel. Resolved at request time so no token
+  // caching, per the integrations skill guidance.
+  const host = process.env["REPLIT_CONNECTORS_HOSTNAME"];
+  const identity = process.env["REPL_IDENTITY"] ?? process.env["WEB_REPL_RENEWAL"];
+  if (host && identity) {
+    try {
+      const url = `https://${host}/api/v2/connection?include_secrets=true&connector_names=twilio`;
+      const res = await fetch(url, {
+        headers: {
+          Accept: "application/json",
+          X_REPLIT_TOKEN: identity,
+        },
+      });
+      if (res.ok) {
+        const data = (await res.json()) as {
+          items?: Array<{ settings?: Record<string, unknown> }>;
+        };
+        const settings = data.items?.[0]?.settings ?? null;
+        if (settings) {
+          const accountSid =
+            (settings["account_sid"] as string | undefined) ??
+            (settings["accountSid"] as string | undefined);
+          const authToken =
+            (settings["auth_token"] as string | undefined) ??
+            (settings["authToken"] as string | undefined);
+          const fromNumber =
+            (settings["phone_number"] as string | undefined) ??
+            (settings["from_number"] as string | undefined) ??
+            (settings["fromNumber"] as string | undefined);
+          if (accountSid && authToken && fromNumber) {
+            return { accountSid, authToken, fromNumber };
+          }
+        }
+      }
+    } catch {
+      // fall through to the env-var escape hatch below
+    }
+  }
+
+  // 2. Raw env-var escape hatch — only used for local development /
+  // CI environments where the Replit connector isn't reachable. The
+  // connector path above is the production source of truth.
   const envSid = process.env["TWILIO_ACCOUNT_SID"];
   const envToken = process.env["TWILIO_AUTH_TOKEN"];
   const envFrom = process.env["TWILIO_PHONE_NUMBER"] ?? process.env["TWILIO_FROM"];
@@ -55,42 +99,7 @@ async function loadTwilioCreds(): Promise<TwilioCreds | null> {
     return { accountSid: envSid, authToken: envToken, fromNumber: envFrom };
   }
 
-  // 2. Replit Connectors API — the recommended Replit-managed flow.
-  // Resolved at request time so no token caching, per the integrations
-  // skill guidance.
-  const host = process.env["REPLIT_CONNECTORS_HOSTNAME"];
-  const identity = process.env["REPL_IDENTITY"] ?? process.env["WEB_REPL_RENEWAL"];
-  if (!host || !identity) return null;
-
-  try {
-    const url = `https://${host}/api/v2/connection?include_secrets=true&connector_names=twilio`;
-    const res = await fetch(url, {
-      headers: {
-        Accept: "application/json",
-        X_REPLIT_TOKEN: identity,
-      },
-    });
-    if (!res.ok) return null;
-    const data = (await res.json()) as {
-      items?: Array<{ settings?: Record<string, unknown> }>;
-    };
-    const settings = data.items?.[0]?.settings ?? null;
-    if (!settings) return null;
-    const accountSid =
-      (settings["account_sid"] as string | undefined) ??
-      (settings["accountSid"] as string | undefined);
-    const authToken =
-      (settings["auth_token"] as string | undefined) ??
-      (settings["authToken"] as string | undefined);
-    const fromNumber =
-      (settings["phone_number"] as string | undefined) ??
-      (settings["from_number"] as string | undefined) ??
-      (settings["fromNumber"] as string | undefined);
-    if (!accountSid || !authToken || !fromNumber) return null;
-    return { accountSid, authToken, fromNumber };
-  } catch {
-    return null;
-  }
+  return null;
 }
 
 async function postTwilioMessage(

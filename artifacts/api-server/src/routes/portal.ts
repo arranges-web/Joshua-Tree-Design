@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import rateLimit from "express-rate-limit";
-import { and, asc, desc, eq, gt, gte, inArray, isNull, lte } from "drizzle-orm";
+import { and, asc, desc, eq, gt, inArray, isNull } from "drizzle-orm";
 import { z } from "zod";
 import { createHash, randomInt } from "node:crypto";
 import {
@@ -40,11 +40,16 @@ function hashOtpCode(phoneE164: string, code: string): string {
 }
 
 // ─── Rate limiters ───────────────────────────────────────────────────────
-// Keyed by normalized E.164 phone (with an IP fallback when the body is
-// missing/unparseable). This is the primary defense against SMS-bombing
-// and credential-stuffing — IP-only limits are trivially bypassed by an
-// attacker rotating addresses.
-function phoneRateKey(req: { body?: unknown; ip?: string | undefined }): string {
+// OTP abuse is defended at TWO layers, both of which must pass:
+//   1. per-phone bucket — caps SMS sent / verify attempts against a single
+//      number (stops targeted credential-stuffing of one customer).
+//   2. per-IP bucket    — caps total OTP traffic from a single source
+//      (stops a single attacker from rotating phone numbers to
+//      SMS-bomb the platform).
+// IP-only limits are trivially bypassed by rotating addresses; phone-only
+// limits are trivially bypassed by rotating target numbers. Together they
+// close both holes.
+function phoneRateKey(req: { body?: unknown }): string | null {
   const body = req.body;
   const raw =
     body && typeof body === "object" && "phone" in body
@@ -52,27 +57,47 @@ function phoneRateKey(req: { body?: unknown; ip?: string | undefined }): string 
       : undefined;
   if (typeof raw === "string") {
     const e164 = normalizeToE164(raw);
-    if (e164) return `phone:${e164}`;
+    if (e164) return e164;
   }
-  return `ip:${req.ip ?? "unknown"}`;
+  return null;
 }
 
-// Aggressive on OTP request (sends real SMS / costs money), looser on
-// verify (legitimate users sometimes mistype).
-const otpRequestLimiter = rateLimit({
+// Per-phone limiters. Aggressive on OTP request (real SMS costs money),
+// looser on verify (legitimate users sometimes mistype).
+const otpRequestPhoneLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 5,
   standardHeaders: true,
   legacyHeaders: false,
-  keyGenerator: (req) => phoneRateKey(req),
+  keyGenerator: (req) => `phone:${phoneRateKey(req) ?? `ip:${req.ip ?? "unknown"}`}`,
   message: { error: "too_many_otp_requests" },
 });
-const otpVerifyLimiter = rateLimit({
+const otpVerifyPhoneLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 20,
   standardHeaders: true,
   legacyHeaders: false,
-  keyGenerator: (req) => phoneRateKey(req),
+  keyGenerator: (req) => `phone:${phoneRateKey(req) ?? `ip:${req.ip ?? "unknown"}`}`,
+  message: { error: "too_many_verify_attempts" },
+});
+
+// Per-IP ceilings — sized to allow a small office or shared NAT to use
+// the portal normally, but to stop a single source from cycling through
+// many phone numbers.
+const otpRequestIpLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => `ip:${req.ip ?? "unknown"}`,
+  message: { error: "too_many_otp_requests" },
+});
+const otpVerifyIpLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 50,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => `ip:${req.ip ?? "unknown"}`,
   message: { error: "too_many_verify_attempts" },
 });
 
@@ -81,7 +106,11 @@ const requestOtpSchema = z.object({
   phone: z.string().min(1).max(40),
 });
 
-router.post("/auth/request-otp", otpRequestLimiter, async (req, res) => {
+router.post(
+  "/auth/request-otp",
+  otpRequestIpLimiter,
+  otpRequestPhoneLimiter,
+  async (req, res) => {
   const parsed = requestOtpSchema.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: "invalid_phone" });
@@ -136,7 +165,11 @@ const verifyOtpSchema = z.object({
   code: z.string().regex(/^\d{6}$/),
 });
 
-router.post("/auth/verify-otp", otpVerifyLimiter, async (req, res) => {
+router.post(
+  "/auth/verify-otp",
+  otpVerifyIpLimiter,
+  otpVerifyPhoneLimiter,
+  async (req, res) => {
   const parsed = verifyOtpSchema.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: "invalid_request" });
@@ -285,7 +318,6 @@ router.get("/jobs", requirePortalAuth, async (req, res) => {
     .from(jobsTable)
     .where(inArray(jobsTable.propertyId, propIds));
 
-  const now = new Date();
   const upcomingRaw = allJobs.filter(
     (j) => j.status !== "COMPLETE" && j.status !== "CANCELLED",
   );
@@ -319,9 +351,6 @@ router.get("/jobs", requirePortalAuth, async (req, res) => {
     propertyAddress: propAddrById.get(j.propertyId) ?? null,
     crewName: j.crewId != null ? crewNameById.get(j.crewId) ?? null : null,
   });
-
-  // Avoid unused import warning.
-  void gte; void lte; void now;
 
   res.json({
     upcoming: upcomingRaw.map(decorate),
