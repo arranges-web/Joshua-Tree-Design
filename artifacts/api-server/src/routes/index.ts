@@ -8,6 +8,7 @@ import quotesRouter from "./quotes";
 import invoicesRouter from "./invoices";
 import fleetRouter from "./fleet";
 import adminRouter from "./admin";
+import leadsRouter from "./leads";
 
 const router: IRouter = Router();
 
@@ -20,5 +21,6 @@ router.use(quotesRouter);
 router.use(invoicesRouter);
 router.use(fleetRouter);
 router.use(adminRouter);
+router.use(leadsRouter);
 
 export default router;

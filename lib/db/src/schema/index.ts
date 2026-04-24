@@ -4,3 +4,4 @@ export * from "./jobs";
 export * from "./quotes";
 export * from "./fleet";
 export * from "./permissions";
+export * from "./service_requests";

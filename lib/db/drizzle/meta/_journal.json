@@ -15,6 +15,13 @@
       "when": 1776813368401,
       "tag": "0001_last_nebula",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1777003702590,
+      "tag": "0002_aberrant_wolf_cub",
+      "breakpoints": true
     }
   ]
 }

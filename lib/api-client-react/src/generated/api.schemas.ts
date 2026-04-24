@@ -353,7 +353,91 @@ export interface PermissionMatrixResponse {
   cells: PermissionMatrixCell[];
 }
 
+export interface Lead {
+  id: number;
+  customerId: number;
+  propertyId?: number | null;
+  service: string;
+  notes?: string | null;
+  preferredWindowStart?: string | null;
+  preferredWindowEnd?: string | null;
+  status: string;
+  source: string;
+  convertedQuoteId?: number | null;
+  createdAt: string;
+  customerName?: string | null;
+  propertyAddress?: string | null;
+}
+
+export interface LeadWriteBody {
+  customerId: number;
+  propertyId?: number | null;
+  service: string;
+  notes?: string | null;
+  preferredWindowStart?: string | null;
+  preferredWindowEnd?: string | null;
+  status?: string;
+  source?: string;
+}
+
+export interface LeadUpdateBody {
+  propertyId?: number | null;
+  service?: string;
+  notes?: string | null;
+  preferredWindowStart?: string | null;
+  preferredWindowEnd?: string | null;
+  status?: string;
+}
+
+export interface LeadResponse {
+  lead: Lead;
+}
+
+export interface LeadListResponse {
+  leads: Lead[];
+}
+
+export interface LeadConvertResponse {
+  lead: Lead;
+  quote: Quote;
+}
+
+export interface Property {
+  id: number;
+  customerId: number;
+  address: string;
+  city: string;
+  zip: string;
+  notes?: string | null;
+}
+
+export type CustomerProfileResponseJobs = {
+  upcoming: Job[];
+  past: Job[];
+};
+
+export type CustomerProfileResponseTotals = {
+  lifetimeRevenueCents: number;
+  openQuoteCents: number;
+  outstandingInvoiceCents: number;
+  openLeadCount: number;
+};
+
+export interface CustomerProfileResponse {
+  customer: Customer;
+  properties: Property[];
+  jobs: CustomerProfileResponseJobs;
+  quotes: Quote[];
+  invoices: Invoice[];
+  leads: Lead[];
+  totals: CustomerProfileResponseTotals;
+}
+
 /**
  * Error
  */
 export type ErrorResponse = ErrorBody;
+
+export type ListLeadsParams = {
+  status?: string;
+};

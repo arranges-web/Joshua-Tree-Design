@@ -15,6 +15,7 @@ import {
   equipmentTable,
   maintenanceLogsTable,
   sectionPermissionsTable,
+  serviceRequestsTable,
   ROLE_KEYS,
   DEPARTMENT_KEYS,
   SECTION_KEYS,
@@ -59,6 +60,7 @@ const DEFAULT_MATRIX: Record<RoleKey, Record<string, { canView: boolean; canEdit
     "field.safety": { canView: false, canEdit: false },
     "sales.calendar": { canView: true, canEdit: true },
     "reports.financials": { canView: false, canEdit: false },
+    leads: { canView: true, canEdit: true },
   },
   CREW_LEAD: {
     "dashboard.global": { canView: false, canEdit: false },
@@ -76,6 +78,7 @@ const DEFAULT_MATRIX: Record<RoleKey, Record<string, { canView: boolean; canEdit
     "field.safety": { canView: true, canEdit: true },
     "sales.calendar": { canView: false, canEdit: false },
     "reports.financials": { canView: false, canEdit: false },
+    leads: { canView: false, canEdit: false },
   },
   MECHANIC: {
     "dashboard.global": { canView: false, canEdit: false },
@@ -93,6 +96,7 @@ const DEFAULT_MATRIX: Record<RoleKey, Record<string, { canView: boolean; canEdit
     "field.safety": { canView: false, canEdit: false },
     "sales.calendar": { canView: false, canEdit: false },
     "reports.financials": { canView: false, canEdit: false },
+    leads: { canView: false, canEdit: false },
   },
 };
 
@@ -106,6 +110,7 @@ async function main() {
     maintenance_logs,
     equipment,
     trucks,
+    service_requests,
     quote_line_items,
     invoices,
     quotes,
@@ -258,6 +263,55 @@ async function main() {
     { truckId: insertedTrucks[2]!.id, kind: "INSPECTION", description: "Annual DOT inspection", performedByUserId: mech.id, costCents: 30000 },
     { equipmentId: insertedEquip[0]!.id, kind: "SCHEDULED", description: "Chain sharpened, bar replaced", performedByUserId: mech.id, costCents: 4500 },
     { equipmentId: insertedEquip[1]!.id, kind: "REPAIR", description: "Knife set replaced", performedByUserId: mech.id, costCents: 22000 },
+  ]);
+
+  // Service requests / leads (mix of statuses, including fresh NEW ones)
+  const now = Date.now();
+  await db.insert(serviceRequestsTable).values([
+    {
+      customerId: insertedCustomers[0]!.id,
+      propertyId: insertedProperties[0]!.id,
+      service: "TREE_REMOVAL",
+      notes: "Large oak leaning over driveway after last storm.",
+      preferredWindowStart: new Date(now + 86400000 * 2),
+      preferredWindowEnd: new Date(now + 86400000 * 5),
+      status: "NEW",
+      source: "WEB",
+    },
+    {
+      customerId: insertedCustomers[1]!.id,
+      propertyId: insertedProperties[1]!.id,
+      service: "TRIMMING_PRUNING",
+      notes: "Three royal palms need fronds cleaned out.",
+      preferredWindowStart: new Date(now + 86400000 * 7),
+      preferredWindowEnd: new Date(now + 86400000 * 14),
+      status: "NEW",
+      source: "PORTAL",
+    },
+    {
+      customerId: insertedCustomers[2]!.id,
+      propertyId: insertedProperties[2]!.id,
+      service: "EMERGENCY_STORM",
+      notes: "Branches down across pool cage — needs same-day cleanup.",
+      status: "CONTACTED",
+      source: "PHONE",
+    },
+    {
+      customerId: insertedCustomers[3]!.id,
+      propertyId: insertedProperties[3]!.id,
+      service: "STUMP_GRINDING",
+      notes: "Two stumps left over from last removal.",
+      status: "NEW",
+      source: "PORTAL",
+    },
+    {
+      customerId: insertedCustomers[4]!.id,
+      propertyId: null,
+      service: "MANGROVE_CARE",
+      notes: "Annual mangrove trim along seawall — needs DEP scope.",
+      status: "DISMISSED",
+      source: "WALKIN",
+    },
   ]);
 
   console.log("Seed complete.");

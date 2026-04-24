@@ -25,3 +25,12 @@ pnpm workspace monorepo using TypeScript. Each package manages its own dependenc
 - `pnpm --filter @workspace/api-server run dev` — run API server locally
 
 See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and package details.
+
+## Joshua Tree FSM — domain notes
+
+- `service_requests` table is the leads pipeline (statuses NEW → CONTACTED → QUOTED → CONVERTED → DISMISSED, with `converted_quote_id` FK to `quotes`).
+- RBAC: `leads` section is editable by ADMIN + SALES. SALES is scoped to leads belonging to customers they own (`scopeServiceRequests` in `artifacts/api-server/src/lib/rbac/scope.ts`).
+- `GET /api/customers/:id` returns a deep customer profile (properties, jobs split upcoming/past, quotes, invoices, leads) plus a `totals` rollup (lifetime revenue, outstanding, open quote exposure, open lead count).
+- `POST /api/leads/:id/convert` is **transactional and idempotent**: takes a `SELECT … FOR UPDATE` row lock and re-checks `converted_quote_id` so two concurrent requests cannot create duplicate draft quotes.
+- Lead create/update validates `propertyId` belongs to the lead's customer to prevent cross-customer property leakage.
+- Admin UI: `/admin/leads` (inbox), `/admin/customers/:id` (profile). Customer rows in the customers list link to the profile.

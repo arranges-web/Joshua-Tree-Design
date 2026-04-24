@@ -5,6 +5,7 @@ import {
   jobsTable,
   crewsTable,
   crewMembersTable,
+  serviceRequestsTable,
 } from "@workspace/db";
 import type { AuthenticatedUser } from "../../middlewares/requireAuth";
 
@@ -46,6 +47,19 @@ export function scopeJobs(user: AuthenticatedUser): SQL | undefined {
     return inArray(
       jobsTable.propertyId,
       sql<number[]>`(SELECT ${quotesTable.propertyId} FROM ${quotesTable} WHERE ${quotesTable.ownerUserId} = ${user.id} AND ${quotesTable.propertyId} IS NOT NULL)`,
+    );
+  }
+  return sql`false`;
+}
+
+// Service-request (lead) scoping — leads belong to a customer, so SALES sees
+// requests for customers they own. ADMIN sees everything; everyone else: deny.
+export function scopeServiceRequests(user: AuthenticatedUser): SQL | undefined {
+  if (user.role === "ADMIN") return undefined;
+  if (user.role === "SALES") {
+    return inArray(
+      serviceRequestsTable.customerId,
+      sql<number[]>`(SELECT ${customersTable.id} FROM ${customersTable} WHERE ${customersTable.ownerUserId} = ${user.id})`,
     );
   }
   return sql`false`;

@@ -18,6 +18,7 @@ tags:
   - name: maintenance
   - name: employees
   - name: permissions
+  - name: leads
 
 paths:
   /healthz:
@@ -107,6 +108,21 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/CustomerResponse" }
   /customers/{id}:
+    get:
+      operationId: getCustomerProfile
+      tags: [customers]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CustomerProfileResponse" }
+        "404": { $ref: "#/components/responses/Error" }
     patch:
       operationId: updateCustomer
       tags: [customers]
@@ -612,6 +628,73 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/PermissionMatrixResponse" }
 
+  /leads:
+    get:
+      operationId: listLeads
+      tags: [leads]
+      parameters:
+        - in: query
+          name: status
+          required: false
+          schema: { type: string }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LeadListResponse" }
+    post:
+      operationId: createLead
+      tags: [leads]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/LeadWriteBody" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LeadResponse" }
+  /leads/{id}:
+    patch:
+      operationId: updateLead
+      tags: [leads]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/LeadUpdateBody" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LeadResponse" }
+  /leads/{id}/convert:
+    post:
+      operationId: convertLeadToQuote
+      tags: [leads]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LeadConvertResponse" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+
 components:
   responses:
     Error:
@@ -1066,3 +1149,107 @@ components:
         cells:
           type: array
           items: { $ref: "#/components/schemas/PermissionMatrixCell" }
+
+    Lead:
+      type: object
+      required: [id, customerId, service, status, source, createdAt]
+      properties:
+        id: { type: integer }
+        customerId: { type: integer }
+        propertyId: { type: integer, nullable: true }
+        service: { type: string }
+        notes: { type: string, nullable: true }
+        preferredWindowStart: { type: string, format: date-time, nullable: true }
+        preferredWindowEnd: { type: string, format: date-time, nullable: true }
+        status: { type: string }
+        source: { type: string }
+        convertedQuoteId: { type: integer, nullable: true }
+        createdAt: { type: string, format: date-time }
+        customerName: { type: string, nullable: true }
+        propertyAddress: { type: string, nullable: true }
+    LeadWriteBody:
+      type: object
+      required: [customerId, service]
+      properties:
+        customerId: { type: integer }
+        propertyId: { type: integer, nullable: true }
+        service: { type: string }
+        notes: { type: string, nullable: true }
+        preferredWindowStart: { type: string, format: date-time, nullable: true }
+        preferredWindowEnd: { type: string, format: date-time, nullable: true }
+        status: { type: string }
+        source: { type: string }
+    LeadUpdateBody:
+      type: object
+      properties:
+        propertyId: { type: integer, nullable: true }
+        service: { type: string }
+        notes: { type: string, nullable: true }
+        preferredWindowStart: { type: string, format: date-time, nullable: true }
+        preferredWindowEnd: { type: string, format: date-time, nullable: true }
+        status: { type: string }
+    LeadResponse:
+      type: object
+      required: [lead]
+      properties:
+        lead: { $ref: "#/components/schemas/Lead" }
+    LeadListResponse:
+      type: object
+      required: [leads]
+      properties:
+        leads:
+          type: array
+          items: { $ref: "#/components/schemas/Lead" }
+    LeadConvertResponse:
+      type: object
+      required: [lead, quote]
+      properties:
+        lead: { $ref: "#/components/schemas/Lead" }
+        quote: { $ref: "#/components/schemas/Quote" }
+
+    Property:
+      type: object
+      required: [id, customerId, address, city, zip]
+      properties:
+        id: { type: integer }
+        customerId: { type: integer }
+        address: { type: string }
+        city: { type: string }
+        zip: { type: string }
+        notes: { type: string, nullable: true }
+
+    CustomerProfileResponse:
+      type: object
+      required: [customer, properties, jobs, quotes, invoices, leads, totals]
+      properties:
+        customer: { $ref: "#/components/schemas/Customer" }
+        properties:
+          type: array
+          items: { $ref: "#/components/schemas/Property" }
+        jobs:
+          type: object
+          required: [upcoming, past]
+          properties:
+            upcoming:
+              type: array
+              items: { $ref: "#/components/schemas/Job" }
+            past:
+              type: array
+              items: { $ref: "#/components/schemas/Job" }
+        quotes:
+          type: array
+          items: { $ref: "#/components/schemas/Quote" }
+        invoices:
+          type: array
+          items: { $ref: "#/components/schemas/Invoice" }
+        leads:
+          type: array
+          items: { $ref: "#/components/schemas/Lead" }
+        totals:
+          type: object
+          required: [lifetimeRevenueCents, openQuoteCents, outstandingInvoiceCents, openLeadCount]
+          properties:
+            lifetimeRevenueCents: { type: integer }
+            openQuoteCents: { type: integer }
+            outstandingInvoiceCents: { type: integer }
+            openLeadCount: { type: integer }

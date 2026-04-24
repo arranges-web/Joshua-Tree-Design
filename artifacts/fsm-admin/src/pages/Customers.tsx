@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link } from "wouter";
 import { useListCustomers, useCreateCustomer, useUpdateCustomer, useDeleteCustomer, getListCustomersQueryKey, useListEmployees, type Customer } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -65,7 +66,14 @@ export function Customers() {
             <TableBody>
               {rows.map((c) => (
                 <TableRow key={c.id} className="text-sm">
-                  <TableCell className="font-medium">{c.fullName}</TableCell>
+                  <TableCell className="font-medium">
+                    <Link
+                      href={`/customers/${c.id}`}
+                      className="text-primary underline-offset-4 hover:underline"
+                    >
+                      {c.fullName}
+                    </Link>
+                  </TableCell>
                   <TableCell className="font-mono text-xs">{c.email || "—"}</TableCell>
                   <TableCell className="font-mono text-xs">{c.phone || "—"}</TableCell>
                   <TableCell className="text-muted-foreground">{c.billingAddress || "—"}</TableCell>

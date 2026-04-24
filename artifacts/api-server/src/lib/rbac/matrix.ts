@@ -27,6 +27,7 @@ export const DEFAULT_MATRIX: Record<RoleKey, Record<SectionKey, Permission>> = {
     "field.safety": { canView: false, canEdit: false },
     "sales.calendar": { canView: true, canEdit: true },
     "reports.financials": { canView: false, canEdit: false },
+    leads: { canView: true, canEdit: true },
   },
 
   CREW_LEAD: {
@@ -45,6 +46,7 @@ export const DEFAULT_MATRIX: Record<RoleKey, Record<SectionKey, Permission>> = {
     "field.safety": { canView: true, canEdit: true },
     "sales.calendar": { canView: false, canEdit: false },
     "reports.financials": { canView: false, canEdit: false },
+    leads: { canView: false, canEdit: false },
   },
 
   MECHANIC: {
@@ -63,6 +65,7 @@ export const DEFAULT_MATRIX: Record<RoleKey, Record<SectionKey, Permission>> = {
     "field.safety": { canView: false, canEdit: false },
     "sales.calendar": { canView: false, canEdit: false },
     "reports.financials": { canView: false, canEdit: false },
+    leads: { canView: false, canEdit: false },
   },
 };
 

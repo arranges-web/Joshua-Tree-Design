@@ -14,6 +14,7 @@ import {
   ShieldCheck,
   Menu,
   TreeDeciduous,
+  Inbox,
 } from "lucide-react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { useState } from "react";
@@ -31,6 +32,7 @@ const NAV_GROUPS: Array<{
   {
     label: "Operations",
     items: [
+      { href: "/leads", label: "Leads", icon: Inbox },
       { href: "/customers", label: "Customers", icon: Users },
       { href: "/jobs", label: "Jobs", icon: Briefcase },
       { href: "/quotes", label: "Quotes", icon: FileSignature },

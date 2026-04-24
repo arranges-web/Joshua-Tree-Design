@@ -97,6 +97,108 @@ export const CreateCustomerBody = zod.object({
   ownerUserId: zod.number(),
 });
 
+export const GetCustomerProfileParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const GetCustomerProfileResponse = zod.object({
+  customer: zod.object({
+    id: zod.number(),
+    fullName: zod.string(),
+    email: zod.string().nullish(),
+    phone: zod.string().nullish(),
+    billingAddress: zod.string().nullish(),
+    ownerUserId: zod.number(),
+    createdAt: zod.coerce.date(),
+  }),
+  properties: zod.array(
+    zod.object({
+      id: zod.number(),
+      customerId: zod.number(),
+      address: zod.string(),
+      city: zod.string(),
+      zip: zod.string(),
+      notes: zod.string().nullish(),
+    }),
+  ),
+  jobs: zod.object({
+    upcoming: zod.array(
+      zod.object({
+        id: zod.number(),
+        propertyId: zod.number(),
+        crewId: zod.number().nullish(),
+        status: zod.string(),
+        scheduledFor: zod.coerce.date().nullish(),
+        completedAt: zod.coerce.date().nullish(),
+        totalCents: zod.number(),
+        notes: zod.string().nullish(),
+        createdAt: zod.coerce.date(),
+      }),
+    ),
+    past: zod.array(
+      zod.object({
+        id: zod.number(),
+        propertyId: zod.number(),
+        crewId: zod.number().nullish(),
+        status: zod.string(),
+        scheduledFor: zod.coerce.date().nullish(),
+        completedAt: zod.coerce.date().nullish(),
+        totalCents: zod.number(),
+        notes: zod.string().nullish(),
+        createdAt: zod.coerce.date(),
+      }),
+    ),
+  }),
+  quotes: zod.array(
+    zod.object({
+      id: zod.number(),
+      customerId: zod.number(),
+      propertyId: zod.number().nullish(),
+      ownerUserId: zod.number(),
+      status: zod.string(),
+      subtotalCents: zod.number(),
+      totalCents: zod.number(),
+      sentAt: zod.coerce.date().nullish(),
+      decidedAt: zod.coerce.date().nullish(),
+      createdAt: zod.coerce.date(),
+    }),
+  ),
+  invoices: zod.array(
+    zod.object({
+      id: zod.number(),
+      jobId: zod.number().nullish(),
+      customerId: zod.number(),
+      status: zod.string(),
+      totalCents: zod.number(),
+      issuedAt: zod.coerce.date().nullish(),
+      paidAt: zod.coerce.date().nullish(),
+    }),
+  ),
+  leads: zod.array(
+    zod.object({
+      id: zod.number(),
+      customerId: zod.number(),
+      propertyId: zod.number().nullish(),
+      service: zod.string(),
+      notes: zod.string().nullish(),
+      preferredWindowStart: zod.coerce.date().nullish(),
+      preferredWindowEnd: zod.coerce.date().nullish(),
+      status: zod.string(),
+      source: zod.string(),
+      convertedQuoteId: zod.number().nullish(),
+      createdAt: zod.coerce.date(),
+      customerName: zod.string().nullish(),
+      propertyAddress: zod.string().nullish(),
+    }),
+  ),
+  totals: zod.object({
+    lifetimeRevenueCents: zod.number(),
+    openQuoteCents: zod.number(),
+    outstandingInvoiceCents: zod.number(),
+    openLeadCount: zod.number(),
+  }),
+});
+
 export const UpdateCustomerParams = zod.object({
   id: zod.coerce.number(),
 });
@@ -601,4 +703,74 @@ export const GetPermissionMatrixResponse = zod.object({
       isOverride: zod.boolean(),
     }),
   ),
+});
+
+export const ListLeadsQueryParams = zod.object({
+  status: zod.coerce.string().optional(),
+});
+
+export const ListLeadsResponse = zod.object({
+  leads: zod.array(
+    zod.object({
+      id: zod.number(),
+      customerId: zod.number(),
+      propertyId: zod.number().nullish(),
+      service: zod.string(),
+      notes: zod.string().nullish(),
+      preferredWindowStart: zod.coerce.date().nullish(),
+      preferredWindowEnd: zod.coerce.date().nullish(),
+      status: zod.string(),
+      source: zod.string(),
+      convertedQuoteId: zod.number().nullish(),
+      createdAt: zod.coerce.date(),
+      customerName: zod.string().nullish(),
+      propertyAddress: zod.string().nullish(),
+    }),
+  ),
+});
+
+export const CreateLeadBody = zod.object({
+  customerId: zod.number(),
+  propertyId: zod.number().nullish(),
+  service: zod.string(),
+  notes: zod.string().nullish(),
+  preferredWindowStart: zod.coerce.date().nullish(),
+  preferredWindowEnd: zod.coerce.date().nullish(),
+  status: zod.string().optional(),
+  source: zod.string().optional(),
+});
+
+export const UpdateLeadParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const UpdateLeadBody = zod.object({
+  propertyId: zod.number().nullish(),
+  service: zod.string().optional(),
+  notes: zod.string().nullish(),
+  preferredWindowStart: zod.coerce.date().nullish(),
+  preferredWindowEnd: zod.coerce.date().nullish(),
+  status: zod.string().optional(),
+});
+
+export const UpdateLeadResponse = zod.object({
+  lead: zod.object({
+    id: zod.number(),
+    customerId: zod.number(),
+    propertyId: zod.number().nullish(),
+    service: zod.string(),
+    notes: zod.string().nullish(),
+    preferredWindowStart: zod.coerce.date().nullish(),
+    preferredWindowEnd: zod.coerce.date().nullish(),
+    status: zod.string(),
+    source: zod.string(),
+    convertedQuoteId: zod.number().nullish(),
+    createdAt: zod.coerce.date(),
+    customerName: zod.string().nullish(),
+    propertyAddress: zod.string().nullish(),
+  }),
+});
+
+export const ConvertLeadToQuoteParams = zod.object({
+  id: zod.coerce.number(),
 });

@@ -11,6 +11,8 @@ import NotFound from "@/pages/not-found";
 import { Login } from "@/pages/Login";
 import { Dashboard } from "@/pages/Dashboard";
 import { Customers } from "@/pages/Customers";
+import { CustomerProfile } from "@/pages/CustomerProfile";
+import { Leads } from "@/pages/Leads";
 import { Jobs } from "@/pages/Jobs";
 import { Quotes } from "@/pages/Quotes";
 import { Invoices } from "@/pages/Invoices";
@@ -64,6 +66,8 @@ function AppRouter() {
             <Switch>
               <Route path="/" component={Dashboard} />
               <Route path="/customers" component={Customers} />
+              <Route path="/customers/:id" component={CustomerProfile} />
+              <Route path="/leads" component={Leads} />
               <Route path="/jobs" component={Jobs} />
               <Route path="/quotes" component={Quotes} />
               <Route path="/invoices" component={Invoices} />
