@@ -109,13 +109,8 @@ function daysFromNow(d: number) {
 }
 
 export async function populateData(): Promise<void> {
-  // Per-role passwords to match what the admin login page auto-fills.
-  const hashByRole: Record<RoleKey, string> = {
-    ADMIN:     await bcrypt.hash("admin-jt",    10),
-    SALES:     await bcrypt.hash("sales-jt",    10),
-    CREW_LEAD: await bcrypt.hash("crew-jt",     10),
-    MECHANIC:  await bcrypt.hash("mech-jt",     10),
-  };
+  // All staff share a single known password for demo simplicity.
+  const hash = await bcrypt.hash("password123", 10);
 
   // ── Roles ─────────────────────────────────────────────────────────────────
   const insertedRoles = await db
@@ -167,7 +162,7 @@ export async function populateData(): Promise<void> {
     .values(
       userDefs.map((u) => ({
         email: u.email,
-        hashedPassword: hashByRole[u.role],
+        hashedPassword: hash,
         fullName: u.fullName,
         roleId: roleByKey.get(u.role)!,
         departmentId: deptByKey.get(u.dept)!,
@@ -212,14 +207,14 @@ export async function populateData(): Promise<void> {
   ];
 
   // ── Properties ────────────────────────────────────────────────────────────
+  // Hank (demo portal user) gets exactly 2 properties per spec.
   const insertedProperties = await db
     .insert(propertiesTable)
     .values([
-      // Hank — 3 properties (primary portal demo user)
+      // Hank — 2 properties (matches customer portal demo requirements)
       { customerId: hank.id, address: "123 Palm Way",       city: "Cape Coral",       zip: "33904" },
       { customerId: hank.id, address: "1400 Surfside Blvd", city: "Cape Coral",       zip: "33914" },
-      { customerId: hank.id, address: "88 Cypress Point",   city: "Fort Myers",       zip: "33908" },
-      // Others
+      // Others — 1-2 properties each
       { customerId: lisa.id,    address: "55 Mango Ln",       city: "Fort Myers",       zip: "33901" },
       { customerId: lisa.id,    address: "210 Iona Rd",        city: "Fort Myers",       zip: "33908" },
       { customerId: pete.id,    address: "9 Banyan Rd",        city: "Estero",           zip: "33928" },
@@ -234,7 +229,7 @@ export async function populateData(): Promise<void> {
     ])
     .returning();
   const [
-    hankP1, hankP2, hankP3,
+    hankP1, hankP2,
     lisaP1, lisaP2,
     peteP1,
     mayaP1, mayaP2,
@@ -251,73 +246,78 @@ export async function populateData(): Promise<void> {
     .insert(crewsTable)
     .values([
       { name: "Crew Alpha", leadUserId: lead1.id },
-      { name: "Crew Bravo", leadUserId: lead2.id },
+      { name: "Crew Beta",  leadUserId: lead2.id },
       { name: "Crew Gamma", leadUserId: lead3.id },
     ])
     .returning();
-  const [alpha, bravo, gamma] = insertedCrews as Array<typeof insertedCrews[number]>;
+  const [alpha, beta, gamma] = insertedCrews as Array<typeof insertedCrews[number]>;
   await db.insert(crewMembersTable).values([
     { crewId: alpha.id, userId: lead1.id },
     { crewId: alpha.id, userId: mech.id },
-    { crewId: bravo.id, userId: lead2.id },
-    { crewId: bravo.id, userId: sales1.id },
+    { crewId: alpha.id, userId: sales1.id },
+    { crewId: beta.id,  userId: lead2.id },
+    { crewId: beta.id,  userId: sales2.id },
     { crewId: gamma.id, userId: lead3.id },
-    { crewId: gamma.id, userId: sales2.id },
+    { crewId: gamma.id, userId: lead2.id },
   ]);
 
   // ── Jobs ──────────────────────────────────────────────────────────────────
-  // Hank: 1 upcoming SCHEDULED + 2 past COMPLETE
+  // Hank's jobs: 1 SCHEDULED (upcoming) + 2 COMPLETE (recent history)
   await db.insert(jobsTable).values([
-    { propertyId: hankP1.id, crewId: alpha.id, status: "SCHEDULED",   scheduledFor: daysFromNow(7),   totalCents: 195_000, notes: "Annual palm pruning — 4 royal palms along driveway" },
-    { propertyId: hankP1.id, crewId: alpha.id, status: "COMPLETE",    scheduledFor: daysAgo(28),  completedAt: daysAgo(27),  totalCents: 320_000, notes: "Large live oak removal — root zone near pool cage" },
-    { propertyId: hankP2.id, crewId: bravo.id, status: "COMPLETE",    scheduledFor: daysAgo(58),  completedAt: daysAgo(57),  totalCents: 87_500,  notes: "Stump grinding — 2 stumps left from prior removal" },
+    { propertyId: hankP1.id, crewId: alpha.id, status: "SCHEDULED",  scheduledFor: daysFromNow(7),  totalCents: 195_000, notes: "Annual palm pruning — 4 royal palms along driveway" },
+    { propertyId: hankP1.id, crewId: alpha.id, status: "COMPLETE",   scheduledFor: daysAgo(28),  completedAt: daysAgo(27), totalCents: 320_000, notes: "Large live oak removal — root zone near pool cage" },
+    { propertyId: hankP2.id, crewId: beta.id,  status: "COMPLETE",   scheduledFor: daysAgo(55),  completedAt: daysAgo(54), totalCents: 87_500,  notes: "Stump grinding — 2 stumps left from prior removal" },
   ]);
 
-  // Additional 22 jobs across other customers
+  // Additional 22 jobs across other customers (SCHEDULED, IN_PROGRESS, COMPLETE)
   await db.insert(jobsTable).values([
     // SCHEDULED (upcoming)
-    { propertyId: lisaP1.id,    crewId: bravo.id,  status: "SCHEDULED",   scheduledFor: daysFromNow(3),   totalCents: 145_000, notes: "Trim 3 queen palms, remove dead fronds" },
-    { propertyId: peteP1.id,    crewId: gamma.id,  status: "SCHEDULED",   scheduledFor: daysFromNow(5),   totalCents: 260_000, notes: "Banyan tree thinning — permit obtained" },
-    { propertyId: mayaP1.id,    crewId: alpha.id,  status: "SCHEDULED",   scheduledFor: daysFromNow(10),  totalCents: 480_000, notes: "Full canopy reduction — 6 oaks" },
-    { propertyId: quintP1.id,   crewId: bravo.id,  status: "SCHEDULED",   scheduledFor: daysFromNow(12),  totalCents: 95_000,  notes: "Cypress crown raising — 4 ft clearance" },
-    { propertyId: rachelP1.id,  crewId: gamma.id,  status: "SCHEDULED",   scheduledFor: daysFromNow(14),  totalCents: 75_000,  notes: "Palm trimming, hurricane prep" },
-    { propertyId: derekP1.id,   crewId: alpha.id,  status: "SCHEDULED",   scheduledFor: daysFromNow(18),  totalCents: 340_000, notes: "Mangrove trim — DEP permit active" },
-    { propertyId: hankP3.id,    crewId: gamma.id,  status: "SCHEDULED",   scheduledFor: daysFromNow(21),  totalCents: 115_000, notes: "Laurel oak limb removal — over fence" },
-    // IN_PROGRESS (today)
-    { propertyId: lisaP2.id,    crewId: bravo.id,  status: "IN_PROGRESS", scheduledFor: daysFromNow(0),   totalCents: 210_000, notes: "Storm cleanup — 4 downed limbs over pool" },
-    { propertyId: mayaP2.id,    crewId: gamma.id,  status: "IN_PROGRESS", scheduledFor: daysFromNow(0),   totalCents: 165_000, notes: "Crane-assisted removal — 70 ft Laurel oak" },
-    { propertyId: georgeP1.id,  crewId: alpha.id,  status: "IN_PROGRESS", scheduledFor: daysAgo(1),   totalCents: 58_000,  notes: "Sabal palm removal — 3 trees" },
-    { propertyId: fionaP1.id,   crewId: bravo.id,  status: "IN_PROGRESS", scheduledFor: daysFromNow(0),   totalCents: 130_000, notes: "Fairway edge trimming — HOA spec" },
+    { propertyId: lisaP1.id,   crewId: beta.id,   status: "SCHEDULED",   scheduledFor: daysFromNow(3),  totalCents: 145_000, notes: "Trim 3 queen palms, remove dead fronds" },
+    { propertyId: peteP1.id,   crewId: gamma.id,  status: "SCHEDULED",   scheduledFor: daysFromNow(5),  totalCents: 260_000, notes: "Banyan tree thinning — permit obtained" },
+    { propertyId: mayaP1.id,   crewId: alpha.id,  status: "SCHEDULED",   scheduledFor: daysFromNow(10), totalCents: 480_000, notes: "Full canopy reduction — 6 oaks" },
+    { propertyId: quintP1.id,  crewId: beta.id,   status: "SCHEDULED",   scheduledFor: daysFromNow(12), totalCents: 95_000,  notes: "Cypress crown raising — 4 ft clearance" },
+    { propertyId: rachelP1.id, crewId: gamma.id,  status: "SCHEDULED",   scheduledFor: daysFromNow(14), totalCents: 75_000,  notes: "Palm trimming, hurricane prep" },
+    { propertyId: derekP1.id,  crewId: alpha.id,  status: "SCHEDULED",   scheduledFor: daysFromNow(18), totalCents: 340_000, notes: "Mangrove trim — DEP permit active" },
+    { propertyId: hankP2.id,   crewId: gamma.id,  status: "SCHEDULED",   scheduledFor: daysFromNow(21), totalCents: 115_000, notes: "Laurel oak limb removal — over fence line" },
+    // IN_PROGRESS (today / active)
+    { propertyId: lisaP2.id,   crewId: beta.id,   status: "IN_PROGRESS", scheduledFor: daysFromNow(0),  totalCents: 210_000, notes: "Storm cleanup — 4 downed limbs over pool" },
+    { propertyId: mayaP2.id,   crewId: gamma.id,  status: "IN_PROGRESS", scheduledFor: daysFromNow(0),  totalCents: 165_000, notes: "Crane-assisted removal — 70 ft Laurel oak" },
+    { propertyId: georgeP1.id, crewId: alpha.id,  status: "IN_PROGRESS", scheduledFor: daysAgo(1),   totalCents: 58_000,  notes: "Sabal palm removal — 3 trees" },
+    { propertyId: fionaP1.id,  crewId: beta.id,   status: "IN_PROGRESS", scheduledFor: daysFromNow(0),  totalCents: 130_000, notes: "Fairway edge trimming — HOA spec" },
     // COMPLETE (recent history)
-    { propertyId: harrietP1.id, crewId: gamma.id,  status: "COMPLETE", scheduledFor: daysAgo(5),  completedAt: daysAgo(4),  totalCents: 225_000, notes: "Emergency storm removal — leaning pine" },
-    { propertyId: rachelP1.id,  crewId: alpha.id,  status: "COMPLETE", scheduledFor: daysAgo(10), completedAt: daysAgo(9),  totalCents: 110_000, notes: "Ficus hedge reduction" },
-    { propertyId: peteP1.id,    crewId: bravo.id,  status: "COMPLETE", scheduledFor: daysAgo(15), completedAt: daysAgo(14), totalCents: 88_000,  notes: "Australian pine removal x2" },
-    { propertyId: mayaP1.id,    crewId: gamma.id,  status: "COMPLETE", scheduledFor: daysAgo(20), completedAt: daysAgo(19), totalCents: 395_000, notes: "Back-yard canopy cleanup post-storm" },
-    { propertyId: lisaP1.id,    crewId: alpha.id,  status: "COMPLETE", scheduledFor: daysAgo(30), completedAt: daysAgo(29), totalCents: 72_000,  notes: "Annual palm skinning — 5 palms" },
-    { propertyId: derekP1.id,   crewId: bravo.id,  status: "COMPLETE", scheduledFor: daysAgo(40), completedAt: daysAgo(39), totalCents: 185_000, notes: "Seawall-side mangrove trim" },
-    { propertyId: quintP1.id,   crewId: gamma.id,  status: "COMPLETE", scheduledFor: daysAgo(50), completedAt: daysAgo(49), totalCents: 145_000, notes: "3 laurel oaks thinned — HOA request" },
-    { propertyId: fionaP1.id,   crewId: alpha.id,  status: "COMPLETE", scheduledFor: daysAgo(60), completedAt: daysAgo(59), totalCents: 62_000,  notes: "Queen palm nutrient inject + frond removal" },
-    { propertyId: georgeP1.id,  crewId: bravo.id,  status: "COMPLETE", scheduledFor: daysAgo(70), completedAt: daysAgo(69), totalCents: 310_000, notes: "3 large oaks removed — land clearing" },
-    { propertyId: harrietP1.id, crewId: gamma.id,  status: "COMPLETE", scheduledFor: daysAgo(80), completedAt: daysAgo(79), totalCents: 195_000, notes: "Emergency call — tree on fence line" },
+    { propertyId: harrietP1.id, crewId: gamma.id, status: "COMPLETE", scheduledFor: daysAgo(5),  completedAt: daysAgo(4),  totalCents: 225_000, notes: "Emergency storm removal — leaning pine" },
+    { propertyId: rachelP1.id,  crewId: alpha.id, status: "COMPLETE", scheduledFor: daysAgo(10), completedAt: daysAgo(9),  totalCents: 110_000, notes: "Ficus hedge reduction" },
+    { propertyId: peteP1.id,    crewId: beta.id,  status: "COMPLETE", scheduledFor: daysAgo(15), completedAt: daysAgo(14), totalCents: 88_000,  notes: "Australian pine removal x2" },
+    { propertyId: mayaP1.id,    crewId: gamma.id, status: "COMPLETE", scheduledFor: daysAgo(20), completedAt: daysAgo(19), totalCents: 395_000, notes: "Back-yard canopy cleanup post-storm" },
+    { propertyId: lisaP1.id,    crewId: alpha.id, status: "COMPLETE", scheduledFor: daysAgo(30), completedAt: daysAgo(29), totalCents: 72_000,  notes: "Annual palm skinning — 5 palms" },
+    { propertyId: derekP1.id,   crewId: beta.id,  status: "COMPLETE", scheduledFor: daysAgo(40), completedAt: daysAgo(39), totalCents: 185_000, notes: "Seawall-side mangrove trim" },
+    { propertyId: quintP1.id,   crewId: gamma.id, status: "COMPLETE", scheduledFor: daysAgo(50), completedAt: daysAgo(49), totalCents: 145_000, notes: "3 laurel oaks thinned — HOA request" },
+    { propertyId: fionaP1.id,   crewId: alpha.id, status: "COMPLETE", scheduledFor: daysAgo(60), completedAt: daysAgo(59), totalCents: 62_000,  notes: "Queen palm nutrient inject + frond removal" },
+    { propertyId: georgeP1.id,  crewId: beta.id,  status: "COMPLETE", scheduledFor: daysAgo(70), completedAt: daysAgo(69), totalCents: 310_000, notes: "3 large oaks removed — land clearing" },
+    { propertyId: harrietP1.id, crewId: gamma.id, status: "COMPLETE", scheduledFor: daysAgo(80), completedAt: daysAgo(79), totalCents: 195_000, notes: "Emergency call — tree on fence line" },
   ]);
 
-  // ── Quotes ────────────────────────────────────────────────────────────────
+  // ── Quotes — 5 DRAFT, 3 SENT, 2 APPROVED = 10 total ─────────────────────
   const insertedQuotes = await db
     .insert(quotesTable)
     .values([
-      { customerId: hank.id,    propertyId: hankP1.id,   ownerUserId: sales1.id, status: "APPROVED", subtotalCents: 195_000, totalCents: 208_650 },
-      { customerId: lisa.id,    propertyId: lisaP1.id,   ownerUserId: sales1.id, status: "APPROVED", subtotalCents: 145_000, totalCents: 155_150 },
-      { customerId: pete.id,    propertyId: peteP1.id,   ownerUserId: sales1.id, status: "SENT",     subtotalCents: 260_000, totalCents: 278_200 },
-      { customerId: maya.id,    propertyId: mayaP1.id,   ownerUserId: sales2.id, status: "SENT",     subtotalCents: 480_000, totalCents: 513_600 },
-      { customerId: rachel.id,  propertyId: rachelP1.id, ownerUserId: sales1.id, status: "SENT",     subtotalCents: 75_000,  totalCents:  80_250 },
-      { customerId: derek.id,   propertyId: derekP1.id,  ownerUserId: sales2.id, status: "DRAFT",    subtotalCents: 340_000, totalCents: 363_800 },
-      { customerId: fiona.id,   propertyId: fionaP1.id,  ownerUserId: sales2.id, status: "DRAFT",    subtotalCents: 130_000, totalCents: 139_100 },
-      { customerId: george.id,  propertyId: georgeP1.id, ownerUserId: sales1.id, status: "DRAFT",    subtotalCents: 310_000, totalCents: 331_700 },
-      { customerId: harriet.id, propertyId: harrietP1.id,ownerUserId: sales2.id, status: "REJECTED", subtotalCents: 420_000, totalCents: 449_400 },
+      // APPROVED (2)
+      { customerId: hank.id,    propertyId: hankP1.id,    ownerUserId: sales1.id, status: "APPROVED", subtotalCents: 195_000, totalCents: 208_650 },
+      { customerId: lisa.id,    propertyId: lisaP1.id,    ownerUserId: sales1.id, status: "APPROVED", subtotalCents: 145_000, totalCents: 155_150 },
+      // SENT (3)
+      { customerId: pete.id,    propertyId: peteP1.id,    ownerUserId: sales1.id, status: "SENT",     subtotalCents: 260_000, totalCents: 278_200 },
+      { customerId: maya.id,    propertyId: mayaP1.id,    ownerUserId: sales2.id, status: "SENT",     subtotalCents: 480_000, totalCents: 513_600 },
+      { customerId: rachel.id,  propertyId: rachelP1.id,  ownerUserId: sales1.id, status: "SENT",     subtotalCents: 75_000,  totalCents:  80_250 },
+      // DRAFT (5)
+      { customerId: derek.id,   propertyId: derekP1.id,   ownerUserId: sales2.id, status: "DRAFT",    subtotalCents: 340_000, totalCents: 363_800 },
+      { customerId: fiona.id,   propertyId: fionaP1.id,   ownerUserId: sales2.id, status: "DRAFT",    subtotalCents: 130_000, totalCents: 139_100 },
+      { customerId: george.id,  propertyId: georgeP1.id,  ownerUserId: sales1.id, status: "DRAFT",    subtotalCents: 310_000, totalCents: 331_700 },
+      { customerId: harriet.id, propertyId: harrietP1.id, ownerUserId: sales2.id, status: "DRAFT",    subtotalCents: 420_000, totalCents: 449_400 },
+      { customerId: quentin.id, propertyId: quintP1.id,   ownerUserId: sales2.id, status: "DRAFT",    subtotalCents: 95_000,  totalCents: 101_650 },
     ])
     .returning();
 
-  // Line items on the first two approved quotes
+  // Line items on the two approved quotes
   if (insertedQuotes[0]) {
     await db.insert(quoteLineItemsTable).values([
       { quoteId: insertedQuotes[0].id, description: "Royal palm pruning (4 trees)", unitPriceCents: 42_500, qty: 4 },
@@ -345,7 +345,7 @@ export async function populateData(): Promise<void> {
     .insert(trucksTable)
     .values([
       { name: "T-01 Bucket Truck", vin: "1FDXX0000000A1", plate: "JTREE-1", status: "ACTIVE",  assignedCrewId: alpha.id },
-      { name: "T-02 Chip Truck",   vin: "1FDXX0000000A2", plate: "JTREE-2", status: "IN_SHOP", assignedCrewId: bravo.id },
+      { name: "T-02 Chip Truck",   vin: "1FDXX0000000A2", plate: "JTREE-2", status: "IN_SHOP", assignedCrewId: beta.id  },
       { name: "T-03 Crane Truck",  vin: "1FDXX0000000A3", plate: "JTREE-3", status: "ACTIVE",  assignedCrewId: gamma.id },
     ])
     .returning();
@@ -354,25 +354,25 @@ export async function populateData(): Promise<void> {
   const insertedEquip = await db
     .insert(equipmentTable)
     .values([
-      { name: "Stihl MS-462",       type: "Chainsaw", serial: "ST462-001", status: "ACTIVE",  assignedTruckId: t1.id },
-      { name: "Vermeer BC1500",      type: "Chipper",  serial: "VR1500-02", status: "IN_SHOP", assignedTruckId: t2.id },
-      { name: "Husqvarna 572 XP",   type: "Chainsaw", serial: "HQ572-003", status: "IN_SHOP", assignedTruckId: t3.id },
+      { name: "Stihl MS-462",     type: "Chainsaw", serial: "ST462-001", status: "ACTIVE",  assignedTruckId: t1.id },
+      { name: "Vermeer BC1500",   type: "Chipper",  serial: "VR1500-02", status: "IN_SHOP", assignedTruckId: t2.id },
+      { name: "Husqvarna 572 XP", type: "Chainsaw", serial: "HQ572-003", status: "IN_SHOP", assignedTruckId: t3.id },
     ])
     .returning();
   const [e1, e2, e3] = insertedEquip as Array<typeof insertedEquip[number]>;
 
   await db.insert(maintenanceLogsTable).values([
-    { truckId: t1.id,     kind: "SCHEDULED",  description: "Oil & filter change, lube fittings",          performedByUserId: mech.id, costCents: 12_500, performedAt: daysAgo(14) },
-    { truckId: t2.id,     kind: "REPAIR",     description: "Hydraulic line blow-out repair",               performedByUserId: mech.id, costCents: 87_500, performedAt: daysAgo(7)  },
-    { truckId: t3.id,     kind: "INSPECTION", description: "Annual FDOT safety inspection",                performedByUserId: mech.id, costCents: 30_000, performedAt: daysAgo(30) },
-    { equipmentId: e1.id, kind: "SCHEDULED",  description: "Bar & chain replaced, guide bar straightened", performedByUserId: mech.id, costCents: 4_500,  performedAt: daysAgo(10) },
-    { equipmentId: e2.id, kind: "REPAIR",     description: "Drum knife set replaced — excessive wear",     performedByUserId: mech.id, costCents: 22_000, performedAt: daysAgo(7)  },
-    { equipmentId: e3.id, kind: "REPAIR",     description: "Cylinder rebuild — compression failure",       performedByUserId: mech.id, costCents: 38_000, performedAt: daysAgo(3)  },
+    { truckId: t1.id,     kind: "SCHEDULED",  description: "Oil & filter change, lube fittings",           performedByUserId: mech.id, costCents: 12_500, performedAt: daysAgo(14) },
+    { truckId: t2.id,     kind: "REPAIR",     description: "Hydraulic line blow-out repair",                performedByUserId: mech.id, costCents: 87_500, performedAt: daysAgo(7)  },
+    { truckId: t3.id,     kind: "INSPECTION", description: "Annual FDOT safety inspection",                 performedByUserId: mech.id, costCents: 30_000, performedAt: daysAgo(30) },
+    { equipmentId: e1.id, kind: "SCHEDULED",  description: "Bar & chain replaced, guide bar straightened",  performedByUserId: mech.id, costCents: 4_500,  performedAt: daysAgo(10) },
+    { equipmentId: e2.id, kind: "REPAIR",     description: "Drum knife set replaced — excessive wear",      performedByUserId: mech.id, costCents: 22_000, performedAt: daysAgo(7)  },
+    { equipmentId: e3.id, kind: "REPAIR",     description: "Cylinder rebuild — compression failure",        performedByUserId: mech.id, costCents: 38_000, performedAt: daysAgo(3)  },
   ]);
 
   // ── Service requests ──────────────────────────────────────────────────────
+  // Hank gets exactly 2: one NEW (fresh lead) and one CONTACTED (follow-up stage)
   await db.insert(serviceRequestsTable).values([
-    // Hank portal demo requests
     {
       customerId: hank.id, propertyId: hankP2.id,
       service: "TREE_REMOVAL", source: "PORTAL", status: "NEW",
@@ -380,12 +380,12 @@ export async function populateData(): Promise<void> {
       preferredWindowStart: daysFromNow(3), preferredWindowEnd: daysFromNow(7),
     },
     {
-      customerId: hank.id, propertyId: hankP3.id,
+      customerId: hank.id, propertyId: hankP1.id,
       service: "TRIMMING_PRUNING", source: "PORTAL", status: "CONTACTED",
       notes: "Four sabal palms along fence line — fronds dragging on roof.",
       preferredWindowStart: daysFromNow(14), preferredWindowEnd: daysFromNow(21),
     },
-    // Fresh NEW leads in inbox
+    // Additional leads in the inbox
     {
       customerId: lisa.id, propertyId: lisaP2.id,
       service: "EMERGENCY_STORM", source: "WEB", status: "NEW",
@@ -394,7 +394,7 @@ export async function populateData(): Promise<void> {
     {
       customerId: pete.id, propertyId: peteP1.id,
       service: "STUMP_GRINDING", source: "PORTAL", status: "NEW",
-      notes: "Two large stumps left over from removal last month. Roots coming up through lawn.",
+      notes: "Two large stumps left over from removal last month.",
       preferredWindowStart: daysFromNow(7), preferredWindowEnd: daysFromNow(14),
     },
     {
@@ -408,7 +408,6 @@ export async function populateData(): Promise<void> {
       service: "CRANE_ASSISTED", source: "PHONE", status: "NEW",
       notes: "Need crane job for 80-ft Mahogany — tight space between house and wall.",
     },
-    // Older leads in pipeline
     {
       customerId: maya.id, propertyId: mayaP2.id,
       service: "TRIMMING_PRUNING", source: "PORTAL", status: "CONTACTED",
@@ -422,7 +421,7 @@ export async function populateData(): Promise<void> {
     },
   ]);
 
-  void quentin; void derek; void harriet; void mayaP2; void lisaP2;
+  void quentin; void derek; void harriet;
 }
 
 export async function seedIfEmpty(): Promise<boolean> {

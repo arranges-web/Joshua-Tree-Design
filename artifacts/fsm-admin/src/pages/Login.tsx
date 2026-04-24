@@ -20,25 +20,25 @@ const TEST_ACCOUNTS = [
   {
     role: "Admin",
     email: "admin@joshuatreeinc.test",
-    password: "admin-jt",
+    password: "password123",
     desc: "Full god-mode access to everything.",
   },
   {
     role: "Sales",
     email: "sales1@joshuatreeinc.test",
-    password: "sales-jt",
+    password: "password123",
     desc: "Pipeline, customers, quotes.",
   },
   {
     role: "Crew Lead",
     email: "lead1@joshuatreeinc.test",
-    password: "crew-jt",
+    password: "password123",
     desc: "Field jobs, photos, safety.",
   },
   {
     role: "Mechanic",
     email: "mechanic@joshuatreeinc.test",
-    password: "mech-jt",
+    password: "password123",
     desc: "Trucks, equipment, maintenance.",
   },
 ];
