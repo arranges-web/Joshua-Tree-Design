@@ -34,6 +34,10 @@ function extractApiError(err: unknown): string {
       return "Too many attempts — wait a few minutes and try again.";
     case "too_many_verify_attempts":
       return "Too many attempts — wait a few minutes and try again.";
+    case "sms_dispatch_failed":
+      return "We couldn't text your code right now. Try again in a moment, or call our office.";
+    case "sms_provider_not_configured":
+      return "SMS isn't available right now. Please call our office and we'll help.";
     default:
       return (err as Error).message || "Something went wrong. Try again.";
   }

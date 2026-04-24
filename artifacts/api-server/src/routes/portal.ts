@@ -140,11 +140,38 @@ router.post(
     body: `Joshua Tree code: ${code}. Expires in 5 minutes.`,
   });
 
-  // Dev fallback: surface the code in the API response so the workflow
-  // is testable without provisioning Twilio. Production builds (NODE_ENV)
-  // never expose the code over HTTP.
   const isProd = process.env["NODE_ENV"] === "production";
-  if (!result.delivered && !isProd) {
+
+  // Production must never silently swallow a provider failure — the user
+  // would never receive a code. Surface a 502 so the client can show a
+  // real error and the user can retry / call the office.
+  if (result.status === "provider_error") {
+    if (isProd) {
+      res.status(502).json({ error: "sms_dispatch_failed" });
+      return;
+    }
+    // Dev: provider configured but failed → still let the developer
+    // proceed via the console code + dev banner.
+    req.log?.info({ to: e164, code }, `[DEV-OTP] code=${code}`);
+    res.json({
+      ok: true,
+      devMode: true,
+      devCode: code,
+      message:
+        "Twilio dispatch failed — using OTP printed to the api-server console.",
+    });
+    return;
+  }
+
+  // Dev fallback: no provider wired up at all. Surface the code in the
+  // API response so the workflow is testable without provisioning
+  // Twilio. Production builds (NODE_ENV) never expose the code over HTTP
+  // and we treat a missing provider as a hard failure.
+  if (result.status === "dev_console") {
+    if (isProd) {
+      res.status(503).json({ error: "sms_provider_not_configured" });
+      return;
+    }
     req.log?.info({ to: e164, code }, `[DEV-OTP] code=${code}`);
     res.json({
       ok: true,
@@ -228,9 +255,10 @@ router.post(
     .set({ consumedAt: new Date() })
     .where(eq(otpCodesTable.id, match.id));
 
-  // The phone has to map to an existing customer. If it doesn't, the
-  // verify still "succeeds" in burning the code but no session is
-  // created — same as a misdialed number.
+  // The phone has to map to an existing customer. If it doesn't, return
+  // the same generic `invalid_code` error we use for code mismatches —
+  // never reveal whether a number is on file. The OTP was already burned
+  // above, so callers can't probe by replaying the same code.
   const customer = (
     await db
       .select()
@@ -239,7 +267,7 @@ router.post(
       .limit(1)
   )[0];
   if (!customer) {
-    res.status(404).json({ error: "no_customer_for_phone" });
+    res.status(400).json({ error: "invalid_code" });
     return;
   }
 

@@ -10,33 +10,40 @@ export interface SendSmsOpts {
   body: string;
 }
 
-export interface SendSmsResult {
-  // True if the message was actually transmitted; false if we logged it
-  // to the server console as a dev fallback.
-  delivered: boolean;
-  provider: "twilio" | "dev_console";
-}
+export type SendSmsOutcome =
+  | { status: "delivered"; provider: "twilio" }
+  | { status: "dev_console"; provider: "dev_console" }
+  | { status: "provider_error"; provider: "twilio"; error: unknown };
 
-export async function sendSms({ toE164, body }: SendSmsOpts): Promise<SendSmsResult> {
+export async function sendSms({
+  toE164,
+  body,
+}: SendSmsOpts): Promise<SendSmsOutcome> {
   const creds = await loadTwilioCreds();
   if (!creds) {
+    // No provider wired up at all → caller must surface the dev fallback
+    // (console + dev banner). In production this should not happen
+    // because deployment should require the connector.
     logger.warn(
       { to: toE164, body },
       "[DEV-OTP] No Twilio connection configured — printing SMS to console.",
     );
-    return { delivered: false, provider: "dev_console" };
+    return { status: "dev_console", provider: "dev_console" };
   }
 
   try {
     await postTwilioMessage(creds, toE164, body);
     logger.info({ to: toE164 }, "Twilio SMS dispatched");
-    return { delivered: true, provider: "twilio" };
+    return { status: "delivered", provider: "twilio" };
   } catch (err) {
+    // Provider was configured but actual dispatch failed. Caller decides
+    // how to surface this — production must NOT pretend the message was
+    // sent (the user would be locked out with no code).
     logger.error(
-      { err, to: toE164, body },
-      "Twilio dispatch failed — falling back to console log so the OTP isn't lost.",
+      { err, to: toE164 },
+      "Twilio dispatch failed.",
     );
-    return { delivered: false, provider: "dev_console" };
+    return { status: "provider_error", provider: "twilio", error: err };
   }
 }
 
