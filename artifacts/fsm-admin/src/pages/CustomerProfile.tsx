@@ -27,6 +27,7 @@ import { Separator } from "@/components/ui/separator";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -434,6 +435,9 @@ function AddPropertyDialog({ customerId }: { customerId: number }) {
       <DialogContent>
         <DialogHeader>
           <DialogTitle className="font-serif">Add property</DialogTitle>
+          <DialogDescription>
+            New property will be associated with this customer automatically.
+          </DialogDescription>
         </DialogHeader>
         <form onSubmit={onSubmit} className="space-y-3">
           <div className="space-y-1.5">
@@ -677,12 +681,24 @@ function InvoicesList({
   );
 }
 
+// Only show leads that still need a quote/decision. Once a lead is
+// CONVERTED or DISMISSED it lives in the Quotes tab or in history; pulling
+// it out keeps this section focused on "incoming requests not yet quoted".
+const ACTIONABLE_LEAD_STATUSES = new Set(["NEW", "CONTACTED", "QUOTED"]);
+
 function LeadsForCustomer({ leads }: { leads: Lead[] }) {
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const [, setLocation] = useLocation();
   const convertMutation = useConvertLeadToQuote();
   const updateMutation = useUpdateLead();
+
+  const actionable = leads.filter((l) =>
+    ACTIONABLE_LEAD_STATUSES.has(l.status),
+  );
+  const archived = leads.filter(
+    (l) => !ACTIONABLE_LEAD_STATUSES.has(l.status),
+  );
 
   const convert = (lead: Lead) => {
     convertMutation.mutate(
@@ -719,89 +735,112 @@ function LeadsForCustomer({ leads }: { leads: Lead[] }) {
     );
   };
 
-  return (
-    <Card>
-      <CardHeader className="pb-2">
-        <CardTitle className="flex items-center gap-2 font-serif text-lg">
-          <Inbox className="h-4 w-4 text-muted-foreground" />
-          Service requests
-        </CardTitle>
-      </CardHeader>
-      <CardContent>
-        {leads.length === 0 ? (
-          <div className="py-6 text-center text-sm text-muted-foreground">
-            No service requests for this customer.
+  const renderLead = (l: Lead, archivedRow: boolean) => (
+    <li
+      key={l.id}
+      className="flex flex-col gap-2 py-3 text-sm md:flex-row md:items-start md:justify-between"
+    >
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center gap-2">
+          <Badge variant="outline" className="font-mono text-[10px]">
+            {formatService(l.service)}
+          </Badge>
+          <StatusBadge status={l.status} />
+          <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+            {l.source}
+          </span>
+          <span className="text-xs text-muted-foreground">
+            submitted {formatDate(l.createdAt)}
+          </span>
+        </div>
+        {l.propertyAddress && (
+          <div className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">
+            <MapPin className="h-3 w-3" />
+            <span>{l.propertyAddress}</span>
           </div>
-        ) : (
-          <ul className="divide-y">
-            {leads.map((l) => (
-              <li
-                key={l.id}
-                className="flex flex-col gap-2 py-3 text-sm md:flex-row md:items-start md:justify-between"
-              >
-                <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Badge variant="outline" className="font-mono text-[10px]">
-                      {formatService(l.service)}
-                    </Badge>
-                    <StatusBadge status={l.status} />
-                    <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
-                      {l.source}
-                    </span>
-                    <span className="text-xs text-muted-foreground">
-                      {formatDate(l.createdAt)}
-                    </span>
-                  </div>
-                  {l.notes && (
-                    <p className="mt-1 text-sm text-muted-foreground">
-                      {l.notes}
-                    </p>
-                  )}
-                  {(l.preferredWindowStart || l.preferredWindowEnd) && (
-                    <div className="mt-1 text-xs text-muted-foreground">
-                      Preferred:{" "}
-                      {formatDate(l.preferredWindowStart)} –{" "}
-                      {formatDate(l.preferredWindowEnd)}
-                    </div>
-                  )}
-                </div>
-                <div className="flex shrink-0 items-center gap-2">
-                  {l.status !== "CONVERTED" &&
-                    l.status !== "DISMISSED" &&
-                    !l.convertedQuoteId && (
-                      <Button
-                        size="sm"
-                        onClick={() => convert(l)}
-                        disabled={convertMutation.isPending}
-                      >
-                        <Wand2 className="mr-1.5 h-3.5 w-3.5" />
-                        Convert to quote
-                      </Button>
-                    )}
-                  {l.convertedQuoteId && (
-                    <Link href="/quotes">
-                      <Button size="sm" variant="outline">
-                        Quote #{l.convertedQuoteId}
-                        <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
-                      </Button>
-                    </Link>
-                  )}
-                  {l.status !== "DISMISSED" && l.status !== "CONVERTED" && (
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => dismiss(l)}
-                      disabled={updateMutation.isPending}
-                    >
-                      Dismiss
-                    </Button>
-                  )}
-                </div>
-              </li>
-            ))}
-          </ul>
         )}
-      </CardContent>
-    </Card>
+        {l.notes && (
+          <p className="mt-1 text-sm text-muted-foreground">{l.notes}</p>
+        )}
+        {(l.preferredWindowStart || l.preferredWindowEnd) && (
+          <div className="mt-1 text-xs text-muted-foreground">
+            Preferred: {formatDate(l.preferredWindowStart)} –{" "}
+            {formatDate(l.preferredWindowEnd)}
+          </div>
+        )}
+      </div>
+      <div className="flex shrink-0 items-center gap-2">
+        {!archivedRow && !l.convertedQuoteId && (
+          <Button
+            size="sm"
+            onClick={() => convert(l)}
+            disabled={convertMutation.isPending}
+          >
+            <Wand2 className="mr-1.5 h-3.5 w-3.5" />
+            Convert to quote
+          </Button>
+        )}
+        {l.convertedQuoteId && (
+          <Link href="/quotes">
+            <Button size="sm" variant="outline">
+              Quote #{l.convertedQuoteId}
+              <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
+            </Button>
+          </Link>
+        )}
+        {!archivedRow && (
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => dismiss(l)}
+            disabled={updateMutation.isPending}
+          >
+            Dismiss
+          </Button>
+        )}
+      </div>
+    </li>
+  );
+
+  return (
+    <div className="space-y-4">
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="flex items-center gap-2 font-serif text-lg">
+            <Inbox className="h-4 w-4 text-muted-foreground" />
+            Incoming requests
+          </CardTitle>
+          <p className="text-xs text-muted-foreground">
+            Service requests waiting to be quoted or scheduled.
+          </p>
+        </CardHeader>
+        <CardContent>
+          {actionable.length === 0 ? (
+            <div className="py-6 text-center text-sm text-muted-foreground">
+              No open service requests for this customer.
+            </div>
+          ) : (
+            <ul className="divide-y">
+              {actionable.map((l) => renderLead(l, false))}
+            </ul>
+          )}
+        </CardContent>
+      </Card>
+
+      {archived.length > 0 && (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="font-serif text-base text-muted-foreground">
+              History ({archived.length})
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ul className="divide-y">
+              {archived.map((l) => renderLead(l, true))}
+            </ul>
+          </CardContent>
+        </Card>
+      )}
+    </div>
   );
 }

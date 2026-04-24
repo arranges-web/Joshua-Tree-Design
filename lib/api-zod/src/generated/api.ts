@@ -186,12 +186,29 @@ export const GetCustomerProfileResponse = zod.object({
       id: zod.number(),
       customerId: zod.number(),
       propertyId: zod.number().nullish(),
-      service: zod.string(),
+      service: zod
+        .enum([
+          "TREE_REMOVAL",
+          "TRIMMING_PRUNING",
+          "MANGROVE_CARE",
+          "STUMP_GRINDING",
+          "EMERGENCY_STORM",
+          "CRANE_ASSISTED",
+        ])
+        .describe(
+          "Mirrors the service catalogue shown on joshuatreeinc.com so leads from the public site \/ portal map cleanly without translation.",
+        ),
       notes: zod.string().nullish(),
       preferredWindowStart: zod.coerce.date().nullish(),
       preferredWindowEnd: zod.coerce.date().nullish(),
-      status: zod.string(),
-      source: zod.string(),
+      status: zod.enum([
+        "NEW",
+        "CONTACTED",
+        "QUOTED",
+        "CONVERTED",
+        "DISMISSED",
+      ]),
+      source: zod.enum(["PORTAL", "PHONE", "WEB", "WALKIN"]),
       convertedQuoteId: zod.number().nullish(),
       createdAt: zod.coerce.date(),
       customerName: zod.string().nullish(),
@@ -743,12 +760,29 @@ export const ListLeadsResponse = zod.object({
       id: zod.number(),
       customerId: zod.number(),
       propertyId: zod.number().nullish(),
-      service: zod.string(),
+      service: zod
+        .enum([
+          "TREE_REMOVAL",
+          "TRIMMING_PRUNING",
+          "MANGROVE_CARE",
+          "STUMP_GRINDING",
+          "EMERGENCY_STORM",
+          "CRANE_ASSISTED",
+        ])
+        .describe(
+          "Mirrors the service catalogue shown on joshuatreeinc.com so leads from the public site \/ portal map cleanly without translation.",
+        ),
       notes: zod.string().nullish(),
       preferredWindowStart: zod.coerce.date().nullish(),
       preferredWindowEnd: zod.coerce.date().nullish(),
-      status: zod.string(),
-      source: zod.string(),
+      status: zod.enum([
+        "NEW",
+        "CONTACTED",
+        "QUOTED",
+        "CONVERTED",
+        "DISMISSED",
+      ]),
+      source: zod.enum(["PORTAL", "PHONE", "WEB", "WALKIN"]),
       convertedQuoteId: zod.number().nullish(),
       createdAt: zod.coerce.date(),
       customerName: zod.string().nullish(),
@@ -760,12 +794,25 @@ export const ListLeadsResponse = zod.object({
 export const CreateLeadBody = zod.object({
   customerId: zod.number(),
   propertyId: zod.number().nullish(),
-  service: zod.string(),
+  service: zod
+    .enum([
+      "TREE_REMOVAL",
+      "TRIMMING_PRUNING",
+      "MANGROVE_CARE",
+      "STUMP_GRINDING",
+      "EMERGENCY_STORM",
+      "CRANE_ASSISTED",
+    ])
+    .describe(
+      "Mirrors the service catalogue shown on joshuatreeinc.com so leads from the public site \/ portal map cleanly without translation.",
+    ),
   notes: zod.string().nullish(),
   preferredWindowStart: zod.coerce.date().nullish(),
   preferredWindowEnd: zod.coerce.date().nullish(),
-  status: zod.string().optional(),
-  source: zod.string().optional(),
+  status: zod
+    .enum(["NEW", "CONTACTED", "QUOTED", "CONVERTED", "DISMISSED"])
+    .optional(),
+  source: zod.enum(["PORTAL", "PHONE", "WEB", "WALKIN"]).optional(),
 });
 
 export const UpdateLeadParams = zod.object({
@@ -774,11 +821,25 @@ export const UpdateLeadParams = zod.object({
 
 export const UpdateLeadBody = zod.object({
   propertyId: zod.number().nullish(),
-  service: zod.string().optional(),
+  service: zod
+    .enum([
+      "TREE_REMOVAL",
+      "TRIMMING_PRUNING",
+      "MANGROVE_CARE",
+      "STUMP_GRINDING",
+      "EMERGENCY_STORM",
+      "CRANE_ASSISTED",
+    ])
+    .optional()
+    .describe(
+      "Mirrors the service catalogue shown on joshuatreeinc.com so leads from the public site \/ portal map cleanly without translation.",
+    ),
   notes: zod.string().nullish(),
   preferredWindowStart: zod.coerce.date().nullish(),
   preferredWindowEnd: zod.coerce.date().nullish(),
-  status: zod.string().optional(),
+  status: zod
+    .enum(["NEW", "CONTACTED", "QUOTED", "CONVERTED", "DISMISSED"])
+    .optional(),
 });
 
 export const UpdateLeadResponse = zod.object({
@@ -786,12 +847,23 @@ export const UpdateLeadResponse = zod.object({
     id: zod.number(),
     customerId: zod.number(),
     propertyId: zod.number().nullish(),
-    service: zod.string(),
+    service: zod
+      .enum([
+        "TREE_REMOVAL",
+        "TRIMMING_PRUNING",
+        "MANGROVE_CARE",
+        "STUMP_GRINDING",
+        "EMERGENCY_STORM",
+        "CRANE_ASSISTED",
+      ])
+      .describe(
+        "Mirrors the service catalogue shown on joshuatreeinc.com so leads from the public site \/ portal map cleanly without translation.",
+      ),
     notes: zod.string().nullish(),
     preferredWindowStart: zod.coerce.date().nullish(),
     preferredWindowEnd: zod.coerce.date().nullish(),
-    status: zod.string(),
-    source: zod.string(),
+    status: zod.enum(["NEW", "CONTACTED", "QUOTED", "CONVERTED", "DISMISSED"]),
+    source: zod.enum(["PORTAL", "PHONE", "WEB", "WALKIN"]),
     convertedQuoteId: zod.number().nullish(),
     createdAt: zod.coerce.date(),
     customerName: zod.string().nullish(),

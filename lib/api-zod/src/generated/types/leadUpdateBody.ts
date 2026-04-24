@@ -5,12 +5,14 @@
  * FSM Platform API
  * OpenAPI spec version: 0.1.0
  */
+import type { LeadService } from "./leadService";
+import type { LeadStatus } from "./leadStatus";
 
 export interface LeadUpdateBody {
   propertyId?: number | null;
-  service?: string;
+  service?: LeadService;
   notes?: string | null;
   preferredWindowStart?: Date | null;
   preferredWindowEnd?: Date | null;
-  status?: string;
+  status?: LeadStatus;
 }

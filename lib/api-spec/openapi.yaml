@@ -1171,6 +1171,31 @@ components:
           type: array
           items: { $ref: "#/components/schemas/PermissionMatrixCell" }
 
+    LeadService:
+      type: string
+      description: Mirrors the service catalogue shown on joshuatreeinc.com so leads from the public site / portal map cleanly without translation.
+      enum:
+        - TREE_REMOVAL
+        - TRIMMING_PRUNING
+        - MANGROVE_CARE
+        - STUMP_GRINDING
+        - EMERGENCY_STORM
+        - CRANE_ASSISTED
+    LeadStatus:
+      type: string
+      enum:
+        - NEW
+        - CONTACTED
+        - QUOTED
+        - CONVERTED
+        - DISMISSED
+    LeadSource:
+      type: string
+      enum:
+        - PORTAL
+        - PHONE
+        - WEB
+        - WALKIN
     Lead:
       type: object
       required: [id, customerId, service, status, source, createdAt]
@@ -1178,12 +1203,12 @@ components:
         id: { type: integer }
         customerId: { type: integer }
         propertyId: { type: integer, nullable: true }
-        service: { type: string }
+        service: { $ref: "#/components/schemas/LeadService" }
         notes: { type: string, nullable: true }
         preferredWindowStart: { type: string, format: date-time, nullable: true }
         preferredWindowEnd: { type: string, format: date-time, nullable: true }
-        status: { type: string }
-        source: { type: string }
+        status: { $ref: "#/components/schemas/LeadStatus" }
+        source: { $ref: "#/components/schemas/LeadSource" }
         convertedQuoteId: { type: integer, nullable: true }
         createdAt: { type: string, format: date-time }
         customerName: { type: string, nullable: true }
@@ -1194,21 +1219,21 @@ components:
       properties:
         customerId: { type: integer }
         propertyId: { type: integer, nullable: true }
-        service: { type: string }
+        service: { $ref: "#/components/schemas/LeadService" }
         notes: { type: string, nullable: true }
         preferredWindowStart: { type: string, format: date-time, nullable: true }
         preferredWindowEnd: { type: string, format: date-time, nullable: true }
-        status: { type: string }
-        source: { type: string }
+        status: { $ref: "#/components/schemas/LeadStatus" }
+        source: { $ref: "#/components/schemas/LeadSource" }
     LeadUpdateBody:
       type: object
       properties:
         propertyId: { type: integer, nullable: true }
-        service: { type: string }
+        service: { $ref: "#/components/schemas/LeadService" }
         notes: { type: string, nullable: true }
         preferredWindowStart: { type: string, format: date-time, nullable: true }
         preferredWindowEnd: { type: string, format: date-time, nullable: true }
-        status: { type: string }
+        status: { $ref: "#/components/schemas/LeadStatus" }
     LeadResponse:
       type: object
       required: [lead]

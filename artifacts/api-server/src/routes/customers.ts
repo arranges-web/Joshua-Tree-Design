@@ -166,15 +166,30 @@ router.get(
     // Leads — scopeServiceRequests already filters by customer ownership
     // for SALES, which is redundant here (we've already gated by customer)
     // but applying it keeps the auth path consistent with /api/leads.
+    // Join properties so each lead row carries propertyAddress, matching
+    // the /api/leads response shape so the UI can render service +
+    // property + when-submitted without an extra round trip.
     const leadsScope = scopeServiceRequests(user);
     const leadsWhere = leadsScope
       ? and(eq(serviceRequestsTable.customerId, customer.id), leadsScope)
       : eq(serviceRequestsTable.customerId, customer.id);
-    const leads = await db
-      .select()
+    const leadRows = await db
+      .select({
+        lead: serviceRequestsTable,
+        propertyAddress: propertiesTable.address,
+      })
       .from(serviceRequestsTable)
+      .leftJoin(
+        propertiesTable,
+        eq(serviceRequestsTable.propertyId, propertiesTable.id),
+      )
       .where(leadsWhere)
       .orderBy(desc(serviceRequestsTable.createdAt));
+    const leads = leadRows.map((r) => ({
+      ...r.lead,
+      customerName: customer.fullName,
+      propertyAddress: r.propertyAddress,
+    }));
 
     // Rollup totals (lifetime revenue from PAID invoices, open quote
     // exposure from DRAFT/SENT, outstanding from SENT/OVERDUE invoices).

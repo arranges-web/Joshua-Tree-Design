@@ -353,16 +353,49 @@ export interface PermissionMatrixResponse {
   cells: PermissionMatrixCell[];
 }
 
+/**
+ * Mirrors the service catalogue shown on joshuatreeinc.com so leads from the public site / portal map cleanly without translation.
+ */
+export type LeadService = (typeof LeadService)[keyof typeof LeadService];
+
+export const LeadService = {
+  TREE_REMOVAL: "TREE_REMOVAL",
+  TRIMMING_PRUNING: "TRIMMING_PRUNING",
+  MANGROVE_CARE: "MANGROVE_CARE",
+  STUMP_GRINDING: "STUMP_GRINDING",
+  EMERGENCY_STORM: "EMERGENCY_STORM",
+  CRANE_ASSISTED: "CRANE_ASSISTED",
+} as const;
+
+export type LeadStatus = (typeof LeadStatus)[keyof typeof LeadStatus];
+
+export const LeadStatus = {
+  NEW: "NEW",
+  CONTACTED: "CONTACTED",
+  QUOTED: "QUOTED",
+  CONVERTED: "CONVERTED",
+  DISMISSED: "DISMISSED",
+} as const;
+
+export type LeadSource = (typeof LeadSource)[keyof typeof LeadSource];
+
+export const LeadSource = {
+  PORTAL: "PORTAL",
+  PHONE: "PHONE",
+  WEB: "WEB",
+  WALKIN: "WALKIN",
+} as const;
+
 export interface Lead {
   id: number;
   customerId: number;
   propertyId?: number | null;
-  service: string;
+  service: LeadService;
   notes?: string | null;
   preferredWindowStart?: string | null;
   preferredWindowEnd?: string | null;
-  status: string;
-  source: string;
+  status: LeadStatus;
+  source: LeadSource;
   convertedQuoteId?: number | null;
   createdAt: string;
   customerName?: string | null;
@@ -372,21 +405,21 @@ export interface Lead {
 export interface LeadWriteBody {
   customerId: number;
   propertyId?: number | null;
-  service: string;
+  service: LeadService;
   notes?: string | null;
   preferredWindowStart?: string | null;
   preferredWindowEnd?: string | null;
-  status?: string;
-  source?: string;
+  status?: LeadStatus;
+  source?: LeadSource;
 }
 
 export interface LeadUpdateBody {
   propertyId?: number | null;
-  service?: string;
+  service?: LeadService;
   notes?: string | null;
   preferredWindowStart?: string | null;
   preferredWindowEnd?: string | null;
-  status?: string;
+  status?: LeadStatus;
 }
 
 export interface LeadResponse {
