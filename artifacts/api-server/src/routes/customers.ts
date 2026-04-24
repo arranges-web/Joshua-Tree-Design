@@ -22,6 +22,7 @@ import {
 } from "@workspace/api-zod";
 import { requireAuth } from "../middlewares/requireAuth";
 import { requireSection } from "../middlewares/requireSection";
+import { normalizeToE164 } from "../lib/auth/phone";
 import {
   scopeCustomers,
   scopeJobs,
@@ -272,11 +273,29 @@ router.post(
       res.status(400).json({ error: "invalid_body" });
       return;
     }
-    const [row] = await db
-      .insert(customersTable)
-      .values(parsed.data)
-      .returning();
-    res.status(201).json({ customer: row });
+    // E.164 normalization MUST happen here. The portal's verify-otp
+    // path looks customers up exclusively by `phoneE164`, so any
+    // customer record whose `phoneE164` is missing or stale becomes
+    // unreachable from the portal. Derive it from `phone` on every
+    // write so the two columns can never drift.
+    const phoneE164 = derivePhoneE164(parsed.data.phone);
+    if (parsed.data.phone && !phoneE164) {
+      res.status(400).json({ error: "invalid_phone" });
+      return;
+    }
+    try {
+      const [row] = await db
+        .insert(customersTable)
+        .values({ ...parsed.data, phoneE164 })
+        .returning();
+      res.status(201).json({ customer: row });
+    } catch (err) {
+      if (isUniquePhoneViolation(err)) {
+        res.status(409).json({ error: "phone_already_in_use" });
+        return;
+      }
+      throw err;
+    }
   },
 );
 
@@ -292,22 +311,57 @@ router.patch(
       res.status(400).json({ error: "invalid_request" });
       return;
     }
+    // Re-derive phoneE164 atomically with phone so portal lookups
+    // (artifacts/api-server/src/routes/portal.ts verify-otp) can never
+    // see a stale value. If phone wasn't provided in the patch body,
+    // leave both columns alone.
+    const hasPhoneEdit = Object.prototype.hasOwnProperty.call(body.data, "phone");
+    let updatePayload: Record<string, unknown> = { ...body.data };
+    if (hasPhoneEdit) {
+      const phoneE164 = derivePhoneE164(body.data.phone);
+      if (body.data.phone && !phoneE164) {
+        res.status(400).json({ error: "invalid_phone" });
+        return;
+      }
+      updatePayload = { ...updatePayload, phoneE164 };
+    }
     const scope = scopeCustomers(user);
     const where = scope
       ? and(eq(customersTable.id, params.data.id), scope)
       : eq(customersTable.id, params.data.id);
-    const [row] = await db
-      .update(customersTable)
-      .set(body.data)
-      .where(where)
-      .returning();
-    if (!row) {
-      res.status(404).json({ error: "not_found" });
-      return;
+    try {
+      const [row] = await db
+        .update(customersTable)
+        .set(updatePayload)
+        .where(where)
+        .returning();
+      if (!row) {
+        res.status(404).json({ error: "not_found" });
+        return;
+      }
+      res.json({ customer: row });
+    } catch (err) {
+      if (isUniquePhoneViolation(err)) {
+        res.status(409).json({ error: "phone_already_in_use" });
+        return;
+      }
+      throw err;
     }
-    res.json({ customer: row });
   },
 );
+
+// ─── Helpers ─────────────────────────────────────────────────────────────
+function derivePhoneE164(phone: string | null | undefined): string | null {
+  if (!phone) return null;
+  return normalizeToE164(phone);
+}
+
+function isUniquePhoneViolation(err: unknown): boolean {
+  // Postgres unique-constraint violation surfaces as code 23505. We only
+  // care about the customers_phone_e164_uq index.
+  const e = err as { code?: string; constraint?: string };
+  return e?.code === "23505" && (e.constraint ?? "").includes("phone_e164");
+}
 
 router.delete(
   "/customers/:id",
