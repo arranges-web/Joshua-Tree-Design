@@ -5,6 +5,7 @@ import {
   useUpdateLead,
   useConvertLeadToQuote,
   type Lead,
+  type LeadStatus,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -172,7 +173,7 @@ export function Leads() {
     );
   };
 
-  const setStatus = (lead: Lead, status: string) => {
+  const setStatus = (lead: Lead, status: LeadStatus) => {
     updateMutation.mutate(
       { id: lead.id, data: { status } },
       {
