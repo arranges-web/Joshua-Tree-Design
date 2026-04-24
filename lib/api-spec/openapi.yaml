@@ -1,36 +1,1068 @@
 openapi: 3.1.0
 info:
-  # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: FSM Platform API
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
-    description: Health operations
+  - name: auth
+  - name: dashboard
+  - name: customers
+  - name: jobs
+  - name: quotes
+  - name: invoices
+  - name: fleet
+  - name: maintenance
+  - name: employees
+  - name: permissions
+
 paths:
   /healthz:
     get:
       operationId: healthCheck
       tags: [health]
-      summary: Health check
-      description: Returns server health status
       responses:
         "200":
           description: Healthy
           content:
             application/json:
-              schema:
-                $ref: "#/components/schemas/HealthStatus"
+              schema: { $ref: "#/components/schemas/HealthStatus" }
+
+  /auth/login:
+    post:
+      operationId: login
+      tags: [auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/LoginRequest" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AuthMeResponse" }
+        "401": { $ref: "#/components/responses/Error" }
+
+  /auth/logout:
+    post:
+      operationId: logout
+      tags: [auth]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Ok" }
+
+  /auth/me:
+    get:
+      operationId: getMe
+      tags: [auth]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AuthMeResponse" }
+        "401": { $ref: "#/components/responses/Error" }
+
+  /admin/dashboard-summary:
+    get:
+      operationId: getDashboardSummary
+      tags: [dashboard]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DashboardSummary" }
+
+  /customers:
+    get:
+      operationId: listCustomers
+      tags: [customers]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CustomerListResponse" }
+    post:
+      operationId: createCustomer
+      tags: [customers]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CustomerWriteBody" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CustomerResponse" }
+  /customers/{id}:
+    patch:
+      operationId: updateCustomer
+      tags: [customers]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CustomerWriteBody" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CustomerResponse" }
+    delete:
+      operationId: deleteCustomer
+      tags: [customers]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Ok" }
+
+  /jobs:
+    get:
+      operationId: listJobs
+      tags: [jobs]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/JobListResponse" }
+    post:
+      operationId: createJob
+      tags: [jobs]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/JobWriteBody" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/JobResponse" }
+  /jobs/{id}:
+    patch:
+      operationId: updateJob
+      tags: [jobs]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/JobWriteBody" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/JobResponse" }
+    delete:
+      operationId: deleteJob
+      tags: [jobs]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Ok" }
+
+  /quotes:
+    get:
+      operationId: listQuotes
+      tags: [quotes]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/QuoteListResponse" }
+    post:
+      operationId: createQuote
+      tags: [quotes]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/QuoteWriteBody" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/QuoteResponse" }
+  /quotes/{id}:
+    patch:
+      operationId: updateQuote
+      tags: [quotes]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/QuoteWriteBody" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/QuoteResponse" }
+    delete:
+      operationId: deleteQuote
+      tags: [quotes]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Ok" }
+
+  /invoices:
+    get:
+      operationId: listInvoices
+      tags: [invoices]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/InvoiceListResponse" }
+    post:
+      operationId: createInvoice
+      tags: [invoices]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/InvoiceWriteBody" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/InvoiceResponse" }
+  /invoices/{id}:
+    patch:
+      operationId: updateInvoice
+      tags: [invoices]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/InvoiceWriteBody" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/InvoiceResponse" }
+    delete:
+      operationId: deleteInvoice
+      tags: [invoices]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Ok" }
+
+  /trucks:
+    get:
+      operationId: listTrucks
+      tags: [fleet]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TruckListResponse" }
+    post:
+      operationId: createTruck
+      tags: [fleet]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/TruckWriteBody" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TruckResponse" }
+  /trucks/{id}:
+    patch:
+      operationId: updateTruck
+      tags: [fleet]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/TruckWriteBody" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TruckResponse" }
+    delete:
+      operationId: deleteTruck
+      tags: [fleet]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Ok" }
+
+  /equipment:
+    get:
+      operationId: listEquipment
+      tags: [fleet]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EquipmentListResponse" }
+    post:
+      operationId: createEquipment
+      tags: [fleet]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/EquipmentWriteBody" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EquipmentResponse" }
+  /equipment/{id}:
+    patch:
+      operationId: updateEquipment
+      tags: [fleet]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/EquipmentWriteBody" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EquipmentResponse" }
+    delete:
+      operationId: deleteEquipment
+      tags: [fleet]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Ok" }
+
+  /maintenance-logs:
+    get:
+      operationId: listMaintenanceLogs
+      tags: [maintenance]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MaintenanceLogListResponse" }
+    post:
+      operationId: createMaintenanceLog
+      tags: [maintenance]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/MaintenanceLogWriteBody" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MaintenanceLogResponse" }
+  /maintenance-logs/{id}:
+    patch:
+      operationId: updateMaintenanceLog
+      tags: [maintenance]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/MaintenanceLogWriteBody" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MaintenanceLogResponse" }
+    delete:
+      operationId: deleteMaintenanceLog
+      tags: [maintenance]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Ok" }
+
+  /admin/users:
+    get:
+      operationId: listEmployees
+      tags: [employees]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EmployeeListResponse" }
+    post:
+      operationId: createEmployee
+      tags: [employees]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/EmployeeCreateBody" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EmployeeResponse" }
+  /admin/users/{id}:
+    patch:
+      operationId: updateEmployee
+      tags: [employees]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/EmployeeUpdateBody" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EmployeeResponse" }
+    delete:
+      operationId: deleteEmployee
+      tags: [employees]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Ok" }
+
+  /admin/roles:
+    get:
+      operationId: listRoles
+      tags: [employees]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RoleListResponse" }
+
+  /admin/departments:
+    get:
+      operationId: listDepartments
+      tags: [employees]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DepartmentListResponse" }
+
+  /admin/section-permissions:
+    get:
+      operationId: listSectionPermissions
+      tags: [permissions]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SectionPermissionListResponse" }
+    post:
+      operationId: updateSectionPermission
+      tags: [permissions]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SectionPermissionUpdateBody" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Ok" }
+
+  /admin/section-permissions/matrix:
+    get:
+      operationId: getPermissionMatrix
+      tags: [permissions]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PermissionMatrixResponse" }
+
 components:
+  responses:
+    Error:
+      description: Error
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorBody" }
   schemas:
     HealthStatus:
       type: object
+      required: [status]
       properties:
-        status:
-          type: string
-      required:
-        - status
+        status: { type: string }
+    Ok:
+      type: object
+      required: [ok]
+      properties:
+        ok: { type: boolean }
+    ErrorBody:
+      type: object
+      required: [error]
+      properties:
+        error: { type: string }
 
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email: { type: string, format: email }
+        password: { type: string }
+
+    AuthUser:
+      type: object
+      required: [id, email, fullName, role, department]
+      properties:
+        id: { type: integer }
+        email: { type: string }
+        fullName: { type: string }
+        role: { type: string }
+        department: { type: string }
+    AuthMeResponse:
+      type: object
+      required: [user]
+      properties:
+        user: { $ref: "#/components/schemas/AuthUser" }
+
+    DashboardKpi:
+      type: object
+      required: [openJobs, scheduledJobs, completedThisMonth, pipelineCents, paidThisMonthCents, outstandingInvoicesCents, fleetActive, fleetInShop, employees]
+      properties:
+        openJobs: { type: integer }
+        scheduledJobs: { type: integer }
+        completedThisMonth: { type: integer }
+        pipelineCents: { type: integer }
+        paidThisMonthCents: { type: integer }
+        outstandingInvoicesCents: { type: integer }
+        fleetActive: { type: integer }
+        fleetInShop: { type: integer }
+        employees: { type: integer }
+    DashboardJobByStatus:
+      type: object
+      required: [status, count]
+      properties:
+        status: { type: string }
+        count: { type: integer }
+    DashboardRecentJob:
+      type: object
+      required: [id, status, totalCents]
+      properties:
+        id: { type: integer }
+        status: { type: string }
+        totalCents: { type: integer }
+        scheduledFor: { type: string, format: date-time, nullable: true }
+        notes: { type: string, nullable: true }
+    DashboardSummary:
+      type: object
+      required: [kpi, jobsByStatus, recentJobs, quotePipelineByStage]
+      properties:
+        kpi: { $ref: "#/components/schemas/DashboardKpi" }
+        jobsByStatus:
+          type: array
+          items: { $ref: "#/components/schemas/DashboardJobByStatus" }
+        quotePipelineByStage:
+          type: array
+          items: { $ref: "#/components/schemas/DashboardJobByStatus" }
+        recentJobs:
+          type: array
+          items: { $ref: "#/components/schemas/DashboardRecentJob" }
+
+    Customer:
+      type: object
+      required: [id, fullName, ownerUserId, createdAt]
+      properties:
+        id: { type: integer }
+        fullName: { type: string }
+        email: { type: string, nullable: true }
+        phone: { type: string, nullable: true }
+        billingAddress: { type: string, nullable: true }
+        ownerUserId: { type: integer }
+        createdAt: { type: string, format: date-time }
+    CustomerWriteBody:
+      type: object
+      required: [fullName, ownerUserId]
+      properties:
+        fullName: { type: string }
+        email: { type: string, nullable: true }
+        phone: { type: string, nullable: true }
+        billingAddress: { type: string, nullable: true }
+        ownerUserId: { type: integer }
+    CustomerResponse:
+      type: object
+      required: [customer]
+      properties:
+        customer: { $ref: "#/components/schemas/Customer" }
+    CustomerListResponse:
+      type: object
+      required: [customers]
+      properties:
+        customers:
+          type: array
+          items: { $ref: "#/components/schemas/Customer" }
+
+    Job:
+      type: object
+      required: [id, propertyId, status, totalCents, createdAt]
+      properties:
+        id: { type: integer }
+        propertyId: { type: integer }
+        crewId: { type: integer, nullable: true }
+        status: { type: string }
+        scheduledFor: { type: string, format: date-time, nullable: true }
+        completedAt: { type: string, format: date-time, nullable: true }
+        totalCents: { type: integer }
+        notes: { type: string, nullable: true }
+        createdAt: { type: string, format: date-time }
+    JobWriteBody:
+      type: object
+      required: [propertyId, status, totalCents]
+      properties:
+        propertyId: { type: integer }
+        crewId: { type: integer, nullable: true }
+        status: { type: string }
+        scheduledFor: { type: string, format: date-time, nullable: true }
+        completedAt: { type: string, format: date-time, nullable: true }
+        totalCents: { type: integer }
+        notes: { type: string, nullable: true }
+    JobResponse:
+      type: object
+      required: [job]
+      properties:
+        job: { $ref: "#/components/schemas/Job" }
+    JobListResponse:
+      type: object
+      required: [jobs]
+      properties:
+        jobs:
+          type: array
+          items: { $ref: "#/components/schemas/Job" }
+
+    Quote:
+      type: object
+      required: [id, customerId, ownerUserId, status, subtotalCents, totalCents, createdAt]
+      properties:
+        id: { type: integer }
+        customerId: { type: integer }
+        propertyId: { type: integer, nullable: true }
+        ownerUserId: { type: integer }
+        status: { type: string }
+        subtotalCents: { type: integer }
+        totalCents: { type: integer }
+        sentAt: { type: string, format: date-time, nullable: true }
+        decidedAt: { type: string, format: date-time, nullable: true }
+        createdAt: { type: string, format: date-time }
+    QuoteWriteBody:
+      type: object
+      required: [customerId, ownerUserId, status, subtotalCents, totalCents]
+      properties:
+        customerId: { type: integer }
+        propertyId: { type: integer, nullable: true }
+        ownerUserId: { type: integer }
+        status: { type: string }
+        subtotalCents: { type: integer }
+        totalCents: { type: integer }
+        sentAt: { type: string, format: date-time, nullable: true }
+        decidedAt: { type: string, format: date-time, nullable: true }
+    QuoteResponse:
+      type: object
+      required: [quote]
+      properties:
+        quote: { $ref: "#/components/schemas/Quote" }
+    QuoteListResponse:
+      type: object
+      required: [quotes]
+      properties:
+        quotes:
+          type: array
+          items: { $ref: "#/components/schemas/Quote" }
+
+    Invoice:
+      type: object
+      required: [id, customerId, status, totalCents]
+      properties:
+        id: { type: integer }
+        jobId: { type: integer, nullable: true }
+        customerId: { type: integer }
+        status: { type: string }
+        totalCents: { type: integer }
+        issuedAt: { type: string, format: date-time, nullable: true }
+        paidAt: { type: string, format: date-time, nullable: true }
+    InvoiceWriteBody:
+      type: object
+      required: [customerId, status, totalCents]
+      properties:
+        jobId: { type: integer, nullable: true }
+        customerId: { type: integer }
+        status: { type: string }
+        totalCents: { type: integer }
+        issuedAt: { type: string, format: date-time, nullable: true }
+        paidAt: { type: string, format: date-time, nullable: true }
+    InvoiceResponse:
+      type: object
+      required: [invoice]
+      properties:
+        invoice: { $ref: "#/components/schemas/Invoice" }
+    InvoiceListResponse:
+      type: object
+      required: [invoices]
+      properties:
+        invoices:
+          type: array
+          items: { $ref: "#/components/schemas/Invoice" }
+
+    Truck:
+      type: object
+      required: [id, name, status]
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        vin: { type: string, nullable: true }
+        plate: { type: string, nullable: true }
+        status: { type: string }
+        assignedCrewId: { type: integer, nullable: true }
+    TruckWriteBody:
+      type: object
+      required: [name, status]
+      properties:
+        name: { type: string }
+        vin: { type: string, nullable: true }
+        plate: { type: string, nullable: true }
+        status: { type: string }
+        assignedCrewId: { type: integer, nullable: true }
+    TruckResponse:
+      type: object
+      required: [truck]
+      properties:
+        truck: { $ref: "#/components/schemas/Truck" }
+    TruckListResponse:
+      type: object
+      required: [trucks]
+      properties:
+        trucks:
+          type: array
+          items: { $ref: "#/components/schemas/Truck" }
+
+    Equipment:
+      type: object
+      required: [id, name, type, status]
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        type: { type: string }
+        serial: { type: string, nullable: true }
+        status: { type: string }
+        assignedTruckId: { type: integer, nullable: true }
+    EquipmentWriteBody:
+      type: object
+      required: [name, type, status]
+      properties:
+        name: { type: string }
+        type: { type: string }
+        serial: { type: string, nullable: true }
+        status: { type: string }
+        assignedTruckId: { type: integer, nullable: true }
+    EquipmentResponse:
+      type: object
+      required: [equipment]
+      properties:
+        equipment: { $ref: "#/components/schemas/Equipment" }
+    EquipmentListResponse:
+      type: object
+      required: [equipment]
+      properties:
+        equipment:
+          type: array
+          items: { $ref: "#/components/schemas/Equipment" }
+
+    MaintenanceLog:
+      type: object
+      required: [id, kind, description, performedAt, costCents]
+      properties:
+        id: { type: integer }
+        truckId: { type: integer, nullable: true }
+        equipmentId: { type: integer, nullable: true }
+        kind: { type: string }
+        description: { type: string }
+        performedByUserId: { type: integer, nullable: true }
+        performedAt: { type: string, format: date-time }
+        costCents: { type: integer }
+    MaintenanceLogWriteBody:
+      type: object
+      required: [kind, description, costCents]
+      properties:
+        truckId: { type: integer, nullable: true }
+        equipmentId: { type: integer, nullable: true }
+        kind: { type: string }
+        description: { type: string }
+        performedByUserId: { type: integer, nullable: true }
+        performedAt: { type: string, format: date-time, nullable: true }
+        costCents: { type: integer }
+    MaintenanceLogResponse:
+      type: object
+      required: [log]
+      properties:
+        log: { $ref: "#/components/schemas/MaintenanceLog" }
+    MaintenanceLogListResponse:
+      type: object
+      required: [logs]
+      properties:
+        logs:
+          type: array
+          items: { $ref: "#/components/schemas/MaintenanceLog" }
+
+    Employee:
+      type: object
+      required: [id, email, fullName, role, department, isActive, createdAt]
+      properties:
+        id: { type: integer }
+        email: { type: string }
+        fullName: { type: string }
+        role: { type: string }
+        roleId: { type: integer }
+        department: { type: string }
+        departmentId: { type: integer }
+        isActive: { type: boolean }
+        createdAt: { type: string, format: date-time }
+    EmployeeCreateBody:
+      type: object
+      required: [email, fullName, password, roleId, departmentId]
+      properties:
+        email: { type: string, format: email }
+        fullName: { type: string }
+        password: { type: string, minLength: 6 }
+        roleId: { type: integer }
+        departmentId: { type: integer }
+        isActive: { type: boolean }
+    EmployeeUpdateBody:
+      type: object
+      properties:
+        email: { type: string }
+        fullName: { type: string }
+        password: { type: string }
+        roleId: { type: integer }
+        departmentId: { type: integer }
+        isActive: { type: boolean }
+    EmployeeResponse:
+      type: object
+      required: [employee]
+      properties:
+        employee: { $ref: "#/components/schemas/Employee" }
+    EmployeeListResponse:
+      type: object
+      required: [employees]
+      properties:
+        employees:
+          type: array
+          items: { $ref: "#/components/schemas/Employee" }
+
+    Role:
+      type: object
+      required: [id, key, label]
+      properties:
+        id: { type: integer }
+        key: { type: string }
+        label: { type: string }
+    RoleListResponse:
+      type: object
+      required: [roles]
+      properties:
+        roles:
+          type: array
+          items: { $ref: "#/components/schemas/Role" }
+    Department:
+      type: object
+      required: [id, key, label]
+      properties:
+        id: { type: integer }
+        key: { type: string }
+        label: { type: string }
+    DepartmentListResponse:
+      type: object
+      required: [departments]
+      properties:
+        departments:
+          type: array
+          items: { $ref: "#/components/schemas/Department" }
+
+    SectionPermission:
+      type: object
+      required: [roleKey, sectionKey, canView, canEdit]
+      properties:
+        id: { type: integer, nullable: true }
+        roleKey: { type: string }
+        sectionKey: { type: string }
+        canView: { type: boolean }
+        canEdit: { type: boolean }
+        isOverride: { type: boolean }
+    SectionPermissionListResponse:
+      type: object
+      required: [permissions]
+      properties:
+        permissions:
+          type: array
+          items: { $ref: "#/components/schemas/SectionPermission" }
+    SectionPermissionUpdateBody:
+      type: object
+      required: [roleKey, sectionKey, canView, canEdit]
+      properties:
+        roleKey: { type: string }
+        sectionKey: { type: string }
+        canView: { type: boolean }
+        canEdit: { type: boolean }
+
+    PermissionMatrixCell:
+      type: object
+      required: [roleKey, sectionKey, canView, canEdit, isOverride]
+      properties:
+        roleKey: { type: string }
+        sectionKey: { type: string }
+        canView: { type: boolean }
+        canEdit: { type: boolean }
+        isOverride: { type: boolean }
+    PermissionMatrixResponse:
+      type: object
+      required: [roles, sections, cells]
+      properties:
+        roles:
+          type: array
+          items: { $ref: "#/components/schemas/Role" }
+        sections:
+          type: array
+          items: { type: string }
+        cells:
+          type: array
+          items: { $ref: "#/components/schemas/PermissionMatrixCell" }
