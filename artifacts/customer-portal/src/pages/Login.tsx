@@ -15,6 +15,7 @@ import {
   InputOTPGroup,
   InputOTPSlot,
 } from "@/components/ui/input-otp";
+import { DevOtpBanner } from "@/components/DevOtpBanner";
 
 type Step = "phone" | "code";
 
@@ -108,6 +109,11 @@ export function Login() {
 
   return (
     <div className="relative min-h-screen overflow-hidden bg-background">
+      <DevOtpBanner
+        notice={devNotice}
+        code={devCode}
+        onAutoFill={devCode ? () => setCode(devCode) : undefined}
+      />
       <div
         aria-hidden
         className="pointer-events-none absolute inset-0 opacity-[0.06]"
@@ -277,24 +283,6 @@ export function Login() {
                     Use a different number
                   </button>
                 </div>
-
-                {devNotice && (
-                  <div className="rounded-md border border-accent/30 bg-accent/5 px-3 py-2 text-xs text-foreground/80">
-                    <div className="font-medium uppercase tracking-wider text-[10px] text-accent">
-                      Development mode
-                    </div>
-                    <div className="mt-1">{devNotice}</div>
-                    {devCode && (
-                      <button
-                        type="button"
-                        className="mt-2 text-xs underline-offset-2 hover:underline"
-                        onClick={() => setCode(devCode)}
-                      >
-                        Auto-fill code
-                      </button>
-                    )}
-                  </div>
-                )}
 
                 {errorMsg && (
                   <p className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
