@@ -32,7 +32,7 @@ export default function NotFound() {
             <Link href="/">Back to home</Link>
           </Button>
           <Button asChild size="lg" variant="outline" className="h-11 px-5">
-            <Link href="/requests/new">Request service</Link>
+            <Link href="/new-request">Request service</Link>
           </Button>
         </div>
       </div>
