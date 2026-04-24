@@ -22,6 +22,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Link } from "wouter";
+import { StatusTimeline } from "@/components/StatusTimeline";
 
 const SERVICES: Array<{
   value: LeadServiceT;
@@ -194,16 +195,21 @@ export function NewRequest() {
 
   if (submitted) {
     return (
-      <div className="mx-auto max-w-xl rounded-3xl border border-border/70 bg-card p-10 text-center shadow-sm">
-        <div className="mx-auto mb-5 grid h-14 w-14 place-items-center rounded-full bg-primary text-primary-foreground shadow-sm">
-          <CheckCircle2 className="h-6 w-6" />
+      <div className="mx-auto max-w-2xl rounded-3xl border border-border/70 bg-card p-10 shadow-sm">
+        <div className="text-center">
+          <div className="mx-auto mb-5 grid h-14 w-14 place-items-center rounded-full bg-primary text-primary-foreground shadow-sm">
+            <CheckCircle2 className="h-6 w-6" />
+          </div>
+          <h2 className="font-serif text-3xl">We got it</h2>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Thanks for the details — our team is reviewing your request and
+            will reach out shortly. Here's how it'll move:
+          </p>
         </div>
-        <h2 className="font-serif text-3xl">Request received</h2>
-        <p className="mt-2 text-sm text-muted-foreground">
-          Thanks — our team will review and reach out shortly. You can track
-          status in My Requests.
-        </p>
-        <div className="mt-6 flex flex-wrap justify-center gap-2">
+        <div className="mt-7">
+          <StatusTimeline status="NEW" />
+        </div>
+        <div className="mt-7 flex flex-wrap justify-center gap-2">
           <Button asChild>
             <Link href="/requests">View my requests</Link>
           </Button>

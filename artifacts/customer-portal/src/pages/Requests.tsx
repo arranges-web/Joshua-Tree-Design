@@ -2,6 +2,7 @@ import { Link } from "wouter";
 import { ArrowLeft, CalendarClock, MapPin, Plus, Sprout } from "lucide-react";
 import { usePortalListRequests } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
+import { StatusTimeline } from "@/components/StatusTimeline";
 
 const SERVICE_LABELS: Record<string, string> = {
   TREE_REMOVAL: "Tree Removal",
@@ -11,31 +12,6 @@ const SERVICE_LABELS: Record<string, string> = {
   EMERGENCY_STORM: "Emergency Storm Response",
   CRANE_ASSISTED: "Crane-Assisted Removal",
 };
-
-const STATUS_DESCRIPTIONS: Record<string, string> = {
-  NEW: "We've received your request and will review it soon.",
-  CONTACTED: "Our team has reached out — keep an eye out for our message.",
-  QUOTED: "A quote has been prepared and will be shared with you.",
-  CONVERTED: "This request became a scheduled job.",
-  DISMISSED: "This request was closed without scheduling.",
-};
-
-function statusTone(status: string) {
-  switch (status) {
-    case "NEW":
-      return "bg-accent/15 text-accent border-accent/30";
-    case "CONTACTED":
-      return "bg-primary/10 text-primary border-primary/25";
-    case "QUOTED":
-      return "bg-primary/15 text-primary border-primary/30";
-    case "CONVERTED":
-      return "bg-primary text-primary-foreground border-primary";
-    case "DISMISSED":
-      return "bg-muted text-muted-foreground border-border";
-    default:
-      return "bg-muted text-muted-foreground border-border";
-  }
-}
 
 function formatDateOnly(d?: string | null) {
   if (!d) return null;
@@ -134,11 +110,6 @@ export function Requests() {
                       )}
                     </div>
                   </div>
-                  <span
-                    className={`shrink-0 rounded-full border px-2.5 py-0.5 text-[10px] font-medium uppercase tracking-wider ${statusTone(r.status)}`}
-                  >
-                    {r.status}
-                  </span>
                 </div>
 
                 {r.notes && (
@@ -147,9 +118,9 @@ export function Requests() {
                   </p>
                 )}
 
-                <p className="mt-3 text-xs text-muted-foreground">
-                  {STATUS_DESCRIPTIONS[r.status] ?? ""}
-                </p>
+                <div className="mt-4">
+                  <StatusTimeline status={r.status} />
+                </div>
               </li>
             );
           })}
