@@ -156,6 +156,27 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Ok" }
+  /customers/{id}/properties:
+    post:
+      operationId: createCustomerProperty
+      tags: [customers]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PropertyWriteBody" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PropertyResponse" }
+        "404": { $ref: "#/components/responses/Error" }
 
   /jobs:
     get:
@@ -1217,6 +1238,21 @@ components:
         city: { type: string }
         zip: { type: string }
         notes: { type: string, nullable: true }
+
+    PropertyWriteBody:
+      type: object
+      required: [address, city, zip]
+      properties:
+        address: { type: string, minLength: 1 }
+        city: { type: string, minLength: 1 }
+        zip: { type: string, minLength: 1 }
+        notes: { type: string, nullable: true }
+
+    PropertyResponse:
+      type: object
+      required: [property]
+      properties:
+        property: { $ref: "#/components/schemas/Property" }
 
     CustomerProfileResponse:
       type: object

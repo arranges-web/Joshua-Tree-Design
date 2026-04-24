@@ -51,6 +51,8 @@ import type {
   MaintenanceLogWriteBody,
   Ok,
   PermissionMatrixResponse,
+  PropertyResponse,
+  PropertyWriteBody,
   QuoteListResponse,
   QuoteResponse,
   QuoteWriteBody,
@@ -801,6 +803,87 @@ export const useDeleteCustomer = <
   TContext
 > => {
   return useMutation(getDeleteCustomerMutationOptions(options));
+};
+
+export const getCreateCustomerPropertyUrl = (id: number) => {
+  return `/api/customers/${id}/properties`;
+};
+
+export const createCustomerProperty = async (
+  id: number,
+  propertyWriteBody: PropertyWriteBody,
+  options?: RequestInit,
+): Promise<PropertyResponse> => {
+  return customFetch<PropertyResponse>(getCreateCustomerPropertyUrl(id), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(propertyWriteBody),
+  });
+};
+
+export const getCreateCustomerPropertyMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createCustomerProperty>>,
+    TError,
+    { id: number; data: BodyType<PropertyWriteBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createCustomerProperty>>,
+  TError,
+  { id: number; data: BodyType<PropertyWriteBody> },
+  TContext
+> => {
+  const mutationKey = ["createCustomerProperty"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createCustomerProperty>>,
+    { id: number; data: BodyType<PropertyWriteBody> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return createCustomerProperty(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreateCustomerPropertyMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createCustomerProperty>>
+>;
+export type CreateCustomerPropertyMutationBody = BodyType<PropertyWriteBody>;
+export type CreateCustomerPropertyMutationError = ErrorType<ErrorResponse>;
+
+export const useCreateCustomerProperty = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createCustomerProperty>>,
+    TError,
+    { id: number; data: BodyType<PropertyWriteBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createCustomerProperty>>,
+  TError,
+  { id: number; data: BodyType<PropertyWriteBody> },
+  TContext
+> => {
+  return useMutation(getCreateCustomerPropertyMutationOptions(options));
 };
 
 export const getListJobsUrl = () => {

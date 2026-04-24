@@ -411,6 +411,20 @@ export interface Property {
   notes?: string | null;
 }
 
+export interface PropertyWriteBody {
+  /** @minLength 1 */
+  address: string;
+  /** @minLength 1 */
+  city: string;
+  /** @minLength 1 */
+  zip: string;
+  notes?: string | null;
+}
+
+export interface PropertyResponse {
+  property: Property;
+}
+
 export type CustomerProfileResponseOwner = {
   id: number;
   fullName: string;

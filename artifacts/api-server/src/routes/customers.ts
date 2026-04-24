@@ -17,10 +17,17 @@ import {
   UpdateCustomerParams,
   DeleteCustomerParams,
   GetCustomerProfileParams,
+  CreateCustomerPropertyBody,
+  CreateCustomerPropertyParams,
 } from "@workspace/api-zod";
 import { requireAuth } from "../middlewares/requireAuth";
 import { requireSection } from "../middlewares/requireSection";
-import { scopeCustomers } from "../lib/rbac/scope";
+import {
+  scopeCustomers,
+  scopeJobs,
+  scopeQuotes,
+  scopeServiceRequests,
+} from "../lib/rbac/scope";
 import { shapeCustomerForRole } from "../lib/rbac/shape";
 
 const router: IRouter = Router();
@@ -89,14 +96,18 @@ router.get(
 
     const propIds = properties.map((p) => p.id);
 
-    // Pull jobs for any of this customer's properties. Sort upcoming
-    // soonest-first by scheduledFor; past most-recent-first by completedAt
-    // (falling back to createdAt when those columns are null).
-    const jobs = propIds.length
-      ? await db
-          .select()
-          .from(jobsTable)
-          .where(inArray(jobsTable.propertyId, propIds))
+    // Pull jobs for any of this customer's properties. Re-uses the shared
+    // scopeJobs helper so SALES / CREW_LEAD only see jobs they're entitled
+    // to — we never want a customer profile leaking jobs that the role
+    // wouldn't see on the main /jobs page.
+    const jobsScope = scopeJobs(user);
+    const jobsWhere = propIds.length
+      ? jobsScope
+        ? and(inArray(jobsTable.propertyId, propIds), jobsScope)
+        : inArray(jobsTable.propertyId, propIds)
+      : null;
+    const jobs = jobsWhere
+      ? await db.select().from(jobsTable).where(jobsWhere)
       : [];
 
     const upcoming = jobs
@@ -130,22 +141,39 @@ router.get(
           .where(inArray(crewsTable.id, crewIds))
       : [];
 
+    // Quotes — use scopeQuotes so a SALES rep only ever sees their own
+    // quotes for this customer, even if some other rep also has quotes
+    // attached to them. ADMIN sees all.
+    const quotesScope = scopeQuotes(user);
+    const quotesWhere = quotesScope
+      ? and(eq(quotesTable.customerId, customer.id), quotesScope)
+      : eq(quotesTable.customerId, customer.id);
     const quotes = await db
       .select()
       .from(quotesTable)
-      .where(eq(quotesTable.customerId, customer.id))
+      .where(quotesWhere)
       .orderBy(desc(quotesTable.createdAt));
 
+    // Invoices — there's no scopeInvoices helper yet, but visibility is
+    // already gated by `customers/view` + customer-level scope above, and
+    // invoices belong 1:1 to a customer the caller is entitled to see.
     const invoices = await db
       .select()
       .from(invoicesTable)
       .where(eq(invoicesTable.customerId, customer.id))
       .orderBy(desc(invoicesTable.id));
 
+    // Leads — scopeServiceRequests already filters by customer ownership
+    // for SALES, which is redundant here (we've already gated by customer)
+    // but applying it keeps the auth path consistent with /api/leads.
+    const leadsScope = scopeServiceRequests(user);
+    const leadsWhere = leadsScope
+      ? and(eq(serviceRequestsTable.customerId, customer.id), leadsScope)
+      : eq(serviceRequestsTable.customerId, customer.id);
     const leads = await db
       .select()
       .from(serviceRequestsTable)
-      .where(eq(serviceRequestsTable.customerId, customer.id))
+      .where(leadsWhere)
       .orderBy(desc(serviceRequestsTable.createdAt));
 
     // Rollup totals (lifetime revenue from PAID invoices, open quote
@@ -179,6 +207,43 @@ router.get(
         openLeadCount,
       },
     });
+  },
+);
+
+// Create a property for a specific customer — used by the customer profile
+// "Add property" action so the new property is auto-associated. Honors the
+// same customer scope as the profile read so SALES can only add properties
+// to customers they own.
+router.post(
+  "/customers/:id/properties",
+  requireAuth,
+  requireSection("customers", "edit"),
+  async (req, res) => {
+    const user = req.user!;
+    const params = CreateCustomerPropertyParams.safeParse({
+      id: Number(req.params.id),
+    });
+    const body = CreateCustomerPropertyBody.safeParse(req.body);
+    if (!params.success || !body.success) {
+      res.status(400).json({ error: "invalid_request" });
+      return;
+    }
+    const scope = scopeCustomers(user);
+    const where = scope
+      ? and(eq(customersTable.id, params.data.id), scope)
+      : eq(customersTable.id, params.data.id);
+    const customer = (
+      await db.select().from(customersTable).where(where).limit(1)
+    )[0];
+    if (!customer) {
+      res.status(404).json({ error: "not_found" });
+      return;
+    }
+    const [row] = await db
+      .insert(propertiesTable)
+      .values({ ...body.data, customerId: customer.id })
+      .returning();
+    res.status(201).json({ property: row });
   },
 );
 

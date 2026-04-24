@@ -59,6 +59,8 @@ export * from "./ok";
 export * from "./permissionMatrixCell";
 export * from "./permissionMatrixResponse";
 export * from "./property";
+export * from "./propertyResponse";
+export * from "./propertyWriteBody";
 export * from "./quote";
 export * from "./quoteListResponse";
 export * from "./quoteResponse";

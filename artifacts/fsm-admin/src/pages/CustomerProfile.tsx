@@ -1,9 +1,11 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { Link, useParams, useLocation } from "wouter";
 import {
   useGetCustomerProfile,
   useConvertLeadToQuote,
   useUpdateLead,
+  useCreateCustomerProperty,
+  getGetCustomerProfileQueryKey,
   type Lead,
   type Job,
   type Quote,
@@ -22,6 +24,17 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import {
   ArrowLeft,
@@ -196,7 +209,7 @@ export function CustomerProfile() {
       </div>
 
       <Tabs defaultValue="overview" className="w-full">
-        <TabsList className="grid w-full grid-cols-5 sm:max-w-2xl">
+        <TabsList className="grid w-full grid-cols-6 sm:max-w-3xl">
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="properties">
             Properties ({properties.length})
@@ -205,12 +218,19 @@ export function CustomerProfile() {
             Jobs ({jobs.upcoming.length + jobs.past.length})
           </TabsTrigger>
           <TabsTrigger value="quotes">Quotes ({quotes.length})</TabsTrigger>
+          <TabsTrigger value="invoices">
+            Invoices ({invoices.length})
+          </TabsTrigger>
           <TabsTrigger value="leads">Leads ({leads.length})</TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview" className="mt-4 space-y-4">
           <div className="grid gap-4 md:grid-cols-2">
-            <PropertyList properties={properties} compact />
+            <PropertyList
+              customerId={customer.id}
+              properties={properties}
+              compact
+            />
             <JobsList
               upcoming={jobs.upcoming.slice(0, 3)}
               past={jobs.past.slice(0, 3)}
@@ -223,7 +243,7 @@ export function CustomerProfile() {
         </TabsContent>
 
         <TabsContent value="properties" className="mt-4">
-          <PropertyList properties={properties} />
+          <PropertyList customerId={customer.id} properties={properties} />
         </TabsContent>
 
         <TabsContent value="jobs" className="mt-4">
@@ -237,6 +257,10 @@ export function CustomerProfile() {
 
         <TabsContent value="quotes" className="mt-4">
           <QuotesList quotes={quotes} />
+        </TabsContent>
+
+        <TabsContent value="invoices" className="mt-4">
+          <InvoicesList invoices={invoices} />
         </TabsContent>
 
         <TabsContent value="leads" className="mt-4">
@@ -275,25 +299,28 @@ function RollupCard({
 }
 
 function PropertyList({
+  customerId,
   properties,
   compact,
 }: {
+  customerId: number;
   properties: Property[];
   compact?: boolean;
 }) {
   const [, setLocation] = useLocation();
   return (
     <Card>
-      <CardHeader className="pb-2">
+      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
         <CardTitle className="flex items-center gap-2 font-serif text-lg">
           <Trees className="h-4 w-4 text-muted-foreground" />
           Properties
         </CardTitle>
+        <AddPropertyDialog customerId={customerId} />
       </CardHeader>
       <CardContent>
         {properties.length === 0 ? (
           <div className="py-6 text-center text-sm text-muted-foreground">
-            No properties on file.
+            No properties on file. Click "Add property" to add one.
           </div>
         ) : (
           <ul className="divide-y">
@@ -329,6 +356,141 @@ function PropertyList({
         )}
       </CardContent>
     </Card>
+  );
+}
+
+// Modal for adding a new property pre-associated to this customer. The
+// underlying POST /customers/:id/properties endpoint enforces the same
+// customer scope, so SALES can't add properties to customers they don't own.
+function AddPropertyDialog({ customerId }: { customerId: number }) {
+  const [open, setOpen] = useState(false);
+  const [address, setAddress] = useState("");
+  const [city, setCity] = useState("");
+  const [zip, setZip] = useState("");
+  const [notes, setNotes] = useState("");
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const mutation = useCreateCustomerProperty();
+
+  const reset = () => {
+    setAddress("");
+    setCity("");
+    setZip("");
+    setNotes("");
+  };
+
+  const onSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!address.trim() || !city.trim() || !zip.trim()) {
+      toast({
+        title: "Missing required fields",
+        description: "Address, city, and ZIP are required.",
+        variant: "destructive",
+      });
+      return;
+    }
+    mutation.mutate(
+      {
+        id: customerId,
+        data: {
+          address: address.trim(),
+          city: city.trim(),
+          zip: zip.trim(),
+          notes: notes.trim() || null,
+        },
+      },
+      {
+        onSuccess: () => {
+          queryClient.invalidateQueries({
+            queryKey: getGetCustomerProfileQueryKey(customerId),
+          });
+          toast({ title: "Property added" });
+          reset();
+          setOpen(false);
+        },
+        onError: () =>
+          toast({
+            title: "Couldn't add property",
+            variant: "destructive",
+          }),
+      },
+    );
+  };
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(v) => {
+        setOpen(v);
+        if (!v) reset();
+      }}
+    >
+      <DialogTrigger asChild>
+        <Button size="sm" variant="outline">
+          <Plus className="mr-1 h-3.5 w-3.5" />
+          Add property
+        </Button>
+      </DialogTrigger>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle className="font-serif">Add property</DialogTitle>
+        </DialogHeader>
+        <form onSubmit={onSubmit} className="space-y-3">
+          <div className="space-y-1.5">
+            <Label htmlFor="prop-address">Street address</Label>
+            <Input
+              id="prop-address"
+              value={address}
+              onChange={(e) => setAddress(e.target.value)}
+              placeholder="123 Mangrove Way"
+              autoFocus
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="prop-city">City</Label>
+              <Input
+                id="prop-city"
+                value={city}
+                onChange={(e) => setCity(e.target.value)}
+                placeholder="Marco Island"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="prop-zip">ZIP</Label>
+              <Input
+                id="prop-zip"
+                value={zip}
+                onChange={(e) => setZip(e.target.value)}
+                placeholder="34145"
+              />
+            </div>
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="prop-notes">Notes (optional)</Label>
+            <Textarea
+              id="prop-notes"
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              placeholder="Gate code, access notes, etc."
+              rows={3}
+            />
+          </div>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => setOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button type="submit" disabled={mutation.isPending}>
+              {mutation.isPending ? "Adding…" : "Add property"}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }
 

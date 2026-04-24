@@ -248,6 +248,17 @@ export const DeleteCustomerResponse = zod.object({
   ok: zod.boolean(),
 });
 
+export const CreateCustomerPropertyParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const CreateCustomerPropertyBody = zod.object({
+  address: zod.string().min(1),
+  city: zod.string().min(1),
+  zip: zod.string().min(1),
+  notes: zod.string().nullish(),
+});
+
 export const ListJobsResponse = zod.object({
   jobs: zod.array(
     zod.object({
