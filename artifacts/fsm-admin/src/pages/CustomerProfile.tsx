@@ -681,10 +681,10 @@ function InvoicesList({
   );
 }
 
-// Only show leads that still need a quote/decision. Once a lead is
-// CONVERTED or DISMISSED it lives in the Quotes tab or in history; pulling
-// it out keeps this section focused on "incoming requests not yet quoted".
-const ACTIONABLE_LEAD_STATUSES = new Set(["NEW", "CONTACTED", "QUOTED"]);
+// "Incoming requests" = leads that still need a quote. Once a lead has
+// been QUOTED / CONVERTED / DISMISSED, the work has moved on (to the
+// Quotes tab or into history) and it's no longer waiting on triage.
+const ACTIONABLE_LEAD_STATUSES = new Set(["NEW", "CONTACTED"]);
 
 function LeadsForCustomer({ leads }: { leads: Lead[] }) {
   const queryClient = useQueryClient();
