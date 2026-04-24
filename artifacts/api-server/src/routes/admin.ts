@@ -136,12 +136,14 @@ router.get(
       for (const section of SECTION_KEYS) {
         const o = overrides.get(`${role}::${section}`);
         const def = DEFAULT_MATRIX[role][section];
+        const canView = o ? o.canView : def.canView;
+        const canEdit = o ? o.canEdit : def.canEdit;
         cells.push({
           roleKey: role,
           sectionKey: section,
-          canView: o ? o.canView : def.canView,
-          canEdit: o ? o.canEdit : def.canEdit,
-          isOverride: !!o,
+          canView,
+          canEdit,
+          isOverride: canView !== def.canView || canEdit !== def.canEdit,
         });
       }
     }
