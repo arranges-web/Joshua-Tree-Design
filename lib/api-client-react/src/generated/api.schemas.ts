@@ -458,6 +458,98 @@ export interface PropertyResponse {
   property: Property;
 }
 
+export interface PortalRequestOtpInput {
+  /** Phone number in any common format; server normalizes to E.164. */
+  phone: string;
+}
+
+export interface PortalRequestOtpResult {
+  ok: boolean;
+  /** True when no Twilio connection is wired; the OTP is then printed to the API server console. */
+  devMode?: boolean;
+  /** Only set in non-production builds when devMode is true. Convenience for local testing. */
+  devCode?: string | null;
+  message?: string | null;
+}
+
+export interface PortalVerifyOtpInput {
+  phone: string;
+  /** @pattern ^\d{6}$ */
+  code: string;
+}
+
+export interface PortalCustomer {
+  id: number;
+  fullName: string;
+  email?: string | null;
+  phoneE164?: string | null;
+  billingAddress?: string | null;
+}
+
+export interface PortalCustomerResponse {
+  customer: PortalCustomer;
+}
+
+export interface PortalPropertiesResponse {
+  properties: Property[];
+}
+
+export interface PortalJob {
+  id: number;
+  propertyId: number;
+  crewId?: number | null;
+  status: string;
+  scheduledFor?: string | null;
+  completedAt?: string | null;
+  totalCents: number;
+  notes?: string | null;
+  createdAt: string;
+  propertyAddress?: string | null;
+  crewName?: string | null;
+}
+
+export type PortalJobsResponseCrewsItem = {
+  id: number;
+  name: string;
+};
+
+export interface PortalJobsResponse {
+  upcoming: PortalJob[];
+  past: PortalJob[];
+  crews: PortalJobsResponseCrewsItem[];
+}
+
+export interface PortalRequest {
+  id: number;
+  customerId: number;
+  propertyId?: number | null;
+  service: LeadService;
+  notes?: string | null;
+  preferredWindowStart?: string | null;
+  preferredWindowEnd?: string | null;
+  status: LeadStatus;
+  source: LeadSource;
+  convertedQuoteId?: number | null;
+  createdAt: string;
+  propertyAddress?: string | null;
+}
+
+export interface PortalRequestListResponse {
+  requests: PortalRequest[];
+}
+
+export interface PortalRequestResponse {
+  request: PortalRequest;
+}
+
+export interface PortalCreateRequestInput {
+  service: LeadService;
+  propertyId?: number | null;
+  notes?: string | null;
+  preferredWindowStart?: string | null;
+  preferredWindowEnd?: string | null;
+}
+
 export type CustomerProfileResponseOwner = {
   id: number;
   fullName: string;

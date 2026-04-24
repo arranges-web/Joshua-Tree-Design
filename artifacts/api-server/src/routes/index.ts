@@ -9,6 +9,7 @@ import invoicesRouter from "./invoices";
 import fleetRouter from "./fleet";
 import adminRouter from "./admin";
 import leadsRouter from "./leads";
+import portalRouter from "./portal";
 
 const router: IRouter = Router();
 
@@ -22,5 +23,6 @@ router.use(invoicesRouter);
 router.use(fleetRouter);
 router.use(adminRouter);
 router.use(leadsRouter);
+router.use("/portal", portalRouter);
 
 export default router;

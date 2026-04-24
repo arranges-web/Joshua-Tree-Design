@@ -121,6 +121,8 @@ async function main() {
     crew_members,
     crews,
     properties,
+    customer_sessions,
+    otp_codes,
     customers,
     sessions,
     users,
@@ -191,11 +193,11 @@ async function main() {
   const insertedCustomers = await db
     .insert(customersTable)
     .values([
-      { fullName: "Hank Homeowner", email: "hank@example.com", phone: "239-555-0101", billingAddress: "123 Palm Way, Cape Coral", ownerUserId: sales1.id },
-      { fullName: "Lisa Landowner", email: "lisa@example.com", phone: "239-555-0102", billingAddress: "55 Mango Ln, Fort Myers", ownerUserId: sales1.id },
-      { fullName: "Pete Property", email: "pete@example.com", phone: "239-555-0103", billingAddress: "9 Banyan Rd, Estero", ownerUserId: sales1.id },
-      { fullName: "Maya Mansion", email: "maya@example.com", phone: "239-555-0104", billingAddress: "200 Oak Dr, Naples", ownerUserId: sales2.id },
-      { fullName: "Quentin Quail", email: "q@example.com", phone: "239-555-0105", billingAddress: "77 Cypress Ct, Bonita Springs", ownerUserId: sales2.id },
+      { fullName: "Hank Homeowner", email: "hank@example.com", phone: "239-555-0101", phoneE164: "+12395550101", billingAddress: "123 Palm Way, Cape Coral", ownerUserId: sales1.id },
+      { fullName: "Lisa Landowner", email: "lisa@example.com", phone: "239-555-0102", phoneE164: "+12395550102", billingAddress: "55 Mango Ln, Fort Myers", ownerUserId: sales1.id },
+      { fullName: "Pete Property", email: "pete@example.com", phone: "239-555-0103", phoneE164: "+12395550103", billingAddress: "9 Banyan Rd, Estero", ownerUserId: sales1.id },
+      { fullName: "Maya Mansion", email: "maya@example.com", phone: "239-555-0104", phoneE164: "+12395550104", billingAddress: "200 Oak Dr, Naples", ownerUserId: sales2.id },
+      { fullName: "Quentin Quail", email: "q@example.com", phone: "239-555-0105", phoneE164: "+12395550105", billingAddress: "77 Cypress Ct, Bonita Springs", ownerUserId: sales2.id },
     ])
     .returning();
 
@@ -317,6 +319,9 @@ async function main() {
   console.log("Seed complete.");
   console.log("Users (all password 'password123'):");
   for (const u of insertedUsers) console.log(`  ${u.email}`);
+  console.log("");
+  console.log("Customer portal phone numbers (any of these work for /portal/ login):");
+  for (const c of insertedCustomers) console.log(`  ${c.fullName.padEnd(18)} ${c.phoneE164 ?? "—"}`);
 }
 
 main()

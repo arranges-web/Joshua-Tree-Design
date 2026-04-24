@@ -871,6 +871,167 @@ export const UpdateLeadResponse = zod.object({
   }),
 });
 
+export const PortalRequestOtpBody = zod.object({
+  phone: zod
+    .string()
+    .describe("Phone number in any common format; server normalizes to E.164."),
+});
+
+export const PortalRequestOtpResponse = zod.object({
+  ok: zod.boolean(),
+  devMode: zod
+    .boolean()
+    .optional()
+    .describe(
+      "True when no Twilio connection is wired; the OTP is then printed to the API server console.",
+    ),
+  devCode: zod
+    .string()
+    .nullish()
+    .describe(
+      "Only set in non-production builds when devMode is true. Convenience for local testing.",
+    ),
+  message: zod.string().nullish(),
+});
+
+export const portalVerifyOtpBodyCodeRegExp = new RegExp("^\\d{6}$");
+
+export const PortalVerifyOtpBody = zod.object({
+  phone: zod.string(),
+  code: zod.string().regex(portalVerifyOtpBodyCodeRegExp),
+});
+
+export const PortalVerifyOtpResponse = zod.object({
+  customer: zod.object({
+    id: zod.number(),
+    fullName: zod.string(),
+    email: zod.string().nullish(),
+    phoneE164: zod.string().nullish(),
+    billingAddress: zod.string().nullish(),
+  }),
+});
+
+export const PortalLogoutResponse = zod.object({
+  ok: zod.boolean(),
+});
+
+export const PortalMeResponse = zod.object({
+  customer: zod.object({
+    id: zod.number(),
+    fullName: zod.string(),
+    email: zod.string().nullish(),
+    phoneE164: zod.string().nullish(),
+    billingAddress: zod.string().nullish(),
+  }),
+});
+
+export const PortalListPropertiesResponse = zod.object({
+  properties: zod.array(
+    zod.object({
+      id: zod.number(),
+      customerId: zod.number(),
+      address: zod.string(),
+      city: zod.string(),
+      zip: zod.string(),
+      notes: zod.string().nullish(),
+    }),
+  ),
+});
+
+export const PortalListJobsResponse = zod.object({
+  upcoming: zod.array(
+    zod.object({
+      id: zod.number(),
+      propertyId: zod.number(),
+      crewId: zod.number().nullish(),
+      status: zod.string(),
+      scheduledFor: zod.coerce.date().nullish(),
+      completedAt: zod.coerce.date().nullish(),
+      totalCents: zod.number(),
+      notes: zod.string().nullish(),
+      createdAt: zod.coerce.date(),
+      propertyAddress: zod.string().nullish(),
+      crewName: zod.string().nullish(),
+    }),
+  ),
+  past: zod.array(
+    zod.object({
+      id: zod.number(),
+      propertyId: zod.number(),
+      crewId: zod.number().nullish(),
+      status: zod.string(),
+      scheduledFor: zod.coerce.date().nullish(),
+      completedAt: zod.coerce.date().nullish(),
+      totalCents: zod.number(),
+      notes: zod.string().nullish(),
+      createdAt: zod.coerce.date(),
+      propertyAddress: zod.string().nullish(),
+      crewName: zod.string().nullish(),
+    }),
+  ),
+  crews: zod.array(
+    zod.object({
+      id: zod.number(),
+      name: zod.string(),
+    }),
+  ),
+});
+
+export const PortalListRequestsResponse = zod.object({
+  requests: zod.array(
+    zod.object({
+      id: zod.number(),
+      customerId: zod.number(),
+      propertyId: zod.number().nullish(),
+      service: zod
+        .enum([
+          "TREE_REMOVAL",
+          "TRIMMING_PRUNING",
+          "MANGROVE_CARE",
+          "STUMP_GRINDING",
+          "EMERGENCY_STORM",
+          "CRANE_ASSISTED",
+        ])
+        .describe(
+          "Mirrors the service catalogue shown on joshuatreeinc.com so leads from the public site \/ portal map cleanly without translation.",
+        ),
+      notes: zod.string().nullish(),
+      preferredWindowStart: zod.coerce.date().nullish(),
+      preferredWindowEnd: zod.coerce.date().nullish(),
+      status: zod.enum([
+        "NEW",
+        "CONTACTED",
+        "QUOTED",
+        "CONVERTED",
+        "DISMISSED",
+      ]),
+      source: zod.enum(["PORTAL", "PHONE", "WEB", "WALKIN"]),
+      convertedQuoteId: zod.number().nullish(),
+      createdAt: zod.coerce.date(),
+      propertyAddress: zod.string().nullish(),
+    }),
+  ),
+});
+
+export const PortalCreateRequestBody = zod.object({
+  service: zod
+    .enum([
+      "TREE_REMOVAL",
+      "TRIMMING_PRUNING",
+      "MANGROVE_CARE",
+      "STUMP_GRINDING",
+      "EMERGENCY_STORM",
+      "CRANE_ASSISTED",
+    ])
+    .describe(
+      "Mirrors the service catalogue shown on joshuatreeinc.com so leads from the public site \/ portal map cleanly without translation.",
+    ),
+  propertyId: zod.number().nullish(),
+  notes: zod.string().nullish(),
+  preferredWindowStart: zod.coerce.date().nullish(),
+  preferredWindowEnd: zod.coerce.date().nullish(),
+});
+
 export const ConvertLeadToQuoteParams = zod.object({
   id: zod.coerce.number(),
 });

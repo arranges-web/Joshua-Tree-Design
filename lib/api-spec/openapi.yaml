@@ -698,6 +698,118 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/LeadResponse" }
+  /portal/auth/request-otp:
+    post:
+      operationId: portalRequestOtp
+      tags: [portal]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PortalRequestOtpInput" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PortalRequestOtpResult" }
+        "400": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/Error" }
+
+  /portal/auth/verify-otp:
+    post:
+      operationId: portalVerifyOtp
+      tags: [portal]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PortalVerifyOtpInput" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PortalCustomerResponse" }
+        "400": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/Error" }
+
+  /portal/auth/logout:
+    post:
+      operationId: portalLogout
+      tags: [portal]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Ok" }
+
+  /portal/me:
+    get:
+      operationId: portalMe
+      tags: [portal]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PortalCustomerResponse" }
+        "401": { $ref: "#/components/responses/Error" }
+
+  /portal/properties:
+    get:
+      operationId: portalListProperties
+      tags: [portal]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PortalPropertiesResponse" }
+        "401": { $ref: "#/components/responses/Error" }
+
+  /portal/jobs:
+    get:
+      operationId: portalListJobs
+      tags: [portal]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PortalJobsResponse" }
+        "401": { $ref: "#/components/responses/Error" }
+
+  /portal/requests:
+    get:
+      operationId: portalListRequests
+      tags: [portal]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PortalRequestListResponse" }
+        "401": { $ref: "#/components/responses/Error" }
+    post:
+      operationId: portalCreateRequest
+      tags: [portal]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PortalCreateRequestInput" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PortalRequestResponse" }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+
   /leads/{id}/convert:
     post:
       operationId: convertLeadToQuote
@@ -1278,6 +1390,122 @@ components:
       required: [property]
       properties:
         property: { $ref: "#/components/schemas/Property" }
+
+    PortalRequestOtpInput:
+      type: object
+      required: [phone]
+      properties:
+        phone: { type: string, description: "Phone number in any common format; server normalizes to E.164." }
+    PortalRequestOtpResult:
+      type: object
+      required: [ok]
+      properties:
+        ok: { type: boolean }
+        devMode: { type: boolean, description: "True when no Twilio connection is wired; the OTP is then printed to the API server console." }
+        devCode: { type: string, nullable: true, description: "Only set in non-production builds when devMode is true. Convenience for local testing." }
+        message: { type: string, nullable: true }
+
+    PortalVerifyOtpInput:
+      type: object
+      required: [phone, code]
+      properties:
+        phone: { type: string }
+        code: { type: string, pattern: "^\\d{6}$" }
+
+    PortalCustomer:
+      type: object
+      required: [id, fullName]
+      properties:
+        id: { type: integer }
+        fullName: { type: string }
+        email: { type: string, nullable: true }
+        phoneE164: { type: string, nullable: true }
+        billingAddress: { type: string, nullable: true }
+    PortalCustomerResponse:
+      type: object
+      required: [customer]
+      properties:
+        customer: { $ref: "#/components/schemas/PortalCustomer" }
+
+    PortalPropertiesResponse:
+      type: object
+      required: [properties]
+      properties:
+        properties:
+          type: array
+          items: { $ref: "#/components/schemas/Property" }
+
+    PortalJob:
+      type: object
+      required: [id, propertyId, status, totalCents, createdAt]
+      properties:
+        id: { type: integer }
+        propertyId: { type: integer }
+        crewId: { type: integer, nullable: true }
+        status: { type: string }
+        scheduledFor: { type: string, format: date-time, nullable: true }
+        completedAt: { type: string, format: date-time, nullable: true }
+        totalCents: { type: integer }
+        notes: { type: string, nullable: true }
+        createdAt: { type: string, format: date-time }
+        propertyAddress: { type: string, nullable: true }
+        crewName: { type: string, nullable: true }
+    PortalJobsResponse:
+      type: object
+      required: [upcoming, past, crews]
+      properties:
+        upcoming:
+          type: array
+          items: { $ref: "#/components/schemas/PortalJob" }
+        past:
+          type: array
+          items: { $ref: "#/components/schemas/PortalJob" }
+        crews:
+          type: array
+          items:
+            type: object
+            required: [id, name]
+            properties:
+              id: { type: integer }
+              name: { type: string }
+
+    PortalRequest:
+      type: object
+      required: [id, customerId, service, status, source, createdAt]
+      properties:
+        id: { type: integer }
+        customerId: { type: integer }
+        propertyId: { type: integer, nullable: true }
+        service: { $ref: "#/components/schemas/LeadService" }
+        notes: { type: string, nullable: true }
+        preferredWindowStart: { type: string, format: date-time, nullable: true }
+        preferredWindowEnd: { type: string, format: date-time, nullable: true }
+        status: { $ref: "#/components/schemas/LeadStatus" }
+        source: { $ref: "#/components/schemas/LeadSource" }
+        convertedQuoteId: { type: integer, nullable: true }
+        createdAt: { type: string, format: date-time }
+        propertyAddress: { type: string, nullable: true }
+    PortalRequestListResponse:
+      type: object
+      required: [requests]
+      properties:
+        requests:
+          type: array
+          items: { $ref: "#/components/schemas/PortalRequest" }
+    PortalRequestResponse:
+      type: object
+      required: [request]
+      properties:
+        request: { $ref: "#/components/schemas/PortalRequest" }
+    PortalCreateRequestInput:
+      type: object
+      required: [service]
+      properties:
+        service: { $ref: "#/components/schemas/LeadService" }
+        propertyId: { type: integer, nullable: true }
+        notes: { type: string, nullable: true }
+        preferredWindowStart: { type: string, format: date-time, nullable: true }
+        preferredWindowEnd: { type: string, format: date-time, nullable: true }
 
     CustomerProfileResponse:
       type: object

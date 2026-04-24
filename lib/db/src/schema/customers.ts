@@ -6,6 +6,7 @@ import {
   doublePrecision,
   timestamp,
   index,
+  uniqueIndex,
 } from "drizzle-orm/pg-core";
 import { usersTable } from "./users";
 
@@ -16,6 +17,7 @@ export const customersTable = pgTable(
     fullName: text("full_name").notNull(),
     email: text("email"),
     phone: text("phone"),
+    phoneE164: text("phone_e164"),
     billingAddress: text("billing_address"),
     ownerUserId: integer("owner_user_id")
       .notNull()
@@ -24,7 +26,10 @@ export const customersTable = pgTable(
       .notNull()
       .defaultNow(),
   },
-  (t) => [index("customers_owner_user_id_idx").on(t.ownerUserId)],
+  (t) => [
+    index("customers_owner_user_id_idx").on(t.ownerUserId),
+    uniqueIndex("customers_phone_e164_uq").on(t.phoneE164),
+  ],
 );
 
 export const propertiesTable = pgTable(

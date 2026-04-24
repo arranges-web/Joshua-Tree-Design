@@ -34,3 +34,12 @@ See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and pa
 - `POST /api/leads/:id/convert` is **transactional and idempotent**: takes a `SELECT … FOR UPDATE` row lock and re-checks `converted_quote_id` so two concurrent requests cannot create duplicate draft quotes.
 - Lead create/update validates `propertyId` belongs to the lead's customer to prevent cross-customer property leakage.
 - Admin UI: `/admin/leads` (inbox), `/admin/customers/:id` (profile). Customer rows in the customers list link to the profile.
+
+## Customer Portal (`/portal/`)
+
+- Standalone artifact (`artifacts/customer-portal`) on port 23434, brand-matched to `joshua-tree` (cream / forest-green / coral, Instrument Serif + Inter Tight).
+- Phone-OTP login backed by `/api/portal/auth/request-otp` and `/api/portal/auth/verify-otp`. Uses Twilio when the connector is configured, otherwise prints the code to the API console and returns `devCode` / `devMode: true` (only when `NODE_ENV !== "production"`).
+- Sessions are signed cookies (`jt_portal_session`) with `requirePortalAuth` middleware that **rejects staff cookies** — staff and customers cannot impersonate each other even if both cookies are present.
+- Portal endpoints: `GET /portal/me`, `GET /portal/properties`, `GET /portal/jobs` (split into `upcoming` / `past`), `GET /portal/requests`, `POST /portal/requests`. New requests insert into `service_requests` with status `NEW` so they appear in the staff `/admin/leads` inbox.
+- Rate limits: per-phone OTP request limit + per-phone verify attempts cap (`too_many_otp_requests`, `too_many_verify_attempts` error codes).
+- Service request creation validates that any supplied `propertyId` belongs to the calling customer (`property_not_owned`).
