@@ -11,14 +11,16 @@ import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Eye, Pencil, ShieldCheck, Ban } from "lucide-react";
 
-function formatLabel(key: string) {
+function formatLabel(key: string | undefined | null) {
+  if (!key) return "";
   return key
     .split(/[._-]/)
     .map((p) => p.charAt(0).toUpperCase() + p.slice(1).toLowerCase())
     .join(" ");
 }
 
-function sectionGroupLabel(key: string) {
+function sectionGroupLabel(key: string | undefined | null) {
+  if (!key) return "Other";
   const prefix = key.split(".")[0];
   const map: Record<string, string> = {
     dashboard: "Dashboard",
@@ -70,13 +72,15 @@ export function Permissions() {
 
   const roles = useMemo(
     () =>
-      (data?.roles ?? []).map((r) => ({
-        key: r.key,
-        label: r.label || formatLabel(r.key),
-      })),
+      (data?.roles ?? [])
+        .filter((r) => r?.key)
+        .map((r) => ({
+          key: r.key,
+          label: r.label || formatLabel(r.key),
+        })),
     [data?.roles],
   );
-  const sections = data?.sections ?? [];
+  const sections = (data?.sections ?? []).filter(Boolean);
   const cells = data?.cells ?? [];
 
   const cellMap = useMemo(() => {

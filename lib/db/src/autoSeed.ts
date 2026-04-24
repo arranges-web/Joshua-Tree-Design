@@ -1,0 +1,435 @@
+import bcrypt from "bcryptjs";
+import { db } from "./client";
+import {
+  rolesTable,
+  departmentsTable,
+  usersTable,
+  customersTable,
+  propertiesTable,
+  crewsTable,
+  crewMembersTable,
+  jobsTable,
+  quotesTable,
+  quoteLineItemsTable,
+  invoicesTable,
+  trucksTable,
+  equipmentTable,
+  maintenanceLogsTable,
+  sectionPermissionsTable,
+  serviceRequestsTable,
+  ROLE_KEYS,
+  DEPARTMENT_KEYS,
+  SECTION_KEYS,
+  type RoleKey,
+  type DepartmentKey,
+} from "./schema";
+
+const ROLE_LABELS: Record<RoleKey, string> = {
+  ADMIN: "Administrator",
+  SALES: "Sales / Estimator",
+  CREW_LEAD: "Field Crew Lead",
+  MECHANIC: "Mechanic / Fleet",
+};
+
+const DEPT_LABELS: Record<DepartmentKey, string> = {
+  Admin: "Administration",
+  Sales: "Sales",
+  Operations: "Field Operations",
+  Fleet: "Fleet & Mechanics",
+};
+
+const DEFAULT_MATRIX: Record<
+  RoleKey,
+  Record<string, { canView: boolean; canEdit: boolean }>
+> = {
+  ADMIN: Object.fromEntries(
+    SECTION_KEYS.map((k) => [k, { canView: true, canEdit: true }]),
+  ),
+  SALES: {
+    "dashboard.global": { canView: false, canEdit: false },
+    customers: { canView: true, canEdit: true },
+    jobs: { canView: true, canEdit: false },
+    quotes: { canView: true, canEdit: true },
+    invoices: { canView: false, canEdit: false },
+    "fleet.trucks": { canView: false, canEdit: false },
+    "fleet.equipment": { canView: false, canEdit: false },
+    "fleet.maintenance": { canView: false, canEdit: false },
+    "admin.users": { canView: false, canEdit: false },
+    "admin.permissions": { canView: false, canEdit: false },
+    "field.job_site": { canView: false, canEdit: false },
+    "field.photos": { canView: false, canEdit: false },
+    "field.safety": { canView: false, canEdit: false },
+    "sales.calendar": { canView: true, canEdit: true },
+    "reports.financials": { canView: false, canEdit: false },
+    leads: { canView: true, canEdit: true },
+  },
+  CREW_LEAD: {
+    "dashboard.global": { canView: false, canEdit: false },
+    customers: { canView: false, canEdit: false },
+    jobs: { canView: true, canEdit: true },
+    quotes: { canView: false, canEdit: false },
+    invoices: { canView: false, canEdit: false },
+    "fleet.trucks": { canView: false, canEdit: false },
+    "fleet.equipment": { canView: false, canEdit: false },
+    "fleet.maintenance": { canView: false, canEdit: false },
+    "admin.users": { canView: false, canEdit: false },
+    "admin.permissions": { canView: false, canEdit: false },
+    "field.job_site": { canView: true, canEdit: true },
+    "field.photos": { canView: true, canEdit: true },
+    "field.safety": { canView: true, canEdit: true },
+    "sales.calendar": { canView: false, canEdit: false },
+    "reports.financials": { canView: false, canEdit: false },
+    leads: { canView: false, canEdit: false },
+  },
+  MECHANIC: {
+    "dashboard.global": { canView: false, canEdit: false },
+    customers: { canView: false, canEdit: false },
+    jobs: { canView: false, canEdit: false },
+    quotes: { canView: false, canEdit: false },
+    invoices: { canView: false, canEdit: false },
+    "fleet.trucks": { canView: true, canEdit: true },
+    "fleet.equipment": { canView: true, canEdit: true },
+    "fleet.maintenance": { canView: true, canEdit: true },
+    "admin.users": { canView: false, canEdit: false },
+    "admin.permissions": { canView: false, canEdit: false },
+    "field.job_site": { canView: false, canEdit: false },
+    "field.photos": { canView: false, canEdit: false },
+    "field.safety": { canView: false, canEdit: false },
+    "sales.calendar": { canView: false, canEdit: false },
+    "reports.financials": { canView: false, canEdit: false },
+    leads: { canView: false, canEdit: false },
+  },
+};
+
+function daysAgo(d: number) {
+  return new Date(Date.now() - d * 86_400_000);
+}
+function daysFromNow(d: number) {
+  return new Date(Date.now() + d * 86_400_000);
+}
+
+export async function populateData(): Promise<void> {
+  // Per-role passwords to match what the admin login page auto-fills.
+  const hashByRole: Record<RoleKey, string> = {
+    ADMIN:     await bcrypt.hash("admin-jt",    10),
+    SALES:     await bcrypt.hash("sales-jt",    10),
+    CREW_LEAD: await bcrypt.hash("crew-jt",     10),
+    MECHANIC:  await bcrypt.hash("mech-jt",     10),
+  };
+
+  // ── Roles ─────────────────────────────────────────────────────────────────
+  const insertedRoles = await db
+    .insert(rolesTable)
+    .values(ROLE_KEYS.map((k) => ({ key: k, label: ROLE_LABELS[k] })))
+    .returning();
+  const roleByKey = new Map<RoleKey, number>(
+    insertedRoles.map((r) => [r.key as RoleKey, r.id]),
+  );
+
+  // ── Departments ───────────────────────────────────────────────────────────
+  const insertedDepts = await db
+    .insert(departmentsTable)
+    .values(DEPARTMENT_KEYS.map((k) => ({ key: k, label: DEPT_LABELS[k] })))
+    .returning();
+  const deptByKey = new Map<DepartmentKey, number>(
+    insertedDepts.map((d) => [d.key as DepartmentKey, d.id]),
+  );
+
+  // ── Section permissions ───────────────────────────────────────────────────
+  const permRows: {
+    roleId: number;
+    sectionKey: string;
+    canView: boolean;
+    canEdit: boolean;
+  }[] = [];
+  for (const role of ROLE_KEYS) {
+    const roleId = roleByKey.get(role)!;
+    for (const section of SECTION_KEYS) {
+      const def = DEFAULT_MATRIX[role][section];
+      if (!def) continue;
+      permRows.push({ roleId, sectionKey: section, ...def });
+    }
+  }
+  await db.insert(sectionPermissionsTable).values(permRows);
+
+  // ── Users ─────────────────────────────────────────────────────────────────
+  const userDefs = [
+    { email: "admin@joshuatreeinc.test",    fullName: "Alex Admin",     role: "ADMIN"     as RoleKey, dept: "Admin"      as DepartmentKey },
+    { email: "sales1@joshuatreeinc.test",   fullName: "Sam Sales",      role: "SALES"     as RoleKey, dept: "Sales"      as DepartmentKey },
+    { email: "sales2@joshuatreeinc.test",   fullName: "Sara Estimator", role: "SALES"     as RoleKey, dept: "Sales"      as DepartmentKey },
+    { email: "lead1@joshuatreeinc.test",    fullName: "Carl CrewLead",  role: "CREW_LEAD" as RoleKey, dept: "Operations" as DepartmentKey },
+    { email: "lead2@joshuatreeinc.test",    fullName: "Cathy CrewLead", role: "CREW_LEAD" as RoleKey, dept: "Operations" as DepartmentKey },
+    { email: "lead3@joshuatreeinc.test",    fullName: "Bobby CrewLead", role: "CREW_LEAD" as RoleKey, dept: "Operations" as DepartmentKey },
+    { email: "mechanic@joshuatreeinc.test", fullName: "Mike Mechanic",  role: "MECHANIC"  as RoleKey, dept: "Fleet"      as DepartmentKey },
+  ];
+  const insertedUsers = await db
+    .insert(usersTable)
+    .values(
+      userDefs.map((u) => ({
+        email: u.email,
+        hashedPassword: hashByRole[u.role],
+        fullName: u.fullName,
+        roleId: roleByKey.get(u.role)!,
+        departmentId: deptByKey.get(u.dept)!,
+      })),
+    )
+    .returning();
+  const uByEmail = new Map(insertedUsers.map((x) => [x.email, x]));
+  const sales1 = uByEmail.get("sales1@joshuatreeinc.test")!;
+  const sales2 = uByEmail.get("sales2@joshuatreeinc.test")!;
+  const lead1  = uByEmail.get("lead1@joshuatreeinc.test")!;
+  const lead2  = uByEmail.get("lead2@joshuatreeinc.test")!;
+  const lead3  = uByEmail.get("lead3@joshuatreeinc.test")!;
+  const mech   = uByEmail.get("mechanic@joshuatreeinc.test")!;
+
+  // ── Customers ─────────────────────────────────────────────────────────────
+  const insertedCustomers = await db
+    .insert(customersTable)
+    .values([
+      { fullName: "Hank Homeowner",    email: "hank@example.com",    phone: "(239) 555-0101", phoneE164: "+12395550101", billingAddress: "123 Palm Way, Cape Coral, FL 33904",        ownerUserId: sales1.id },
+      { fullName: "Lisa Landowner",    email: "lisa@example.com",    phone: "(239) 555-0102", phoneE164: "+12395550102", billingAddress: "55 Mango Ln, Fort Myers, FL 33901",          ownerUserId: sales1.id },
+      { fullName: "Pete Property",     email: "pete@example.com",    phone: "(239) 555-0103", phoneE164: "+12395550103", billingAddress: "9 Banyan Rd, Estero, FL 33928",              ownerUserId: sales1.id },
+      { fullName: "Maya Mansion",      email: "maya@example.com",    phone: "(239) 555-0104", phoneE164: "+12395550104", billingAddress: "200 Oak Dr, Naples, FL 34102",               ownerUserId: sales2.id },
+      { fullName: "Quentin Quail",     email: "q@example.com",       phone: "(239) 555-0105", phoneE164: "+12395550105", billingAddress: "77 Cypress Ct, Bonita Springs, FL 34135",   ownerUserId: sales2.id },
+      { fullName: "Rachel Riverfront", email: "rachel@example.com",  phone: "(239) 555-0106", phoneE164: "+12395550106", billingAddress: "412 Riviera Dr, Cape Coral, FL 33904",      ownerUserId: sales1.id },
+      { fullName: "Derek Dockside",    email: "derek@example.com",   phone: "(239) 555-0107", phoneE164: "+12395550107", billingAddress: "18 Harbor Ln, Fort Myers Beach, FL 33931",  ownerUserId: sales2.id },
+      { fullName: "Fiona Fairway",     email: "fiona@example.com",   phone: "(239) 555-0108", phoneE164: "+12395550108", billingAddress: "600 Fairway Blvd, Naples, FL 34108",        ownerUserId: sales2.id },
+      { fullName: "George Glade",      email: "george@example.com",  phone: "(239) 555-0109", phoneE164: "+12395550109", billingAddress: "301 Glade Rd, Lehigh Acres, FL 33936",      ownerUserId: sales1.id },
+      { fullName: "Harriet Harbor",    email: "harriet@example.com", phone: "(239) 555-0110", phoneE164: "+12395550110", billingAddress: "5 Harbor Isle, Marco Island, FL 34145",     ownerUserId: sales2.id },
+    ])
+    .returning();
+  const [hank, lisa, pete, maya, quentin, rachel, derek, fiona, george, harriet] = insertedCustomers as [
+    typeof insertedCustomers[number],
+    typeof insertedCustomers[number],
+    typeof insertedCustomers[number],
+    typeof insertedCustomers[number],
+    typeof insertedCustomers[number],
+    typeof insertedCustomers[number],
+    typeof insertedCustomers[number],
+    typeof insertedCustomers[number],
+    typeof insertedCustomers[number],
+    typeof insertedCustomers[number],
+  ];
+
+  // ── Properties ────────────────────────────────────────────────────────────
+  const insertedProperties = await db
+    .insert(propertiesTable)
+    .values([
+      // Hank — 3 properties (primary portal demo user)
+      { customerId: hank.id, address: "123 Palm Way",       city: "Cape Coral",       zip: "33904" },
+      { customerId: hank.id, address: "1400 Surfside Blvd", city: "Cape Coral",       zip: "33914" },
+      { customerId: hank.id, address: "88 Cypress Point",   city: "Fort Myers",       zip: "33908" },
+      // Others
+      { customerId: lisa.id,    address: "55 Mango Ln",       city: "Fort Myers",       zip: "33901" },
+      { customerId: lisa.id,    address: "210 Iona Rd",        city: "Fort Myers",       zip: "33908" },
+      { customerId: pete.id,    address: "9 Banyan Rd",        city: "Estero",           zip: "33928" },
+      { customerId: maya.id,    address: "200 Oak Dr",         city: "Naples",           zip: "34102" },
+      { customerId: maya.id,    address: "5100 Pelican Bay",   city: "Naples",           zip: "34108" },
+      { customerId: quentin.id, address: "77 Cypress Ct",      city: "Bonita Springs",   zip: "34135" },
+      { customerId: rachel.id,  address: "412 Riviera Dr",     city: "Cape Coral",       zip: "33904" },
+      { customerId: derek.id,   address: "18 Harbor Ln",       city: "Fort Myers Beach", zip: "33931" },
+      { customerId: fiona.id,   address: "600 Fairway Blvd",   city: "Naples",           zip: "34108" },
+      { customerId: george.id,  address: "301 Glade Rd",       city: "Lehigh Acres",     zip: "33936" },
+      { customerId: harriet.id, address: "5 Harbor Isle",      city: "Marco Island",     zip: "34145" },
+    ])
+    .returning();
+  const [
+    hankP1, hankP2, hankP3,
+    lisaP1, lisaP2,
+    peteP1,
+    mayaP1, mayaP2,
+    quintP1,
+    rachelP1,
+    derekP1,
+    fionaP1,
+    georgeP1,
+    harrietP1,
+  ] = insertedProperties as Array<typeof insertedProperties[number]>;
+
+  // ── Crews ─────────────────────────────────────────────────────────────────
+  const insertedCrews = await db
+    .insert(crewsTable)
+    .values([
+      { name: "Crew Alpha", leadUserId: lead1.id },
+      { name: "Crew Bravo", leadUserId: lead2.id },
+      { name: "Crew Gamma", leadUserId: lead3.id },
+    ])
+    .returning();
+  const [alpha, bravo, gamma] = insertedCrews as Array<typeof insertedCrews[number]>;
+  await db.insert(crewMembersTable).values([
+    { crewId: alpha.id, userId: lead1.id },
+    { crewId: alpha.id, userId: mech.id },
+    { crewId: bravo.id, userId: lead2.id },
+    { crewId: bravo.id, userId: sales1.id },
+    { crewId: gamma.id, userId: lead3.id },
+    { crewId: gamma.id, userId: sales2.id },
+  ]);
+
+  // ── Jobs ──────────────────────────────────────────────────────────────────
+  // Hank: 1 upcoming SCHEDULED + 2 past COMPLETE
+  await db.insert(jobsTable).values([
+    { propertyId: hankP1.id, crewId: alpha.id, status: "SCHEDULED",   scheduledFor: daysFromNow(7),   totalCents: 195_000, notes: "Annual palm pruning — 4 royal palms along driveway" },
+    { propertyId: hankP1.id, crewId: alpha.id, status: "COMPLETE",    scheduledFor: daysAgo(28),  completedAt: daysAgo(27),  totalCents: 320_000, notes: "Large live oak removal — root zone near pool cage" },
+    { propertyId: hankP2.id, crewId: bravo.id, status: "COMPLETE",    scheduledFor: daysAgo(58),  completedAt: daysAgo(57),  totalCents: 87_500,  notes: "Stump grinding — 2 stumps left from prior removal" },
+  ]);
+
+  // Additional 22 jobs across other customers
+  await db.insert(jobsTable).values([
+    // SCHEDULED (upcoming)
+    { propertyId: lisaP1.id,    crewId: bravo.id,  status: "SCHEDULED",   scheduledFor: daysFromNow(3),   totalCents: 145_000, notes: "Trim 3 queen palms, remove dead fronds" },
+    { propertyId: peteP1.id,    crewId: gamma.id,  status: "SCHEDULED",   scheduledFor: daysFromNow(5),   totalCents: 260_000, notes: "Banyan tree thinning — permit obtained" },
+    { propertyId: mayaP1.id,    crewId: alpha.id,  status: "SCHEDULED",   scheduledFor: daysFromNow(10),  totalCents: 480_000, notes: "Full canopy reduction — 6 oaks" },
+    { propertyId: quintP1.id,   crewId: bravo.id,  status: "SCHEDULED",   scheduledFor: daysFromNow(12),  totalCents: 95_000,  notes: "Cypress crown raising — 4 ft clearance" },
+    { propertyId: rachelP1.id,  crewId: gamma.id,  status: "SCHEDULED",   scheduledFor: daysFromNow(14),  totalCents: 75_000,  notes: "Palm trimming, hurricane prep" },
+    { propertyId: derekP1.id,   crewId: alpha.id,  status: "SCHEDULED",   scheduledFor: daysFromNow(18),  totalCents: 340_000, notes: "Mangrove trim — DEP permit active" },
+    { propertyId: hankP3.id,    crewId: gamma.id,  status: "SCHEDULED",   scheduledFor: daysFromNow(21),  totalCents: 115_000, notes: "Laurel oak limb removal — over fence" },
+    // IN_PROGRESS (today)
+    { propertyId: lisaP2.id,    crewId: bravo.id,  status: "IN_PROGRESS", scheduledFor: daysFromNow(0),   totalCents: 210_000, notes: "Storm cleanup — 4 downed limbs over pool" },
+    { propertyId: mayaP2.id,    crewId: gamma.id,  status: "IN_PROGRESS", scheduledFor: daysFromNow(0),   totalCents: 165_000, notes: "Crane-assisted removal — 70 ft Laurel oak" },
+    { propertyId: georgeP1.id,  crewId: alpha.id,  status: "IN_PROGRESS", scheduledFor: daysAgo(1),   totalCents: 58_000,  notes: "Sabal palm removal — 3 trees" },
+    { propertyId: fionaP1.id,   crewId: bravo.id,  status: "IN_PROGRESS", scheduledFor: daysFromNow(0),   totalCents: 130_000, notes: "Fairway edge trimming — HOA spec" },
+    // COMPLETE (recent history)
+    { propertyId: harrietP1.id, crewId: gamma.id,  status: "COMPLETE", scheduledFor: daysAgo(5),  completedAt: daysAgo(4),  totalCents: 225_000, notes: "Emergency storm removal — leaning pine" },
+    { propertyId: rachelP1.id,  crewId: alpha.id,  status: "COMPLETE", scheduledFor: daysAgo(10), completedAt: daysAgo(9),  totalCents: 110_000, notes: "Ficus hedge reduction" },
+    { propertyId: peteP1.id,    crewId: bravo.id,  status: "COMPLETE", scheduledFor: daysAgo(15), completedAt: daysAgo(14), totalCents: 88_000,  notes: "Australian pine removal x2" },
+    { propertyId: mayaP1.id,    crewId: gamma.id,  status: "COMPLETE", scheduledFor: daysAgo(20), completedAt: daysAgo(19), totalCents: 395_000, notes: "Back-yard canopy cleanup post-storm" },
+    { propertyId: lisaP1.id,    crewId: alpha.id,  status: "COMPLETE", scheduledFor: daysAgo(30), completedAt: daysAgo(29), totalCents: 72_000,  notes: "Annual palm skinning — 5 palms" },
+    { propertyId: derekP1.id,   crewId: bravo.id,  status: "COMPLETE", scheduledFor: daysAgo(40), completedAt: daysAgo(39), totalCents: 185_000, notes: "Seawall-side mangrove trim" },
+    { propertyId: quintP1.id,   crewId: gamma.id,  status: "COMPLETE", scheduledFor: daysAgo(50), completedAt: daysAgo(49), totalCents: 145_000, notes: "3 laurel oaks thinned — HOA request" },
+    { propertyId: fionaP1.id,   crewId: alpha.id,  status: "COMPLETE", scheduledFor: daysAgo(60), completedAt: daysAgo(59), totalCents: 62_000,  notes: "Queen palm nutrient inject + frond removal" },
+    { propertyId: georgeP1.id,  crewId: bravo.id,  status: "COMPLETE", scheduledFor: daysAgo(70), completedAt: daysAgo(69), totalCents: 310_000, notes: "3 large oaks removed — land clearing" },
+    { propertyId: harrietP1.id, crewId: gamma.id,  status: "COMPLETE", scheduledFor: daysAgo(80), completedAt: daysAgo(79), totalCents: 195_000, notes: "Emergency call — tree on fence line" },
+  ]);
+
+  // ── Quotes ────────────────────────────────────────────────────────────────
+  const insertedQuotes = await db
+    .insert(quotesTable)
+    .values([
+      { customerId: hank.id,    propertyId: hankP1.id,   ownerUserId: sales1.id, status: "APPROVED", subtotalCents: 195_000, totalCents: 208_650 },
+      { customerId: lisa.id,    propertyId: lisaP1.id,   ownerUserId: sales1.id, status: "APPROVED", subtotalCents: 145_000, totalCents: 155_150 },
+      { customerId: pete.id,    propertyId: peteP1.id,   ownerUserId: sales1.id, status: "SENT",     subtotalCents: 260_000, totalCents: 278_200 },
+      { customerId: maya.id,    propertyId: mayaP1.id,   ownerUserId: sales2.id, status: "SENT",     subtotalCents: 480_000, totalCents: 513_600 },
+      { customerId: rachel.id,  propertyId: rachelP1.id, ownerUserId: sales1.id, status: "SENT",     subtotalCents: 75_000,  totalCents:  80_250 },
+      { customerId: derek.id,   propertyId: derekP1.id,  ownerUserId: sales2.id, status: "DRAFT",    subtotalCents: 340_000, totalCents: 363_800 },
+      { customerId: fiona.id,   propertyId: fionaP1.id,  ownerUserId: sales2.id, status: "DRAFT",    subtotalCents: 130_000, totalCents: 139_100 },
+      { customerId: george.id,  propertyId: georgeP1.id, ownerUserId: sales1.id, status: "DRAFT",    subtotalCents: 310_000, totalCents: 331_700 },
+      { customerId: harriet.id, propertyId: harrietP1.id,ownerUserId: sales2.id, status: "REJECTED", subtotalCents: 420_000, totalCents: 449_400 },
+    ])
+    .returning();
+
+  // Line items on the first two approved quotes
+  if (insertedQuotes[0]) {
+    await db.insert(quoteLineItemsTable).values([
+      { quoteId: insertedQuotes[0].id, description: "Royal palm pruning (4 trees)", unitPriceCents: 42_500, qty: 4 },
+      { quoteId: insertedQuotes[0].id, description: "Debris haul-off & disposal",   unitPriceCents: 25_000, qty: 1 },
+    ]);
+  }
+  if (insertedQuotes[1]) {
+    await db.insert(quoteLineItemsTable).values([
+      { quoteId: insertedQuotes[1].id, description: "Queen palm trim (3 trees)",    unitPriceCents: 29_000, qty: 3 },
+      { quoteId: insertedQuotes[1].id, description: "Debris haul-off",              unitPriceCents: 58_000, qty: 1 },
+    ]);
+  }
+
+  // ── Invoices ──────────────────────────────────────────────────────────────
+  await db.insert(invoicesTable).values([
+    { customerId: hank.id,   status: "PAID", totalCents: 320_000, issuedAt: daysAgo(30), paidAt: daysAgo(18) },
+    { customerId: hank.id,   status: "PAID", totalCents:  87_500, issuedAt: daysAgo(60), paidAt: daysAgo(48) },
+    { customerId: lisa.id,   status: "SENT", totalCents: 210_000, issuedAt: daysAgo(3)  },
+    { customerId: maya.id,   status: "SENT", totalCents: 395_000, issuedAt: daysAgo(5)  },
+    { customerId: george.id, status: "PAID", totalCents: 310_000, issuedAt: daysAgo(75), paidAt: daysAgo(62) },
+  ]);
+
+  // ── Fleet ─────────────────────────────────────────────────────────────────
+  const insertedTrucks = await db
+    .insert(trucksTable)
+    .values([
+      { name: "T-01 Bucket Truck", vin: "1FDXX0000000A1", plate: "JTREE-1", status: "ACTIVE",  assignedCrewId: alpha.id },
+      { name: "T-02 Chip Truck",   vin: "1FDXX0000000A2", plate: "JTREE-2", status: "IN_SHOP", assignedCrewId: bravo.id },
+      { name: "T-03 Crane Truck",  vin: "1FDXX0000000A3", plate: "JTREE-3", status: "ACTIVE",  assignedCrewId: gamma.id },
+    ])
+    .returning();
+  const [t1, t2, t3] = insertedTrucks as Array<typeof insertedTrucks[number]>;
+
+  const insertedEquip = await db
+    .insert(equipmentTable)
+    .values([
+      { name: "Stihl MS-462",       type: "Chainsaw", serial: "ST462-001", status: "ACTIVE",  assignedTruckId: t1.id },
+      { name: "Vermeer BC1500",      type: "Chipper",  serial: "VR1500-02", status: "IN_SHOP", assignedTruckId: t2.id },
+      { name: "Husqvarna 572 XP",   type: "Chainsaw", serial: "HQ572-003", status: "IN_SHOP", assignedTruckId: t3.id },
+    ])
+    .returning();
+  const [e1, e2, e3] = insertedEquip as Array<typeof insertedEquip[number]>;
+
+  await db.insert(maintenanceLogsTable).values([
+    { truckId: t1.id,     kind: "SCHEDULED",  description: "Oil & filter change, lube fittings",          performedByUserId: mech.id, costCents: 12_500, performedAt: daysAgo(14) },
+    { truckId: t2.id,     kind: "REPAIR",     description: "Hydraulic line blow-out repair",               performedByUserId: mech.id, costCents: 87_500, performedAt: daysAgo(7)  },
+    { truckId: t3.id,     kind: "INSPECTION", description: "Annual FDOT safety inspection",                performedByUserId: mech.id, costCents: 30_000, performedAt: daysAgo(30) },
+    { equipmentId: e1.id, kind: "SCHEDULED",  description: "Bar & chain replaced, guide bar straightened", performedByUserId: mech.id, costCents: 4_500,  performedAt: daysAgo(10) },
+    { equipmentId: e2.id, kind: "REPAIR",     description: "Drum knife set replaced — excessive wear",     performedByUserId: mech.id, costCents: 22_000, performedAt: daysAgo(7)  },
+    { equipmentId: e3.id, kind: "REPAIR",     description: "Cylinder rebuild — compression failure",       performedByUserId: mech.id, costCents: 38_000, performedAt: daysAgo(3)  },
+  ]);
+
+  // ── Service requests ──────────────────────────────────────────────────────
+  await db.insert(serviceRequestsTable).values([
+    // Hank portal demo requests
+    {
+      customerId: hank.id, propertyId: hankP2.id,
+      service: "TREE_REMOVAL", source: "PORTAL", status: "NEW",
+      notes: "Large oak leaning over garage — worried after last hurricane. Same week if possible.",
+      preferredWindowStart: daysFromNow(3), preferredWindowEnd: daysFromNow(7),
+    },
+    {
+      customerId: hank.id, propertyId: hankP3.id,
+      service: "TRIMMING_PRUNING", source: "PORTAL", status: "CONTACTED",
+      notes: "Four sabal palms along fence line — fronds dragging on roof.",
+      preferredWindowStart: daysFromNow(14), preferredWindowEnd: daysFromNow(21),
+    },
+    // Fresh NEW leads in inbox
+    {
+      customerId: lisa.id, propertyId: lisaP2.id,
+      service: "EMERGENCY_STORM", source: "WEB", status: "NEW",
+      notes: "Branches down across pool cage, need same-day or next-day cleanup.",
+    },
+    {
+      customerId: pete.id, propertyId: peteP1.id,
+      service: "STUMP_GRINDING", source: "PORTAL", status: "NEW",
+      notes: "Two large stumps left over from removal last month. Roots coming up through lawn.",
+      preferredWindowStart: daysFromNow(7), preferredWindowEnd: daysFromNow(14),
+    },
+    {
+      customerId: rachel.id, propertyId: rachelP1.id,
+      service: "MANGROVE_CARE", source: "WEB", status: "NEW",
+      notes: "Annual DEP-permitted trim along canal. Same scope as last year.",
+      preferredWindowStart: daysFromNow(21), preferredWindowEnd: daysFromNow(35),
+    },
+    {
+      customerId: fiona.id, propertyId: fionaP1.id,
+      service: "CRANE_ASSISTED", source: "PHONE", status: "NEW",
+      notes: "Need crane job for 80-ft Mahogany — tight space between house and wall.",
+    },
+    // Older leads in pipeline
+    {
+      customerId: maya.id, propertyId: mayaP2.id,
+      service: "TRIMMING_PRUNING", source: "PORTAL", status: "CONTACTED",
+      notes: "6 oaks along back property line — HOA sent notice. Quote ASAP.",
+      preferredWindowStart: daysFromNow(5), preferredWindowEnd: daysFromNow(12),
+    },
+    {
+      customerId: george.id, propertyId: georgeP1.id,
+      service: "TREE_REMOVAL", source: "WALKIN", status: "QUOTED",
+      notes: "3 dead pines near fence line. Quote sent — waiting on approval.",
+    },
+  ]);
+
+  void quentin; void derek; void harriet; void mayaP2; void lisaP2;
+}
+
+export async function seedIfEmpty(): Promise<boolean> {
+  const existing = await db.select().from(usersTable).limit(1);
+  if (existing.length > 0) {
+    return false;
+  }
+  await populateData();
+  return true;
+}

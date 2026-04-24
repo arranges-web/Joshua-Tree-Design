@@ -140,35 +140,36 @@ router.post(
     body: `Joshua Tree code: ${code}. Expires in 5 minutes.`,
   });
 
+  // DEMO_MODE=true allows the dev-banner OTP fallback even in production.
+  // This is intentional for client demonstrations where Twilio is not yet
+  // provisioned. Set via environment variable — never hard-coded.
   const isProd = process.env["NODE_ENV"] === "production";
+  const isDemoMode = process.env["DEMO_MODE"] === "true";
+  const allowDevFallback = !isProd || isDemoMode;
 
-  // Production must never silently swallow a provider failure — the user
-  // would never receive a code. Surface a 502 so the client can show a
-  // real error and the user can retry / call the office.
+  // Provider was configured but dispatch threw — e.g. bad credentials.
+  // In strict production (no DEMO_MODE) surface a real error so the user
+  // knows their code won't arrive; in demo / dev mode still surface the
+  // code so the demo can proceed.
   if (result.status === "provider_error") {
-    if (isProd) {
+    if (!allowDevFallback) {
       res.status(502).json({ error: "sms_dispatch_failed" });
       return;
     }
-    // Dev: provider configured but failed → still let the developer
-    // proceed via the console code + dev banner.
     req.log?.info({ to: e164, code }, `[DEV-OTP] code=${code}`);
     res.json({
       ok: true,
       devMode: true,
       devCode: code,
-      message:
-        "Twilio dispatch failed — using OTP printed to the api-server console.",
+      message: "Twilio dispatch failed — using OTP printed to the api-server console.",
     });
     return;
   }
 
-  // Dev fallback: no provider wired up at all. Surface the code in the
-  // API response so the workflow is testable without provisioning
-  // Twilio. Production builds (NODE_ENV) never expose the code over HTTP
-  // and we treat a missing provider as a hard failure.
+  // No provider configured at all (dev / demo). In strict production
+  // (no DEMO_MODE) this is a hard failure; in demo / dev, surface the code.
   if (result.status === "dev_console") {
-    if (isProd) {
+    if (!allowDevFallback) {
       res.status(503).json({ error: "sms_provider_not_configured" });
       return;
     }
@@ -177,8 +178,9 @@ router.post(
       ok: true,
       devMode: true,
       devCode: code,
-      message:
-        "Twilio not configured — OTP printed to api-server console.",
+      message: isDemoMode
+        ? "Demo mode — OTP displayed in banner. (Configure Twilio to send real SMS.)"
+        : "Twilio not configured — OTP printed to api-server console.",
     });
     return;
   }
