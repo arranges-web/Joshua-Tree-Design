@@ -625,6 +625,8 @@ export const ListMaintenanceLogsResponse = zod.object({
       kind: zod.string(),
       description: zod.string(),
       performedByUserId: zod.number().nullish(),
+      loggedByUserId: zod.number().nullish(),
+      loggedByName: zod.string().nullish(),
       performedAt: zod.coerce.date(),
       laborCostCents: zod.number(),
       partsCostCents: zod.number(),
@@ -673,6 +675,8 @@ export const UpdateMaintenanceLogResponse = zod.object({
     kind: zod.string(),
     description: zod.string(),
     performedByUserId: zod.number().nullish(),
+    loggedByUserId: zod.number().nullish(),
+    loggedByName: zod.string().nullish(),
     performedAt: zod.coerce.date(),
     laborCostCents: zod.number(),
     partsCostCents: zod.number(),
@@ -794,6 +798,8 @@ export const GetAssetBySlugResponse = zod.object({
       kind: zod.string(),
       description: zod.string(),
       performedByUserId: zod.number().nullish(),
+      loggedByUserId: zod.number().nullish(),
+      loggedByName: zod.string().nullish(),
       performedAt: zod.coerce.date(),
       laborCostCents: zod.number(),
       partsCostCents: zod.number(),
@@ -876,6 +882,8 @@ export const SetAssetStatusResponse = zod.object({
       kind: zod.string(),
       description: zod.string(),
       performedByUserId: zod.number().nullish(),
+      loggedByUserId: zod.number().nullish(),
+      loggedByName: zod.string().nullish(),
       performedAt: zod.coerce.date(),
       laborCostCents: zod.number(),
       partsCostCents: zod.number(),
@@ -894,6 +902,25 @@ export const SetAssetStatusResponse = zod.object({
       recordedAt: zod.coerce.date(),
       recordedByUserId: zod.number().nullish(),
       notes: zod.string().nullish(),
+    }),
+  ),
+});
+
+export const GetAssetStatusHistoryParams = zod.object({
+  slug: zod.coerce.string(),
+});
+
+export const GetAssetStatusHistoryResponse = zod.object({
+  history: zod.array(
+    zod.object({
+      id: zod.number(),
+      assetType: zod.string(),
+      assetId: zod.number(),
+      oldStatus: zod.string(),
+      newStatus: zod.string(),
+      changedByUserId: zod.number().nullish(),
+      changedByName: zod.string().nullish(),
+      changedAt: zod.coerce.date(),
     }),
   ),
 });

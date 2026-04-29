@@ -11,6 +11,8 @@ export * from "./assetDetailResponse";
 export * from "./assetKind";
 export * from "./assetListResponse";
 export * from "./assetServiceState";
+export * from "./assetStatusHistoryEntry";
+export * from "./assetStatusHistoryResponse";
 export * from "./assetStatusUpdateBody";
 export * from "./assetStatusUpdateBodyStatus";
 export * from "./assetUsageUnit";

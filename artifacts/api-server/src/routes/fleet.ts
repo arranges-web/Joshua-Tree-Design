@@ -6,6 +6,8 @@ import {
   equipmentTable,
   maintenanceLogsTable,
   usageReadingsTable,
+  assetStatusLogTable,
+  usersTable,
 } from "@workspace/db";
 import {
   CreateTruckBody,
@@ -369,9 +371,10 @@ router.post(
     const [row] = await db
       .insert(maintenanceLogsTable)
       // buildLogValues("create") always sets description/labor/parts/cost.
-      .values(
-        buildLogValues(parsed.data, "create") as typeof maintenanceLogsTable.$inferInsert,
-      )
+      .values({
+        ...(buildLogValues(parsed.data, "create") as typeof maintenanceLogsTable.$inferInsert),
+        loggedByUserId: req.user?.id ?? null,
+      })
       .returning();
 
     // If the log includes a usage snapshot, advance the asset's odometer too.
@@ -713,7 +716,7 @@ router.get(
       res.status(404).json({ error: "not_found" });
       return;
     }
-    const logs = asset.kind === "TRUCK"
+    const rawLogs = asset.kind === "TRUCK"
       ? await db
           .select()
           .from(maintenanceLogsTable)
@@ -724,6 +727,23 @@ router.get(
           .from(maintenanceLogsTable)
           .where(eq(maintenanceLogsTable.equipmentId, asset.id))
           .orderBy(desc(maintenanceLogsTable.performedAt));
+
+    // Resolve logged-by user names in one batch query.
+    const loggedByIds = [
+      ...new Set(rawLogs.map((l) => l.loggedByUserId).filter((id): id is number => id != null)),
+    ];
+    const loggedByUsers =
+      loggedByIds.length > 0
+        ? await db
+            .select({ id: usersTable.id, fullName: usersTable.fullName })
+            .from(usersTable)
+            .where(sql`${usersTable.id} = ANY(ARRAY[${sql.raw(loggedByIds.join(","))}]::int[])`)
+        : [];
+    const userNameMap = new Map(loggedByUsers.map((u) => [u.id, u.fullName]));
+    const logs = rawLogs.map((l) => ({
+      ...l,
+      loggedByName: l.loggedByUserId ? (userNameMap.get(l.loggedByUserId) ?? null) : null,
+    }));
 
     const recentReadings = asset.kind === "TRUCK"
       ? await db
@@ -775,9 +795,68 @@ router.post(
         .set({ status })
         .where(eq(equipmentTable.id, asset.id));
     }
+    // Record the status transition for audit trail.
+    if (asset.status !== status) {
+      await db.insert(assetStatusLogTable).values({
+        assetType: asset.kind,
+        assetId: asset.id,
+        oldStatus: asset.status,
+        newStatus: status,
+        changedByUserId: req.user?.id ?? null,
+      });
+    }
     // Re-query so we return the freshest summary, including derived fields.
     const refreshed = (await buildAssetList()).find((a) => a.slug === slug);
     res.json({ asset: refreshed, logs: [], recentReadings: [] });
+  },
+);
+
+router.get(
+  "/assets/:slug/status-history",
+  requireAuth,
+  requireFleetView(),
+  async (req, res) => {
+    const slug = String(req.params.slug ?? "");
+    const allowedKinds = viewableKinds(req.user!);
+    const assets = (await buildAssetList()).filter((a) => allowedKinds.has(a.kind));
+    const asset = assets.find((a) => a.slug === slug);
+    if (!asset) {
+      res.status(404).json({ error: "not_found" });
+      return;
+    }
+    const rawHistory = await db
+      .select()
+      .from(assetStatusLogTable)
+      .where(
+        and(
+          eq(assetStatusLogTable.assetType, asset.kind),
+          eq(assetStatusLogTable.assetId, asset.id),
+        ),
+      )
+      .orderBy(desc(assetStatusLogTable.changedAt))
+      .limit(10);
+
+    const changedByIds = [
+      ...new Set(
+        rawHistory.map((h) => h.changedByUserId).filter((id): id is number => id != null),
+      ),
+    ];
+    const changedByUsers =
+      changedByIds.length > 0
+        ? await db
+            .select({ id: usersTable.id, fullName: usersTable.fullName })
+            .from(usersTable)
+            .where(sql`${usersTable.id} = ANY(ARRAY[${sql.raw(changedByIds.join(","))}]::int[])`)
+        : [];
+    const userNameMap = new Map(changedByUsers.map((u) => [u.id, u.fullName]));
+    const history = rawHistory.map((h) => ({
+      ...h,
+      changedAt: new Date(h.changedAt).toISOString(),
+      changedByName: h.changedByUserId
+        ? (userNameMap.get(h.changedByUserId) ?? null)
+        : null,
+    }));
+    res.json({ history });
   },
 );
 

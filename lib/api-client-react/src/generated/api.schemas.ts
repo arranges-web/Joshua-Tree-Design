@@ -264,6 +264,8 @@ export interface MaintenanceLog {
   kind: string;
   description: string;
   performedByUserId?: number | null;
+  loggedByUserId?: number | null;
+  loggedByName?: string | null;
   performedAt: string;
   laborCostCents: number;
   partsCostCents: number;
@@ -271,6 +273,21 @@ export interface MaintenanceLog {
   costCents: number;
   mileageAtService?: number | null;
   hoursAtService?: number | null;
+}
+
+export interface AssetStatusHistoryEntry {
+  id: number;
+  assetType: string;
+  assetId: number;
+  oldStatus: string;
+  newStatus: string;
+  changedByUserId?: number | null;
+  changedByName?: string | null;
+  changedAt: string;
+}
+
+export interface AssetStatusHistoryResponse {
+  history: AssetStatusHistoryEntry[];
 }
 
 export interface MaintenanceLogWriteBody {

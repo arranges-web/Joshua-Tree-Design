@@ -13,6 +13,8 @@ export interface MaintenanceLog {
   kind: string;
   description: string;
   performedByUserId?: number | null;
+  loggedByUserId?: number | null;
+  loggedByName?: string | null;
   performedAt: Date;
   laborCostCents: number;
   partsCostCents: number;

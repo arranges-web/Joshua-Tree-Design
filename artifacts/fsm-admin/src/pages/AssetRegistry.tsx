@@ -80,6 +80,10 @@ function ServiceBadge({ state }: { state: "OK" | "DUE_SOON" | "OVERDUE" }) {
   );
 }
 
+type SortKey = "NAME" | "STATUS" | "SERVICE_DUE" | "YTD_SPEND" | "LIFETIME_SPEND";
+
+const SERVICE_RANK = { OVERDUE: 0, DUE_SOON: 1, OK: 2 };
+
 export function AssetRegistry() {
   const { data, isLoading } = useListAssets();
   const [query, setQuery] = useState("");
@@ -90,11 +94,12 @@ export function AssetRegistry() {
   const [dueFilter, setDueFilter] = useState<
     "ALL" | "OVERDUE" | "DUE_SOON" | "OK"
   >("ALL");
+  const [sortKey, setSortKey] = useState<SortKey>("SERVICE_DUE");
 
   const assets = data?.assets ?? [];
 
   const filtered = useMemo(() => {
-    return assets.filter((a) => {
+    const list = assets.filter((a) => {
       if (kindFilter !== "ALL" && a.kind !== kindFilter) return false;
       if (statusFilter !== "ALL" && a.status !== statusFilter) return false;
       if (dueFilter !== "ALL" && a.serviceState !== dueFilter) return false;
@@ -107,7 +112,17 @@ export function AssetRegistry() {
       }
       return true;
     });
-  }, [assets, query, kindFilter, statusFilter, dueFilter]);
+    list.sort((a, b) => {
+      if (sortKey === "NAME") return a.name.localeCompare(b.name);
+      if (sortKey === "STATUS") return a.status.localeCompare(b.status);
+      if (sortKey === "SERVICE_DUE")
+        return SERVICE_RANK[a.serviceState] - SERVICE_RANK[b.serviceState];
+      if (sortKey === "YTD_SPEND") return (b.ytdSpendCents ?? 0) - (a.ytdSpendCents ?? 0);
+      if (sortKey === "LIFETIME_SPEND") return b.lifeToDateSpendCents - a.lifeToDateSpendCents;
+      return 0;
+    });
+    return list;
+  }, [assets, query, kindFilter, statusFilter, dueFilter, sortKey]);
 
   const totals = useMemo(() => {
     const overdue = assets.filter((a) => a.serviceState === "OVERDUE").length;
@@ -201,6 +216,21 @@ export function AssetRegistry() {
               <SelectItem value="OVERDUE">Overdue</SelectItem>
               <SelectItem value="DUE_SOON">Due soon</SelectItem>
               <SelectItem value="OK">OK</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select
+            value={sortKey}
+            onValueChange={(v) => setSortKey(v as SortKey)}
+          >
+            <SelectTrigger className="w-[170px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="SERVICE_DUE">Sort: Service due</SelectItem>
+              <SelectItem value="NAME">Sort: Name A–Z</SelectItem>
+              <SelectItem value="STATUS">Sort: Status</SelectItem>
+              <SelectItem value="YTD_SPEND">Sort: YTD Spend</SelectItem>
+              <SelectItem value="LIFETIME_SPEND">Sort: Lifetime Spend</SelectItem>
             </SelectContent>
           </Select>
           <div className="ml-auto text-xs text-muted-foreground">

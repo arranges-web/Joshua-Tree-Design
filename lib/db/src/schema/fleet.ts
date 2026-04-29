@@ -104,6 +104,10 @@ export const maintenanceLogsTable = pgTable(
       () => usersTable.id,
       { onDelete: "set null" },
     ),
+    loggedByUserId: integer("logged_by_user_id").references(
+      () => usersTable.id,
+      { onDelete: "set null" },
+    ),
     performedAt: timestamp("performed_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -119,6 +123,30 @@ export const maintenanceLogsTable = pgTable(
     index("maintenance_logs_truck_id_idx").on(t.truckId),
     index("maintenance_logs_equipment_id_idx").on(t.equipmentId),
     index("maintenance_logs_performed_at_idx").on(t.performedAt),
+  ],
+);
+
+// Tracks every status transition for trucks and equipment so the team can see
+// who put an asset In Shop or Out of Service and when.
+export const assetStatusLogTable = pgTable(
+  "asset_status_log",
+  {
+    id: serial("id").primaryKey(),
+    assetType: text("asset_type").notNull(), // "TRUCK" | "EQUIPMENT"
+    assetId: integer("asset_id").notNull(),
+    oldStatus: text("old_status").notNull(),
+    newStatus: text("new_status").notNull(),
+    changedByUserId: integer("changed_by_user_id").references(
+      () => usersTable.id,
+      { onDelete: "set null" },
+    ),
+    changedAt: timestamp("changed_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    index("asset_status_log_asset_idx").on(t.assetType, t.assetId),
+    index("asset_status_log_changed_at_idx").on(t.changedAt),
   ],
 );
 
@@ -154,6 +182,7 @@ export type Truck = typeof trucksTable.$inferSelect;
 export type Equipment = typeof equipmentTable.$inferSelect;
 export type MaintenanceLog = typeof maintenanceLogsTable.$inferSelect;
 export type UsageReading = typeof usageReadingsTable.$inferSelect;
+export type AssetStatusLog = typeof assetStatusLogTable.$inferSelect;
 
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 export const insertTruckSchema = createInsertSchema(trucksTable);

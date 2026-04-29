@@ -582,6 +582,23 @@ paths:
               schema: { $ref: "#/components/schemas/AssetDetailResponse" }
         "404": { $ref: "#/components/responses/Error" }
 
+  /assets/{slug}/status-history:
+    get:
+      operationId: getAssetStatusHistory
+      tags: [assets]
+      parameters:
+        - in: path
+          name: slug
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AssetStatusHistoryResponse" }
+        "404": { $ref: "#/components/responses/Error" }
+
   /fleet-pulse:
     get:
       operationId: getFleetPulse
@@ -1236,12 +1253,33 @@ components:
         kind: { type: string }
         description: { type: string }
         performedByUserId: { type: integer, nullable: true }
+        loggedByUserId: { type: integer, nullable: true }
+        loggedByName: { type: string, nullable: true }
         performedAt: { type: string, format: date-time }
         laborCostCents: { type: integer }
         partsCostCents: { type: integer }
         costCents: { type: integer, description: "Cached total = labor + parts." }
         mileageAtService: { type: integer, nullable: true }
         hoursAtService: { type: integer, nullable: true }
+    AssetStatusHistoryEntry:
+      type: object
+      required: [id, assetType, assetId, oldStatus, newStatus, changedAt]
+      properties:
+        id: { type: integer }
+        assetType: { type: string }
+        assetId: { type: integer }
+        oldStatus: { type: string }
+        newStatus: { type: string }
+        changedByUserId: { type: integer, nullable: true }
+        changedByName: { type: string, nullable: true }
+        changedAt: { type: string, format: date-time }
+    AssetStatusHistoryResponse:
+      type: object
+      required: [history]
+      properties:
+        history:
+          type: array
+          items: { $ref: "#/components/schemas/AssetStatusHistoryEntry" }
     MaintenanceLogWriteBody:
       type: object
       required: [kind, description]

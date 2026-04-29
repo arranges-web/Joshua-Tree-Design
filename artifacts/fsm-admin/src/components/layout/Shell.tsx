@@ -3,18 +3,10 @@ import { useLocation, Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import {
   LogOut,
-  LayoutDashboard,
   Users,
-  Briefcase,
-  FileSignature,
-  Receipt,
-  Truck,
   Wrench,
-  IdCard,
-  ShieldCheck,
   Menu,
   TreeDeciduous,
-  Inbox,
   Activity,
   Package,
 } from "lucide-react";
@@ -28,32 +20,11 @@ const NAV_GROUPS: Array<{
   items: Array<{ href: string; label: string; icon: typeof Users }>;
 }> = [
   {
-    label: "Overview",
-    items: [{ href: "/", label: "Dashboard", icon: LayoutDashboard }],
-  },
-  {
-    label: "Operations",
-    items: [
-      { href: "/leads", label: "Leads", icon: Inbox },
-      { href: "/customers", label: "Customers", icon: Users },
-      { href: "/jobs", label: "Jobs", icon: Briefcase },
-      { href: "/quotes", label: "Quotes", icon: FileSignature },
-      { href: "/invoices", label: "Invoices", icon: Receipt },
-    ],
-  },
-  {
     label: "Fleet & Shop",
     items: [
       { href: "/fleet", label: "Fleet Pulse", icon: Activity },
       { href: "/assets", label: "Asset Registry", icon: Package },
       { href: "/maintenance", label: "Maintenance Log", icon: Wrench },
-    ],
-  },
-  {
-    label: "People & Access",
-    items: [
-      { href: "/employees", label: "Employees", icon: IdCard },
-      { href: "/permissions", label: "Permissions", icon: ShieldCheck },
     ],
   },
 ];

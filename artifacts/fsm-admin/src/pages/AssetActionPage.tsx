@@ -8,6 +8,7 @@ import {
   useCreateUsageReading,
   useCreateMaintenanceLog,
   useSetAssetStatus,
+  useGetAssetStatusHistory,
   getListMaintenanceLogsQueryKey,
   getListAssetsQueryKey,
   getGetFleetPulseQueryKey,
@@ -49,6 +50,8 @@ import {
   Printer,
   ShieldAlert,
   TrendingUp,
+  History,
+  User,
 } from "lucide-react";
 
 const usd = (cents: number | null | undefined) =>
@@ -260,6 +263,7 @@ export function AssetActionPage() {
             <QuickServiceForm asset={asset} />
           </div>
           <ChangeStatusCard asset={asset} />
+          <StatusHistoryCard slug={asset.slug} />
         </TabsContent>
 
         <TabsContent value="ledger">
@@ -274,7 +278,7 @@ export function AssetActionPage() {
                   {logs.map((log) => (
                     <li key={log.id} className="grid gap-2 p-4 sm:grid-cols-[1fr_auto]">
                       <div>
-                        <div className="flex items-center gap-2">
+                        <div className="flex flex-wrap items-center gap-2">
                           <Badge variant="outline" className="text-[10px]">
                             {log.kind}
                           </Badge>
@@ -285,6 +289,12 @@ export function AssetActionPage() {
                             <span className="font-mono text-[11px] text-muted-foreground">
                               @ {num(log.mileageAtService ?? log.hoursAtService ?? 0)}{" "}
                               {asset.usageUnit === "MILES" ? "mi" : "hrs"}
+                            </span>
+                          )}
+                          {log.loggedByName && (
+                            <span className="flex items-center gap-1 text-[11px] text-muted-foreground">
+                              <User className="h-3 w-3" />
+                              {log.loggedByName}
                             </span>
                           )}
                         </div>
@@ -621,6 +631,50 @@ function QuickServiceForm({
             Save Service Entry
           </Button>
         </form>
+      </CardContent>
+    </Card>
+  );
+}
+
+function StatusHistoryCard({ slug }: { slug: string }) {
+  const { data } = useGetAssetStatusHistory(slug);
+  const history = data?.history ?? [];
+
+  function statusLabel(s: string) {
+    if (s === "ACTIVE") return "Active";
+    if (s === "IN_SHOP") return "In Shop";
+    return "Out of Service";
+  }
+
+  if (history.length === 0) return null;
+
+  return (
+    <Card className="border-border/60">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-base">
+          <History className="h-4 w-4" /> Status History
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="p-0">
+        <ul className="divide-y">
+          {history.slice(0, 5).map((entry) => (
+            <li key={entry.id} className="flex items-center justify-between px-4 py-2.5">
+              <div className="flex items-center gap-2 text-sm">
+                <span className="text-muted-foreground">{statusLabel(entry.oldStatus)}</span>
+                <span className="text-muted-foreground">→</span>
+                <span className="font-medium">{statusLabel(entry.newStatus)}</span>
+                {entry.changedByName && (
+                  <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                    <User className="h-3 w-3" /> {entry.changedByName}
+                  </span>
+                )}
+              </div>
+              <span className="text-xs text-muted-foreground">
+                {new Date(entry.changedAt).toLocaleDateString()}
+              </span>
+            </li>
+          ))}
+        </ul>
       </CardContent>
     </Card>
   );

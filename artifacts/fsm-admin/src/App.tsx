@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Switch, Route, Router as WouterRouter, useLocation } from "wouter";
+import { Switch, Route, Router as WouterRouter, Redirect, useLocation } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -9,7 +9,6 @@ import { Shell } from "@/components/layout/Shell";
 import NotFound from "@/pages/not-found";
 
 import { Login } from "@/pages/Login";
-import { Dashboard } from "@/pages/Dashboard";
 import { Customers } from "@/pages/Customers";
 import { CustomerProfile } from "@/pages/CustomerProfile";
 import { Leads } from "@/pages/Leads";
@@ -77,7 +76,9 @@ function AppRouter() {
         <AuthGuard>
           <Shell>
             <Switch>
-              <Route path="/" component={Dashboard} />
+              <Route path="/">
+                <Redirect to="/fleet" />
+              </Route>
               <Route path="/customers" component={Customers} />
               <Route path="/customers/:id" component={CustomerProfile} />
               <Route path="/leads" component={Leads} />

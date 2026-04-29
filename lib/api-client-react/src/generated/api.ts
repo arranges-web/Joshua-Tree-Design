@@ -19,6 +19,7 @@ import type {
 import type {
   AssetDetailResponse,
   AssetListResponse,
+  AssetStatusHistoryResponse,
   AssetStatusUpdateBody,
   AuthMeResponse,
   CustomerListResponse,
@@ -2965,6 +2966,91 @@ export const useSetAssetStatus = <
 > => {
   return useMutation(getSetAssetStatusMutationOptions(options));
 };
+
+export const getGetAssetStatusHistoryUrl = (slug: string) => {
+  return `/api/assets/${slug}/status-history`;
+};
+
+export const getAssetStatusHistory = async (
+  slug: string,
+  options?: RequestInit,
+): Promise<AssetStatusHistoryResponse> => {
+  return customFetch<AssetStatusHistoryResponse>(
+    getGetAssetStatusHistoryUrl(slug),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export const getGetAssetStatusHistoryQueryKey = (slug: string) => {
+  return [`/api/assets/${slug}/status-history`] as const;
+};
+
+export const getGetAssetStatusHistoryQueryOptions = <
+  TData = Awaited<ReturnType<typeof getAssetStatusHistory>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  slug: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getAssetStatusHistory>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getGetAssetStatusHistoryQueryKey(slug);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getAssetStatusHistory>>
+  > = ({ signal }) =>
+    getAssetStatusHistory(slug, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!slug,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getAssetStatusHistory>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetAssetStatusHistoryQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getAssetStatusHistory>>
+>;
+export type GetAssetStatusHistoryQueryError = ErrorType<ErrorResponse>;
+
+export function useGetAssetStatusHistory<
+  TData = Awaited<ReturnType<typeof getAssetStatusHistory>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  slug: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getAssetStatusHistory>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetAssetStatusHistoryQueryOptions(slug, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
 
 export const getGetFleetPulseUrl = () => {
   return `/api/fleet-pulse`;
