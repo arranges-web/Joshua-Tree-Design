@@ -214,6 +214,9 @@ export function FleetPulse() {
             <CardTitle className="flex items-center gap-2 text-base">
               <DollarSign className="h-4 w-4 text-rose-600" />
               Top 5 Money Pits
+              <span className="ml-2 text-xs font-normal text-muted-foreground">
+                Ranked by year-to-date spend
+              </span>
             </CardTitle>
           </CardHeader>
           <CardContent className="p-0">
@@ -235,8 +238,13 @@ export function FleetPulse() {
                         </span>
                         <span className="truncate text-sm font-medium">{m.name}</span>
                       </span>
-                      <span className="font-mono text-sm font-semibold">
-                        {usd(m.lifeToDateSpendCents)}
+                      <span className="text-right">
+                        <span className="block font-mono text-sm font-semibold">
+                          {usd(m.ytdSpendCents)}
+                        </span>
+                        <span className="block text-xs text-muted-foreground">
+                          LTD {usd(m.lifeToDateSpendCents)}
+                        </span>
                       </span>
                     </Link>
                   </li>
