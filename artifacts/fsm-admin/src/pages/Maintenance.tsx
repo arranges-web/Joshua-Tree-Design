@@ -71,10 +71,10 @@ export function Maintenance() {
                   <TableCell>{log.description}</TableCell>
                   <TableCell>{new Date(log.performedAt).toLocaleString()}</TableCell>
                   <TableCell>
-                    {(log as typeof log & { loggedByName?: string | null }).loggedByName ? (
+                    {log.loggedByName ? (
                       <span className="flex items-center gap-1 text-xs text-muted-foreground">
                         <User className="h-3 w-3" />
-                        {(log as typeof log & { loggedByName?: string | null }).loggedByName}
+                        {log.loggedByName}
                       </span>
                     ) : (
                       <span className="text-xs text-muted-foreground/40">—</span>
