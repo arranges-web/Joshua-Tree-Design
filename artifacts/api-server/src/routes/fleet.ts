@@ -24,7 +24,7 @@ import {
   CreateUsageReadingBody,
 } from "@workspace/api-zod";
 import { requireAuth } from "../middlewares/requireAuth";
-import { requireSection } from "../middlewares/requireSection";
+import { requireSection, hasSectionAccess } from "../middlewares/requireSection";
 
 const router: IRouter = Router();
 
@@ -584,23 +584,20 @@ async function buildAssetList(): Promise<AssetSummary[]> {
 
 // Section gate: viewer of either trucks OR equipment can see the registry.
 function requireFleetView(): import("express").RequestHandler {
-  const truckGate = requireSection("fleet.trucks", "view");
-  const equipGate = requireSection("fleet.equipment", "view");
-  return async (req, res, next) => {
-    let allowed = false;
-    await new Promise<void>((resolve) => {
-      truckGate(req, res, (err?: unknown) => {
-        if (!err && !res.headersSent) allowed = true;
-        resolve();
-      });
-    });
-    if (allowed) return next();
-    // Truck gate denied — try equipment gate. Reset any deny state first.
-    if (res.headersSent) {
-      // requireSection already wrote the 403 — overwrite that decision by trying equipment.
-      // Express will throw if we try to write again, so create a stub response wrapper.
+  return (req, res, next) => {
+    if (!req.user) {
+      res.status(401).json({ error: "unauthenticated" });
+      return;
     }
-    return equipGate(req, res, next);
+    const canTrucks = hasSectionAccess(req.user, "fleet.trucks", "view");
+    const canEquipment = hasSectionAccess(req.user, "fleet.equipment", "view");
+    if (!canTrucks && !canEquipment) {
+      res
+        .status(403)
+        .json({ error: "forbidden", section: "fleet", action: "view" });
+      return;
+    }
+    next();
   };
 }
 
@@ -652,6 +649,43 @@ router.get(
           .limit(20);
 
     res.json({ asset, logs, recentReadings });
+  },
+);
+
+router.post(
+  "/assets/:slug/status",
+  requireAuth,
+  requireSection("fleet.maintenance", "edit"),
+  async (req, res) => {
+    const slug = String(req.params.slug ?? "");
+    const rawStatus = String((req.body ?? {}).status ?? "");
+    const allowed = ["ACTIVE", "IN_SHOP", "RETIRED"] as const;
+    type AllowedStatus = (typeof allowed)[number];
+    if (!(allowed as readonly string[]).includes(rawStatus)) {
+      res.status(400).json({ error: "invalid_status" });
+      return;
+    }
+    const status = rawStatus as AllowedStatus;
+    const assets = await buildAssetList();
+    const asset = assets.find((a) => a.slug === slug);
+    if (!asset) {
+      res.status(404).json({ error: "not_found" });
+      return;
+    }
+    if (asset.kind === "TRUCK") {
+      await db
+        .update(trucksTable)
+        .set({ status })
+        .where(eq(trucksTable.id, asset.id));
+    } else {
+      await db
+        .update(equipmentTable)
+        .set({ status })
+        .where(eq(equipmentTable.id, asset.id));
+    }
+    // Re-query so we return the freshest summary, including derived fields.
+    const refreshed = (await buildAssetList()).find((a) => a.slug === slug);
+    res.json({ asset: refreshed, logs: [], recentReadings: [] });
   },
 );
 
@@ -753,8 +787,38 @@ router.get("/fleet-pulse", requireAuth, requireFleetView(), async (_req, res) =>
     .slice(0, 5)
     .map(toPulseSummary);
 
-  // Monthly spend for last 12 months
-  const logs = await db.select().from(maintenanceLogsTable);
+  // Monthly spend for last 12 months — and a recent-maintenance feed.
+  const logs = await db
+    .select()
+    .from(maintenanceLogsTable)
+    .orderBy(desc(maintenanceLogsTable.performedAt));
+  const assetBySlugIndex = new Map<string, AssetSummary>();
+  for (const a of assets) {
+    assetBySlugIndex.set(`${a.kind}-${a.id}`, a);
+  }
+  const recentMaintenance = logs
+    .slice(0, 8)
+    .map((log) => {
+      const key = log.truckId
+        ? `TRUCK-${log.truckId}`
+        : log.equipmentId
+          ? `EQUIPMENT-${log.equipmentId}`
+          : null;
+      const asset = key ? assetBySlugIndex.get(key) : undefined;
+      return {
+        id: log.id,
+        kind: log.kind,
+        description: log.description,
+        performedAt: new Date(log.performedAt).toISOString(),
+        costCents: log.costCents ?? 0,
+        laborCostCents: log.laborCostCents ?? 0,
+        partsCostCents: log.partsCostCents ?? 0,
+        assetKind: (asset?.kind ?? "TRUCK") as "TRUCK" | "EQUIPMENT",
+        assetSlug: asset?.slug ?? "",
+        assetName: asset?.name ?? "Unknown asset",
+      };
+    })
+    .filter((r) => r.assetSlug !== "");
   const monthMap = new Map<
     string,
     { totalCents: number; laborCents: number; partsCents: number }
@@ -797,6 +861,7 @@ router.get("/fleet-pulse", requireAuth, requireFleetView(), async (_req, res) =>
     monthlySpend,
     topMoneyPits,
     totals: { last30DaysCents: last30, ytdCents: ytd, lifetimeCents: lifetime },
+    recentMaintenance,
   });
 });
 

@@ -423,6 +423,19 @@ export interface FleetPulseMonthlySpend {
   partsCents: number;
 }
 
+export type AssetStatusUpdateBodyStatus =
+  (typeof AssetStatusUpdateBodyStatus)[keyof typeof AssetStatusUpdateBodyStatus];
+
+export const AssetStatusUpdateBodyStatus = {
+  ACTIVE: "ACTIVE",
+  IN_SHOP: "IN_SHOP",
+  RETIRED: "RETIRED",
+} as const;
+
+export interface AssetStatusUpdateBody {
+  status: AssetStatusUpdateBodyStatus;
+}
+
 export type FleetPulseResponseCounts = {
   active: number;
   inShop: number;
@@ -436,6 +449,27 @@ export type FleetPulseResponseTotals = {
   lifetimeCents: number;
 };
 
+export type FleetPulseResponseRecentMaintenanceItemAssetKind =
+  (typeof FleetPulseResponseRecentMaintenanceItemAssetKind)[keyof typeof FleetPulseResponseRecentMaintenanceItemAssetKind];
+
+export const FleetPulseResponseRecentMaintenanceItemAssetKind = {
+  TRUCK: "TRUCK",
+  EQUIPMENT: "EQUIPMENT",
+} as const;
+
+export type FleetPulseResponseRecentMaintenanceItem = {
+  id: number;
+  kind: string;
+  description: string;
+  performedAt: string;
+  costCents: number;
+  laborCostCents?: number;
+  partsCostCents?: number;
+  assetKind: FleetPulseResponseRecentMaintenanceItemAssetKind;
+  assetSlug: string;
+  assetName: string;
+};
+
 export interface FleetPulseResponse {
   counts: FleetPulseResponseCounts;
   overdue: FleetPulseAssetSummary[];
@@ -443,6 +477,8 @@ export interface FleetPulseResponse {
   monthlySpend: FleetPulseMonthlySpend[];
   topMoneyPits: FleetPulseAssetSummary[];
   totals: FleetPulseResponseTotals;
+  /** Most recent maintenance entries across the whole fleet. */
+  recentMaintenance: FleetPulseResponseRecentMaintenanceItem[];
 }
 
 export interface Employee {

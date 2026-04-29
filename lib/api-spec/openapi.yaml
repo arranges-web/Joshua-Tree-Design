@@ -560,6 +560,28 @@ paths:
               schema: { $ref: "#/components/schemas/AssetDetailResponse" }
         "404": { $ref: "#/components/responses/Error" }
 
+  /assets/{slug}/status:
+    post:
+      operationId: setAssetStatus
+      tags: [assets]
+      parameters:
+        - in: path
+          name: slug
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AssetStatusUpdateBody" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AssetDetailResponse" }
+        "404": { $ref: "#/components/responses/Error" }
+
   /fleet-pulse:
     get:
       operationId: getFleetPulse
@@ -1349,9 +1371,14 @@ components:
         totalCents: { type: integer }
         laborCents: { type: integer }
         partsCents: { type: integer }
+    AssetStatusUpdateBody:
+      type: object
+      required: [status]
+      properties:
+        status: { type: string, enum: [ACTIVE, IN_SHOP, RETIRED] }
     FleetPulseResponse:
       type: object
-      required: [counts, overdue, dueSoon, monthlySpend, topMoneyPits, totals]
+      required: [counts, overdue, dueSoon, monthlySpend, topMoneyPits, totals, recentMaintenance]
       properties:
         counts:
           type: object
@@ -1380,6 +1407,23 @@ components:
             last30DaysCents: { type: integer }
             ytdCents: { type: integer }
             lifetimeCents: { type: integer }
+        recentMaintenance:
+          type: array
+          description: "Most recent maintenance entries across the whole fleet."
+          items:
+            type: object
+            required: [id, kind, description, performedAt, costCents, assetSlug, assetName, assetKind]
+            properties:
+              id: { type: integer }
+              kind: { type: string }
+              description: { type: string }
+              performedAt: { type: string, format: date-time }
+              costCents: { type: integer }
+              laborCostCents: { type: integer }
+              partsCostCents: { type: integer }
+              assetKind: { type: string, enum: [TRUCK, EQUIPMENT] }
+              assetSlug: { type: string }
+              assetName: { type: string }
 
     Employee:
       type: object

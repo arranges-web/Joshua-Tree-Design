@@ -7,6 +7,7 @@ import {
   getGetAssetBySlugQueryKey,
   useCreateUsageReading,
   useCreateMaintenanceLog,
+  useSetAssetStatus,
   getListMaintenanceLogsQueryKey,
   getListAssetsQueryKey,
   getGetFleetPulseQueryKey,
@@ -45,6 +46,8 @@ import {
   Calendar,
   DollarSign,
   Tag,
+  Printer,
+  ShieldAlert,
 } from "lucide-react";
 
 const usd = (cents: number | null | undefined) =>
@@ -59,6 +62,48 @@ function statusLabel(status: string) {
   if (status === "ACTIVE") return "Active";
   if (status === "IN_SHOP") return "In Shop";
   return "Out of Service";
+}
+
+function printQrLabel(name: string, slug: string, url: string) {
+  // Serialize the QR SVG already rendered on the page so we don't pull
+  // a remote QR generator (works offline, no extra deps).
+  const svgEl = document.querySelector<SVGSVGElement>(
+    "[data-testid='asset-qr-code']",
+  );
+  if (!svgEl) return;
+  const clone = svgEl.cloneNode(true) as SVGSVGElement;
+  clone.setAttribute("width", "240");
+  clone.setAttribute("height", "240");
+  const svgMarkup = new XMLSerializer().serializeToString(clone);
+  const win = window.open("", "qr-label", "width=420,height=520");
+  if (!win) return;
+  win.document.write(
+    `<!doctype html><html><head><title>${escapeHtml(name)} — QR label</title>
+    <style>
+      body { font-family: 'Inter Tight', system-ui, sans-serif; padding: 16px; text-align: center; margin: 0; }
+      h1 { font-size: 18px; margin: 0 0 4px; }
+      .meta { font-family: ui-monospace, monospace; color: #555; font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; margin-bottom: 12px; }
+      .url { font-family: ui-monospace, monospace; font-size: 10px; color: #777; margin-top: 8px; word-break: break-all; }
+      svg { display: block; margin: 0 auto; }
+      @page { margin: 12mm; }
+    </style></head><body>
+      <h1>${escapeHtml(name)}</h1>
+      <div class="meta">${escapeHtml(slug)}</div>
+      ${svgMarkup}
+      <div class="url">${escapeHtml(url)}</div>
+      <script>setTimeout(function(){ window.print(); }, 50);</script>
+    </body></html>`,
+  );
+  win.document.close();
+}
+
+function escapeHtml(s: string) {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
 }
 
 export function AssetActionPage() {
@@ -177,6 +222,16 @@ export function AssetActionPage() {
             <div className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground">
               Scan to open
             </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="mt-1 gap-1.5"
+              onClick={() => printQrLabel(asset.name, asset.slug, qrUrl)}
+              data-testid="print-qr-button"
+            >
+              <Printer className="h-3.5 w-3.5" /> Print label
+            </Button>
           </div>
         </CardContent>
       </Card>
@@ -194,6 +249,7 @@ export function AssetActionPage() {
             <UsageReadingForm asset={asset} />
             <QuickServiceForm asset={asset} />
           </div>
+          <ChangeStatusCard asset={asset} />
         </TabsContent>
 
         <TabsContent value="ledger">
@@ -554,6 +610,93 @@ function QuickServiceForm({
           >
             Save Service Entry
           </Button>
+        </form>
+      </CardContent>
+    </Card>
+  );
+}
+
+function ChangeStatusCard({
+  asset,
+}: {
+  asset: { slug: string; status: string };
+}) {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const mutation = useSetAssetStatus();
+  const [status, setStatus] = useState(asset.status);
+  const [touched, setTouched] = useState(false);
+
+  const dirty = touched && status !== asset.status;
+
+  const submit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!dirty) return;
+    mutation.mutate(
+      { slug: asset.slug, data: { status: status as "ACTIVE" | "IN_SHOP" | "RETIRED" } },
+      {
+        onSuccess: () => {
+          queryClient.invalidateQueries({
+            queryKey: getGetAssetBySlugQueryKey(asset.slug),
+          });
+          queryClient.invalidateQueries({ queryKey: getListAssetsQueryKey() });
+          queryClient.invalidateQueries({ queryKey: getGetFleetPulseQueryKey() });
+          toast({ title: `Status changed to ${statusLabel(status)}` });
+          setTouched(false);
+        },
+        onError: () =>
+          toast({ title: "Could not change status", variant: "destructive" }),
+      },
+    );
+  };
+
+  return (
+    <Card className="border-border/60" data-testid="change-status-card">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-base">
+          <ShieldAlert className="h-4 w-4" /> Change Status
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        <form
+          onSubmit={submit}
+          className="flex flex-wrap items-end gap-3"
+        >
+          <div className="space-y-2">
+            <Label htmlFor="asset-status">Service state</Label>
+            <Select
+              value={status}
+              onValueChange={(v) => {
+                setStatus(v);
+                setTouched(true);
+              }}
+            >
+              <SelectTrigger
+                id="asset-status"
+                className="w-56"
+                data-testid="status-select"
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="ACTIVE">Active</SelectItem>
+                <SelectItem value="IN_SHOP">In Shop</SelectItem>
+                <SelectItem value="RETIRED">Out of Service</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <Button
+            type="submit"
+            disabled={!dirty || mutation.isPending}
+            data-testid="status-submit"
+          >
+            Save status
+          </Button>
+          <p className="basis-full text-xs text-muted-foreground">
+            Use <strong>In Shop</strong> for temporary downtime and{" "}
+            <strong>Out of Service</strong> when the asset is permanently retired
+            or unsafe to operate.
+          </p>
         </form>
       </CardContent>
     </Card>

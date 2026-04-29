@@ -60,7 +60,23 @@ export function Login() {
       {
         onSuccess: async () => {
           await queryClient.invalidateQueries({ queryKey: getGetMeQueryKey() });
-          setLocation("/");
+          // Honour ?next=... so QR deep-links + bookmarked URLs land back
+          // on the originally requested page after authentication.
+          const params = new URLSearchParams(window.location.search);
+          const raw = params.get("next");
+          let next: string | null = null;
+          if (raw) {
+            try {
+              const decoded = decodeURIComponent(raw);
+              // Only allow same-origin internal paths.
+              if (decoded.startsWith("/") && !decoded.startsWith("//")) {
+                next = decoded;
+              }
+            } catch {
+              next = null;
+            }
+          }
+          setLocation(next ?? "/");
         },
         onError: () => setErrorMsg("Invalid email or password"),
       },

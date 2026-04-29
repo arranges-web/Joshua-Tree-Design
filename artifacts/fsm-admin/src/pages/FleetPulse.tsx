@@ -68,6 +68,7 @@ export function FleetPulse() {
   const dueSoon = data?.dueSoon ?? [];
   const monthly = data?.monthlySpend ?? [];
   const moneyPits = data?.topMoneyPits ?? [];
+  const recent = data?.recentMaintenance ?? [];
   const totals = data?.totals ?? {
     last30DaysCents: 0,
     ytdCents: 0,
@@ -204,7 +205,7 @@ export function FleetPulse() {
           emptyText="Nothing due in the near term."
           testid="due-soon-list"
         />
-        <Card className="border-border/60" data-testid="money-pits">
+        <Card className="border-border/60" data-testid="money-pits" id="money-pits-card">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
               <DollarSign className="h-4 w-4 text-rose-600" />
@@ -241,6 +242,64 @@ export function FleetPulse() {
           </CardContent>
         </Card>
       </div>
+
+      <Card className="border-border/60" data-testid="recent-maintenance">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Wrench className="h-4 w-4" /> Recent Maintenance
+            <span className="ml-2 text-xs font-normal text-muted-foreground">
+              Last 8 entries
+            </span>
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="p-0">
+          {recent.length === 0 ? (
+            <div className="px-6 py-8 text-center text-sm text-muted-foreground">
+              No maintenance has been logged yet.
+            </div>
+          ) : (
+            <ul className="divide-y">
+              {recent.map((r) => (
+                <li
+                  key={r.id}
+                  className="grid grid-cols-[1fr_auto] items-center gap-3 px-6 py-3"
+                >
+                  <Link
+                    href={`/assets/${r.assetSlug}`}
+                    className="min-w-0 hover:underline"
+                  >
+                    <div className="flex items-center gap-2">
+                      <Badge
+                        variant="outline"
+                        className="font-mono text-[10px] uppercase"
+                      >
+                        {r.kind}
+                      </Badge>
+                      <span className="truncate text-sm font-medium">
+                        {r.assetName}
+                      </span>
+                      <span className="text-xs text-muted-foreground">
+                        {new Date(r.performedAt).toLocaleDateString()}
+                      </span>
+                    </div>
+                    <div className="mt-0.5 truncate text-xs text-muted-foreground">
+                      {r.description}
+                    </div>
+                  </Link>
+                  <div className="text-right">
+                    <div className="font-mono text-sm font-semibold">
+                      {usd(r.costCents)}
+                    </div>
+                    <div className="font-mono text-[11px] text-muted-foreground">
+                      {usd(r.laborCostCents)} labor · {usd(r.partsCostCents)} parts
+                    </div>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }

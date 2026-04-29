@@ -34,13 +34,24 @@ const queryClient = new QueryClient({
 
 function AuthGuard({ children }: { children: React.ReactNode }) {
   const { data: authData, isLoading, error } = useGetMe();
-  const [, setLocation] = useLocation();
+  const [location, setLocation] = useLocation();
 
   useEffect(() => {
     if (!isLoading && error) {
-      setLocation("/login");
+      // Preserve the originally requested path (incl. query/hash) so the user
+      // lands back on it after they log in. Critical for QR-code deep-links
+      // from /assets/:slug — scanning while logged out should still get you
+      // there after auth.
+      const search = window.location.search ?? "";
+      const hash = window.location.hash ?? "";
+      const next = `${location}${search}${hash}`;
+      const target =
+        next && next !== "/" && next !== "/login"
+          ? `/login?next=${encodeURIComponent(next)}`
+          : "/login";
+      setLocation(target);
     }
-  }, [isLoading, error, setLocation]);
+  }, [isLoading, error, setLocation, location]);
 
   if (isLoading) {
     return (

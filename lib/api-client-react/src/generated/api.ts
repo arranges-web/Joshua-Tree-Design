@@ -19,6 +19,7 @@ import type {
 import type {
   AssetDetailResponse,
   AssetListResponse,
+  AssetStatusUpdateBody,
   AuthMeResponse,
   CustomerListResponse,
   CustomerProfileResponse,
@@ -2883,6 +2884,87 @@ export function useGetAssetBySlug<
 
   return { ...query, queryKey: queryOptions.queryKey };
 }
+
+export const getSetAssetStatusUrl = (slug: string) => {
+  return `/api/assets/${slug}/status`;
+};
+
+export const setAssetStatus = async (
+  slug: string,
+  assetStatusUpdateBody: AssetStatusUpdateBody,
+  options?: RequestInit,
+): Promise<AssetDetailResponse> => {
+  return customFetch<AssetDetailResponse>(getSetAssetStatusUrl(slug), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(assetStatusUpdateBody),
+  });
+};
+
+export const getSetAssetStatusMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof setAssetStatus>>,
+    TError,
+    { slug: string; data: BodyType<AssetStatusUpdateBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof setAssetStatus>>,
+  TError,
+  { slug: string; data: BodyType<AssetStatusUpdateBody> },
+  TContext
+> => {
+  const mutationKey = ["setAssetStatus"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof setAssetStatus>>,
+    { slug: string; data: BodyType<AssetStatusUpdateBody> }
+  > = (props) => {
+    const { slug, data } = props ?? {};
+
+    return setAssetStatus(slug, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type SetAssetStatusMutationResult = NonNullable<
+  Awaited<ReturnType<typeof setAssetStatus>>
+>;
+export type SetAssetStatusMutationBody = BodyType<AssetStatusUpdateBody>;
+export type SetAssetStatusMutationError = ErrorType<ErrorResponse>;
+
+export const useSetAssetStatus = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof setAssetStatus>>,
+    TError,
+    { slug: string; data: BodyType<AssetStatusUpdateBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof setAssetStatus>>,
+  TError,
+  { slug: string; data: BodyType<AssetStatusUpdateBody> },
+  TContext
+> => {
+  return useMutation(getSetAssetStatusMutationOptions(options));
+};
 
 export const getGetFleetPulseUrl = () => {
   return `/api/fleet-pulse`;

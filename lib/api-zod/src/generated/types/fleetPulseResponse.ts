@@ -8,6 +8,7 @@
 import type { FleetPulseAssetSummary } from "./fleetPulseAssetSummary";
 import type { FleetPulseMonthlySpend } from "./fleetPulseMonthlySpend";
 import type { FleetPulseResponseCounts } from "./fleetPulseResponseCounts";
+import type { FleetPulseResponseRecentMaintenanceItem } from "./fleetPulseResponseRecentMaintenanceItem";
 import type { FleetPulseResponseTotals } from "./fleetPulseResponseTotals";
 
 export interface FleetPulseResponse {
@@ -17,4 +18,6 @@ export interface FleetPulseResponse {
   monthlySpend: FleetPulseMonthlySpend[];
   topMoneyPits: FleetPulseAssetSummary[];
   totals: FleetPulseResponseTotals;
+  /** Most recent maintenance entries across the whole fleet. */
+  recentMaintenance: FleetPulseResponseRecentMaintenanceItem[];
 }

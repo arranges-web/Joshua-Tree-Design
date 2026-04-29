@@ -50,7 +50,9 @@ function statusLabel(status: string) {
 function statusBadgeClass(status: string) {
   if (status === "ACTIVE") return "bg-emerald-100 text-emerald-900 border-emerald-200";
   if (status === "IN_SHOP") return "bg-amber-100 text-amber-900 border-amber-200";
-  return "bg-zinc-200 text-zinc-700 border-zinc-300";
+  // RETIRED / "Out of Service" — flag clearly red so a glance at the registry
+  // makes it obvious which trucks are off the road for safety reasons.
+  return "bg-rose-100 text-rose-900 border-rose-300";
 }
 
 function ServiceBadge({ state }: { state: "OK" | "DUE_SOON" | "OVERDUE" }) {
