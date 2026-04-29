@@ -111,23 +111,28 @@ router.patch(
       return;
     }
     const d = body.data;
+    // PATCH semantics: only update fields explicitly present in the body so
+    // partial updates do not unintentionally clear existing values.
+    const patch: Record<string, unknown> = {};
+    if (d.name !== undefined) patch.name = d.name;
+    if (d.brand !== undefined) patch.brand = d.brand ?? null;
+    if (d.model !== undefined) patch.model = d.model ?? null;
+    if (d.vin !== undefined) patch.vin = d.vin ?? null;
+    if (d.plate !== undefined) patch.plate = d.plate ?? null;
+    if (d.status !== undefined) patch.status = d.status as FleetStatus;
+    if (d.assignedCrewId !== undefined)
+      patch.assignedCrewId = d.assignedCrewId ?? null;
+    if (d.purchasePriceCents !== undefined)
+      patch.purchasePriceCents = d.purchasePriceCents ?? null;
+    if (d.purchaseDate !== undefined)
+      patch.purchaseDate = d.purchaseDate ? new Date(d.purchaseDate) : null;
+    if (d.currentMileage != null) patch.currentMileage = d.currentMileage;
+    if (d.serviceIntervalMiles != null)
+      patch.serviceIntervalMiles = d.serviceIntervalMiles;
+
     const [row] = await db
       .update(trucksTable)
-      .set({
-        name: d.name,
-        brand: d.brand ?? null,
-        model: d.model ?? null,
-        vin: d.vin ?? null,
-        plate: d.plate ?? null,
-        ...(d.status ? { status: d.status as FleetStatus } : {}),
-        assignedCrewId: d.assignedCrewId ?? null,
-        purchasePriceCents: d.purchasePriceCents ?? null,
-        purchaseDate: d.purchaseDate ? new Date(d.purchaseDate) : null,
-        ...(d.currentMileage != null ? { currentMileage: d.currentMileage } : {}),
-        ...(d.serviceIntervalMiles != null
-          ? { serviceIntervalMiles: d.serviceIntervalMiles }
-          : {}),
-      })
+      .set(patch)
       .where(eq(trucksTable.id, params.data.id))
       .returning();
     if (!row) {
@@ -226,23 +231,27 @@ router.patch(
       return;
     }
     const d = body.data;
+    // PATCH semantics: only update fields explicitly present in the body.
+    const patch: Record<string, unknown> = {};
+    if (d.name !== undefined) patch.name = d.name;
+    if (d.type !== undefined) patch.type = d.type;
+    if (d.brand !== undefined) patch.brand = d.brand ?? null;
+    if (d.model !== undefined) patch.model = d.model ?? null;
+    if (d.serial !== undefined) patch.serial = d.serial ?? null;
+    if (d.status !== undefined) patch.status = d.status as FleetStatus;
+    if (d.assignedTruckId !== undefined)
+      patch.assignedTruckId = d.assignedTruckId ?? null;
+    if (d.purchasePriceCents !== undefined)
+      patch.purchasePriceCents = d.purchasePriceCents ?? null;
+    if (d.purchaseDate !== undefined)
+      patch.purchaseDate = d.purchaseDate ? new Date(d.purchaseDate) : null;
+    if (d.currentHours != null) patch.currentHours = d.currentHours;
+    if (d.serviceIntervalHours != null)
+      patch.serviceIntervalHours = d.serviceIntervalHours;
+
     const [row] = await db
       .update(equipmentTable)
-      .set({
-        name: d.name,
-        type: d.type,
-        brand: d.brand ?? null,
-        model: d.model ?? null,
-        serial: d.serial ?? null,
-        ...(d.status ? { status: d.status as FleetStatus } : {}),
-        assignedTruckId: d.assignedTruckId ?? null,
-        purchasePriceCents: d.purchasePriceCents ?? null,
-        purchaseDate: d.purchaseDate ? new Date(d.purchaseDate) : null,
-        ...(d.currentHours != null ? { currentHours: d.currentHours } : {}),
-        ...(d.serviceIntervalHours != null
-          ? { serviceIntervalHours: d.serviceIntervalHours }
-          : {}),
-      })
+      .set(patch)
       .where(eq(equipmentTable.id, params.data.id))
       .returning();
     if (!row) {
