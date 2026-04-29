@@ -15,7 +15,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
-import { Edit, Trash2, Plus } from "lucide-react";
+import { Edit, Trash2, Plus, User } from "lucide-react";
 
 const usd = (cents: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format((cents ?? 0) / 100);
 
@@ -54,6 +54,7 @@ export function Maintenance() {
                 <TableHead>Kind</TableHead>
                 <TableHead>Description</TableHead>
                 <TableHead>Performed At</TableHead>
+                <TableHead>Logged By</TableHead>
                 <TableHead className="text-right">Labor</TableHead>
                 <TableHead className="text-right">Parts</TableHead>
                 <TableHead className="text-right">Total</TableHead>
@@ -69,6 +70,16 @@ export function Maintenance() {
                   <TableCell><Badge variant="outline">{log.kind}</Badge></TableCell>
                   <TableCell>{log.description}</TableCell>
                   <TableCell>{new Date(log.performedAt).toLocaleString()}</TableCell>
+                  <TableCell>
+                    {(log as typeof log & { loggedByName?: string | null }).loggedByName ? (
+                      <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                        <User className="h-3 w-3" />
+                        {(log as typeof log & { loggedByName?: string | null }).loggedByName}
+                      </span>
+                    ) : (
+                      <span className="text-xs text-muted-foreground/40">—</span>
+                    )}
+                  </TableCell>
                   <TableCell className="text-right font-mono text-xs">{usd(log.laborCostCents ?? 0)}</TableCell>
                   <TableCell className="text-right font-mono text-xs">{usd(log.partsCostCents ?? 0)}</TableCell>
                   <TableCell className="text-right font-mono font-semibold">{usd(log.costCents)}</TableCell>

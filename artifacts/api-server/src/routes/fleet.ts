@@ -345,7 +345,16 @@ router.get(
       .from(maintenanceLogsTable)
       .orderBy(desc(maintenanceLogsTable.performedAt))
       .limit(500);
-    res.json({ logs: rows });
+    const loggedByIds = [...new Set(rows.map((r) => r.loggedByUserId).filter((id): id is number => id != null))];
+    let userMap: Record<number, string> = {};
+    if (loggedByIds.length > 0) {
+      const users = await db
+        .select({ id: usersTable.id, fullName: usersTable.fullName })
+        .from(usersTable)
+        .where(sql`${usersTable.id} = ANY(ARRAY[${sql.raw(loggedByIds.join(","))}]::int[])`);
+      userMap = Object.fromEntries(users.map((u) => [u.id, u.fullName]));
+    }
+    res.json({ logs: rows.map((r) => ({ ...r, loggedByName: r.loggedByUserId != null ? (userMap[r.loggedByUserId] ?? null) : null })) });
   },
 );
 
