@@ -285,6 +285,9 @@ router.delete(
 );
 
 // ---------- Maintenance Logs ----------
+// `mode = "create"` defaults missing labor/parts to 0 (so costCents is always
+// labor+parts on insert). `mode = "patch"` only touches labor/parts when the
+// caller actually provided them, so partial updates don't zero out costs.
 function buildLogValues<
   T extends {
     kind?: string;
@@ -292,31 +295,42 @@ function buildLogValues<
     laborCostCents?: number | null;
     partsCostCents?: number | null;
   },
->(input: T) {
+>(input: T, mode: "create" | "patch" = "create") {
   const { kind, performedAt, laborCostCents, partsCostCents, ...rest } = input;
   void kind;
   void performedAt;
   void laborCostCents;
   void partsCostCents;
-  const labor = input.laborCostCents ?? 0;
-  const parts = input.partsCostCents ?? 0;
-  return {
-    ...rest,
-    ...(input.kind !== undefined
-      ? { kind: input.kind as MaintenanceKind }
-      : {}),
-    ...(input.performedAt !== undefined && input.performedAt !== null
-      ? {
-          performedAt:
-            typeof input.performedAt === "string"
-              ? new Date(input.performedAt)
-              : input.performedAt,
-        }
-      : {}),
-    laborCostCents: labor,
-    partsCostCents: parts,
-    costCents: labor + parts,
-  };
+
+  const out: Record<string, unknown> = { ...rest };
+  if (input.kind !== undefined) {
+    out.kind = input.kind as MaintenanceKind;
+  }
+  if (input.performedAt !== undefined && input.performedAt !== null) {
+    out.performedAt =
+      typeof input.performedAt === "string"
+        ? new Date(input.performedAt)
+        : input.performedAt;
+  }
+
+  const laborProvided = input.laborCostCents !== undefined;
+  const partsProvided = input.partsCostCents !== undefined;
+  if (mode === "create") {
+    const labor = input.laborCostCents ?? 0;
+    const parts = input.partsCostCents ?? 0;
+    out.laborCostCents = labor;
+    out.partsCostCents = parts;
+    out.costCents = labor + parts;
+  } else if (laborProvided || partsProvided) {
+    // For PATCH we only recompute costCents if labor or parts is actually
+    // being changed. Use the provided value, falling back to 0 only for the
+    // side that isn't being touched (the SQL UPDATE will leave it as-is).
+    if (laborProvided) out.laborCostCents = input.laborCostCents ?? 0;
+    if (partsProvided) out.partsCostCents = input.partsCostCents ?? 0;
+    // costCents recomputation requires both sides; defer to caller when
+    // partial — see PATCH handler below which loads the existing row.
+  }
+  return out;
 }
 
 router.get(
@@ -354,7 +368,10 @@ router.post(
     }
     const [row] = await db
       .insert(maintenanceLogsTable)
-      .values(buildLogValues(parsed.data))
+      // buildLogValues("create") always sets description/labor/parts/cost.
+      .values(
+        buildLogValues(parsed.data, "create") as typeof maintenanceLogsTable.$inferInsert,
+      )
       .returning();
 
     // If the log includes a usage snapshot, advance the asset's odometer too.
@@ -400,9 +417,37 @@ router.patch(
       res.status(400).json({ error: "invalid_request" });
       return;
     }
+    const values = buildLogValues(body.data, "patch") as Record<
+      string,
+      unknown
+    >;
+    // If labor or parts is being touched, recompute costCents from the
+    // resulting row's values (existing + provided).
+    const laborTouched = "laborCostCents" in values;
+    const partsTouched = "partsCostCents" in values;
+    if (laborTouched || partsTouched) {
+      const [existing] = await db
+        .select({
+          laborCostCents: maintenanceLogsTable.laborCostCents,
+          partsCostCents: maintenanceLogsTable.partsCostCents,
+        })
+        .from(maintenanceLogsTable)
+        .where(eq(maintenanceLogsTable.id, params.data.id));
+      if (!existing) {
+        res.status(404).json({ error: "not_found" });
+        return;
+      }
+      const labor = laborTouched
+        ? (values.laborCostCents as number)
+        : (existing.laborCostCents ?? 0);
+      const parts = partsTouched
+        ? (values.partsCostCents as number)
+        : (existing.partsCostCents ?? 0);
+      values.costCents = labor + parts;
+    }
     const [row] = await db
       .update(maintenanceLogsTable)
-      .set(buildLogValues(body.data))
+      .set(values)
       .where(eq(maintenanceLogsTable.id, params.data.id))
       .returning();
     if (!row) {
