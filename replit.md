@@ -43,3 +43,13 @@ See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and pa
 - Portal endpoints: `GET /portal/me`, `GET /portal/properties`, `GET /portal/jobs` (split into `upcoming` / `past`), `GET /portal/requests`, `POST /portal/requests`. New requests insert into `service_requests` with status `NEW` so they appear in the staff `/admin/leads` inbox.
 - Rate limits: per-phone OTP request limit + per-phone verify attempts cap (`too_many_otp_requests`, `too_many_verify_attempts` error codes).
 - Service request creation validates that any supplied `propertyId` belongs to the calling customer (`property_not_owned`).
+
+## Fleet & Finance Management (`/admin/fleet`, `/admin/assets`, `/admin/maintenance`)
+
+- **Smart Asset Registry**: trucks + equipment unified into a single `Asset` view (`GET /api/assets` in `artifacts/api-server/src/routes/fleet.ts`). Each asset carries brand/model, VIN/serial, purchase price+date, current usage (miles for trucks, hours for equipment), service interval, derived `serviceState` (OK / DUE_SOON / OVERDUE) and `lifeToDateSpendCents`. Status enum is `ACTIVE | IN_SHOP | RETIRED` (UI labels RETIRED as "Out of Service").
+- **Asset Action Page** (`/admin/assets/:slug`) renders a printable QR code (`qrcode.react`) deep-linking back to itself plus tabs for Quick Actions (log usage, log service) and Maintenance Ledger.
+- **Maintenance Ledger** stores `laborCostCents` + `partsCostCents` separately and caches their sum in `costCents`. UI auto-sums labor + parts as you type. Server-side guard: every maintenance log and usage reading must target exactly one asset (`must_target_exactly_one_asset`).
+- **Fleet Pulse** (`/admin/fleet`) returns counts, overdue + due-soon lists, last-12-months spend (recharts bar chart with labor/parts split), top-5 money pits, plus 30-day / YTD / lifetime totals.
+- **Permissions**: `requireFleetView` middleware accepts viewers of *either* `fleet.trucks` or `fleet.equipment` for the unified `/assets` and `/fleet-pulse` routes.
+- **Backfill safety**: `lib/db/src/backfillFleet.ts` enriches existing T-01/T-02/T-03 + 3 equipment rows with brand/model/purchase data and adds slugs on every boot. The synthetic extra-asset seed (T-04, T-05, Bandit chipper, Toro grinder + their logs) only runs when `NODE_ENV !== "production"`.
+- **Fonts**: fsm-admin now ships Inter Tight + JetBrains Mono only (no Instrument Serif). `--app-font-serif` aliases to Inter Tight so existing `font-serif` headings remain non-italic.

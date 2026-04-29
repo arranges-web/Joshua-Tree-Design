@@ -15,6 +15,8 @@ import {
   Menu,
   TreeDeciduous,
   Inbox,
+  Activity,
+  Package,
 } from "lucide-react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { useState } from "react";
@@ -42,7 +44,8 @@ const NAV_GROUPS: Array<{
   {
     label: "Fleet & Shop",
     items: [
-      { href: "/fleet", label: "Fleet", icon: Truck },
+      { href: "/fleet", label: "Fleet Pulse", icon: Activity },
+      { href: "/assets", label: "Asset Registry", icon: Package },
       { href: "/maintenance", label: "Maintenance", icon: Wrench },
     ],
   },
@@ -62,7 +65,7 @@ function Brand() {
         <TreeDeciduous className="h-5 w-5" />
       </div>
       <div className="leading-tight">
-        <div className="font-serif text-lg italic tracking-tight text-sidebar-foreground">
+        <div className="text-lg font-bold tracking-tight text-sidebar-foreground">
           Joshua Tree
         </div>
         <div className="text-[10px] font-mono uppercase tracking-[0.18em] text-sidebar-foreground/60">

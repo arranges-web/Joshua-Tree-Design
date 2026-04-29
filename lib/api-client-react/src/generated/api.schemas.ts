@@ -184,18 +184,31 @@ export interface InvoiceListResponse {
 export interface Truck {
   id: number;
   name: string;
+  brand?: string | null;
+  model?: string | null;
   vin?: string | null;
   plate?: string | null;
   status: string;
   assignedCrewId?: number | null;
+  purchasePriceCents?: number | null;
+  purchaseDate?: string | null;
+  currentMileage: number;
+  serviceIntervalMiles: number;
+  slug?: string | null;
 }
 
 export interface TruckWriteBody {
   name: string;
+  brand?: string | null;
+  model?: string | null;
   vin?: string | null;
   plate?: string | null;
   status: string;
   assignedCrewId?: number | null;
+  purchasePriceCents?: number | null;
+  purchaseDate?: string | null;
+  currentMileage?: number | null;
+  serviceIntervalMiles?: number | null;
 }
 
 export interface TruckResponse {
@@ -210,17 +223,30 @@ export interface Equipment {
   id: number;
   name: string;
   type: string;
+  brand?: string | null;
+  model?: string | null;
   serial?: string | null;
   status: string;
   assignedTruckId?: number | null;
+  purchasePriceCents?: number | null;
+  purchaseDate?: string | null;
+  currentHours: number;
+  serviceIntervalHours: number;
+  slug?: string | null;
 }
 
 export interface EquipmentWriteBody {
   name: string;
   type: string;
+  brand?: string | null;
+  model?: string | null;
   serial?: string | null;
   status: string;
   assignedTruckId?: number | null;
+  purchasePriceCents?: number | null;
+  purchaseDate?: string | null;
+  currentHours?: number | null;
+  serviceIntervalHours?: number | null;
 }
 
 export interface EquipmentResponse {
@@ -239,7 +265,12 @@ export interface MaintenanceLog {
   description: string;
   performedByUserId?: number | null;
   performedAt: string;
+  laborCostCents: number;
+  partsCostCents: number;
+  /** Cached total = labor + parts. */
   costCents: number;
+  mileageAtService?: number | null;
+  hoursAtService?: number | null;
 }
 
 export interface MaintenanceLogWriteBody {
@@ -249,7 +280,10 @@ export interface MaintenanceLogWriteBody {
   description: string;
   performedByUserId?: number | null;
   performedAt?: string | null;
-  costCents: number;
+  laborCostCents?: number | null;
+  partsCostCents?: number | null;
+  mileageAtService?: number | null;
+  hoursAtService?: number | null;
 }
 
 export interface MaintenanceLogResponse {
@@ -258,6 +292,157 @@ export interface MaintenanceLogResponse {
 
 export interface MaintenanceLogListResponse {
   logs: MaintenanceLog[];
+}
+
+export type AssetKind = (typeof AssetKind)[keyof typeof AssetKind];
+
+export const AssetKind = {
+  TRUCK: "TRUCK",
+  EQUIPMENT: "EQUIPMENT",
+} as const;
+
+export type AssetUsageUnit =
+  (typeof AssetUsageUnit)[keyof typeof AssetUsageUnit];
+
+export const AssetUsageUnit = {
+  MILES: "MILES",
+  HOURS: "HOURS",
+} as const;
+
+export type AssetServiceState =
+  (typeof AssetServiceState)[keyof typeof AssetServiceState];
+
+export const AssetServiceState = {
+  OK: "OK",
+  DUE_SOON: "DUE_SOON",
+  OVERDUE: "OVERDUE",
+} as const;
+
+export interface Asset {
+  kind: AssetKind;
+  id: number;
+  slug: string;
+  name: string;
+  brand?: string | null;
+  model?: string | null;
+  /** VIN for trucks, serial for equipment. */
+  identifier?: string | null;
+  status: string;
+  purchasePriceCents?: number | null;
+  purchaseDate?: string | null;
+  /** Current mileage (trucks) or hours (equipment). */
+  currentUsage: number;
+  usageUnit: AssetUsageUnit;
+  serviceIntervalUsage: number;
+  lastServiceUsage?: number | null;
+  usageSinceLastService?: number | null;
+  /** Usage value at which the next service is due. */
+  nextServiceDueAt: number;
+  /** How many more miles / hours until the next service. Negative = overdue. */
+  usageUntilDue: number;
+  serviceState: AssetServiceState;
+  lifeToDateSpendCents: number;
+  lastServicePerformedAt?: string | null;
+}
+
+export interface AssetListResponse {
+  assets: Asset[];
+}
+
+export interface UsageReading {
+  id: number;
+  truckId?: number | null;
+  equipmentId?: number | null;
+  mileage?: number | null;
+  hours?: number | null;
+  recordedAt: string;
+  recordedByUserId?: number | null;
+  notes?: string | null;
+}
+
+export interface AssetDetailResponse {
+  asset: Asset;
+  logs: MaintenanceLog[];
+  recentReadings: UsageReading[];
+}
+
+export interface UsageReadingWriteBody {
+  truckId?: number | null;
+  equipmentId?: number | null;
+  mileage?: number | null;
+  hours?: number | null;
+  notes?: string | null;
+}
+
+export interface UsageReadingResponse {
+  reading: UsageReading;
+}
+
+export type FleetPulseAssetSummaryKind =
+  (typeof FleetPulseAssetSummaryKind)[keyof typeof FleetPulseAssetSummaryKind];
+
+export const FleetPulseAssetSummaryKind = {
+  TRUCK: "TRUCK",
+  EQUIPMENT: "EQUIPMENT",
+} as const;
+
+export type FleetPulseAssetSummaryUsageUnit =
+  (typeof FleetPulseAssetSummaryUsageUnit)[keyof typeof FleetPulseAssetSummaryUsageUnit];
+
+export const FleetPulseAssetSummaryUsageUnit = {
+  MILES: "MILES",
+  HOURS: "HOURS",
+} as const;
+
+export type FleetPulseAssetSummaryServiceState =
+  (typeof FleetPulseAssetSummaryServiceState)[keyof typeof FleetPulseAssetSummaryServiceState];
+
+export const FleetPulseAssetSummaryServiceState = {
+  OK: "OK",
+  DUE_SOON: "DUE_SOON",
+  OVERDUE: "OVERDUE",
+} as const;
+
+export interface FleetPulseAssetSummary {
+  kind: FleetPulseAssetSummaryKind;
+  id: number;
+  slug: string;
+  name: string;
+  status: string;
+  usageUntilDue: number;
+  usageUnit: FleetPulseAssetSummaryUsageUnit;
+  serviceState: FleetPulseAssetSummaryServiceState;
+  lifeToDateSpendCents: number;
+}
+
+export interface FleetPulseMonthlySpend {
+  /** ISO month, e.g. 2026-04 */
+  month: string;
+  totalCents: number;
+  laborCents: number;
+  partsCents: number;
+}
+
+export type FleetPulseResponseCounts = {
+  active: number;
+  inShop: number;
+  outOfService: number;
+  total: number;
+};
+
+export type FleetPulseResponseTotals = {
+  last30DaysCents: number;
+  ytdCents: number;
+  lifetimeCents: number;
+};
+
+export interface FleetPulseResponse {
+  counts: FleetPulseResponseCounts;
+  overdue: FleetPulseAssetSummary[];
+  dueSoon: FleetPulseAssetSummary[];
+  monthlySpend: FleetPulseMonthlySpend[];
+  topMoneyPits: FleetPulseAssetSummary[];
+  totals: FleetPulseResponseTotals;
 }
 
 export interface Employee {

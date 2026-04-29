@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Instrument+Serif:ital@0;1&display=swap');
+/* Fonts are loaded via index.html — Inter Tight (sans) + JetBrains Mono (mono). */
 @import "tailwindcss";
 @import "tw-animate-css";
 @plugin "@tailwindcss/typography";
@@ -115,8 +115,8 @@
   --chart-5: 340 50% 40%;
 
   --app-font-sans: 'Inter Tight', 'Inter', ui-sans-serif, system-ui, sans-serif;
-  --app-font-serif: 'Instrument Serif', Georgia, serif;
-  --app-font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --app-font-serif: 'Inter Tight', 'Inter', ui-sans-serif, system-ui, sans-serif;
+  --app-font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   --radius: 0.5rem;
 
   --shadow-2xs: 0px 2px 0px 0px rgba(0,0,0,0.02);

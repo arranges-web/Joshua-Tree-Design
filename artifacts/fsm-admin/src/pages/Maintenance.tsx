@@ -54,7 +54,9 @@ export function Maintenance() {
                 <TableHead>Kind</TableHead>
                 <TableHead>Description</TableHead>
                 <TableHead>Performed At</TableHead>
-                <TableHead className="text-right">Cost</TableHead>
+                <TableHead className="text-right">Labor</TableHead>
+                <TableHead className="text-right">Parts</TableHead>
+                <TableHead className="text-right">Total</TableHead>
                 <TableHead className="w-[100px]">Actions</TableHead>
               </TableRow>
             </TableHeader>
@@ -67,7 +69,9 @@ export function Maintenance() {
                   <TableCell><Badge variant="outline">{log.kind}</Badge></TableCell>
                   <TableCell>{log.description}</TableCell>
                   <TableCell>{new Date(log.performedAt).toLocaleString()}</TableCell>
-                  <TableCell className="text-right font-medium">{usd(log.costCents)}</TableCell>
+                  <TableCell className="text-right font-mono text-xs">{usd(log.laborCostCents ?? 0)}</TableCell>
+                  <TableCell className="text-right font-mono text-xs">{usd(log.partsCostCents ?? 0)}</TableCell>
+                  <TableCell className="text-right font-mono font-semibold">{usd(log.costCents)}</TableCell>
                   <TableCell>
                     <div className="flex items-center gap-2">
                       <MaintenanceFormDialog 
@@ -117,20 +121,33 @@ function MaintenanceFormDialog({ log, trigger, isOpen: controlledIsOpen, setIsOp
     description: log?.description || "",
     performedByUserId: log?.performedByUserId?.toString() || "none",
     performedAt: log?.performedAt ? new Date(log.performedAt).toISOString().slice(0, 16) : "",
-    costDollars: log ? (log.costCents / 100).toString() : "0",
+    laborDollars: log ? ((log.laborCostCents ?? 0) / 100).toString() : "0",
+    partsDollars: log ? ((log.partsCostCents ?? 0) / 100).toString() : "0",
+    usageAt: log
+      ? (log.mileageAtService ?? log.hoursAtService ?? "").toString()
+      : "",
   });
+
+  const labor = parseFloat(formData.laborDollars || "0") || 0;
+  const parts = parseFloat(formData.partsDollars || "0") || 0;
+  const total = labor + parts;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    
+
+    const isTruck = formData.assetType === "truck";
+    const usageNum = formData.usageAt ? parseInt(formData.usageAt, 10) : null;
     const payload = {
-      truckId: formData.assetType === "truck" && formData.truckId !== "none" ? parseInt(formData.truckId, 10) : null,
-      equipmentId: formData.assetType === "equipment" && formData.equipmentId !== "none" ? parseInt(formData.equipmentId, 10) : null,
+      truckId: isTruck && formData.truckId !== "none" ? parseInt(formData.truckId, 10) : null,
+      equipmentId: !isTruck && formData.equipmentId !== "none" ? parseInt(formData.equipmentId, 10) : null,
       kind: formData.kind,
       description: formData.description,
       performedByUserId: formData.performedByUserId !== "none" ? parseInt(formData.performedByUserId, 10) : null,
       performedAt: formData.performedAt ? new Date(formData.performedAt).toISOString() : null,
-      costCents: Math.round(parseFloat(formData.costDollars || "0") * 100),
+      laborCostCents: Math.round(labor * 100),
+      partsCostCents: Math.round(parts * 100),
+      mileageAtService: isTruck && usageNum != null && Number.isFinite(usageNum) ? usageNum : null,
+      hoursAtService: !isTruck && usageNum != null && Number.isFinite(usageNum) ? usageNum : null,
     };
 
     if (log) {
@@ -228,6 +245,36 @@ function MaintenanceFormDialog({ log, trigger, isOpen: controlledIsOpen, setIsOp
 
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
+              <Label htmlFor="laborDollars">Labor ($)</Label>
+              <Input
+                id="laborDollars"
+                type="number"
+                step="0.01"
+                min="0"
+                value={formData.laborDollars}
+                onChange={(e) => setFormData({ ...formData, laborDollars: e.target.value })}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="partsDollars">Parts ($)</Label>
+              <Input
+                id="partsDollars"
+                type="number"
+                step="0.01"
+                min="0"
+                value={formData.partsDollars}
+                onChange={(e) => setFormData({ ...formData, partsDollars: e.target.value })}
+              />
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between rounded-md border border-dashed bg-muted/30 px-3 py-2 text-sm">
+            <span className="text-muted-foreground">Total auto-summed</span>
+            <span className="font-mono font-semibold">{usd(Math.round(total * 100))}</span>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
               <Label htmlFor="performedByUserId">Performed By</Label>
               <Select value={formData.performedByUserId} onValueChange={(val) => setFormData({ ...formData, performedByUserId: val })}>
                 <SelectTrigger><SelectValue placeholder="Select employee" /></SelectTrigger>
@@ -238,11 +285,20 @@ function MaintenanceFormDialog({ log, trigger, isOpen: controlledIsOpen, setIsOp
               </Select>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="costDollars">Cost ($)</Label>
-              <Input id="costDollars" type="number" step="0.01" required value={formData.costDollars} onChange={(e) => setFormData({ ...formData, costDollars: e.target.value })} />
+              <Label htmlFor="usageAt">
+                {formData.assetType === "truck" ? "Mileage at service" : "Hours at service"}
+              </Label>
+              <Input
+                id="usageAt"
+                type="number"
+                min="0"
+                placeholder="optional"
+                value={formData.usageAt}
+                onChange={(e) => setFormData({ ...formData, usageAt: e.target.value })}
+              />
             </div>
           </div>
-          
+
           <div className="space-y-2">
             <Label htmlFor="performedAt">Performed At</Label>
             <Input id="performedAt" type="datetime-local" value={formData.performedAt} onChange={(e) => setFormData({ ...formData, performedAt: e.target.value })} />

@@ -6,6 +6,12 @@
  * OpenAPI spec version: 0.1.0
  */
 
+export * from "./asset";
+export * from "./assetDetailResponse";
+export * from "./assetKind";
+export * from "./assetListResponse";
+export * from "./assetServiceState";
+export * from "./assetUsageUnit";
 export * from "./authMeResponse";
 export * from "./authUser";
 export * from "./customer";
@@ -34,6 +40,14 @@ export * from "./equipmentResponse";
 export * from "./equipmentWriteBody";
 export * from "./errorBody";
 export * from "./errorResponse";
+export * from "./fleetPulseAssetSummary";
+export * from "./fleetPulseAssetSummaryKind";
+export * from "./fleetPulseAssetSummaryServiceState";
+export * from "./fleetPulseAssetSummaryUsageUnit";
+export * from "./fleetPulseMonthlySpend";
+export * from "./fleetPulseResponse";
+export * from "./fleetPulseResponseCounts";
+export * from "./fleetPulseResponseTotals";
 export * from "./healthStatus";
 export * from "./invoice";
 export * from "./invoiceListResponse";
@@ -90,3 +104,6 @@ export * from "./truck";
 export * from "./truckListResponse";
 export * from "./truckResponse";
 export * from "./truckWriteBody";
+export * from "./usageReading";
+export * from "./usageReadingResponse";
+export * from "./usageReadingWriteBody";

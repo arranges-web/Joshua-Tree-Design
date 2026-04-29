@@ -13,5 +13,8 @@ export interface MaintenanceLogWriteBody {
   description: string;
   performedByUserId?: number | null;
   performedAt?: Date | null;
-  costCents: number;
+  laborCostCents?: number | null;
+  partsCostCents?: number | null;
+  mileageAtService?: number | null;
+  hoursAtService?: number | null;
 }

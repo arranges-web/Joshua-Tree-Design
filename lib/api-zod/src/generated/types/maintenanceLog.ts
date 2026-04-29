@@ -14,5 +14,10 @@ export interface MaintenanceLog {
   description: string;
   performedByUserId?: number | null;
   performedAt: Date;
+  laborCostCents: number;
+  partsCostCents: number;
+  /** Cached total = labor + parts. */
   costCents: number;
+  mileageAtService?: number | null;
+  hoursAtService?: number | null;
 }

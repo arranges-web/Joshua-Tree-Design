@@ -465,20 +465,33 @@ export const ListTrucksResponse = zod.object({
     zod.object({
       id: zod.number(),
       name: zod.string(),
+      brand: zod.string().nullish(),
+      model: zod.string().nullish(),
       vin: zod.string().nullish(),
       plate: zod.string().nullish(),
       status: zod.string(),
       assignedCrewId: zod.number().nullish(),
+      purchasePriceCents: zod.number().nullish(),
+      purchaseDate: zod.coerce.date().nullish(),
+      currentMileage: zod.number(),
+      serviceIntervalMiles: zod.number(),
+      slug: zod.string().nullish(),
     }),
   ),
 });
 
 export const CreateTruckBody = zod.object({
   name: zod.string(),
+  brand: zod.string().nullish(),
+  model: zod.string().nullish(),
   vin: zod.string().nullish(),
   plate: zod.string().nullish(),
   status: zod.string(),
   assignedCrewId: zod.number().nullish(),
+  purchasePriceCents: zod.number().nullish(),
+  purchaseDate: zod.coerce.date().nullish(),
+  currentMileage: zod.number().nullish(),
+  serviceIntervalMiles: zod.number().nullish(),
 });
 
 export const UpdateTruckParams = zod.object({
@@ -487,20 +500,33 @@ export const UpdateTruckParams = zod.object({
 
 export const UpdateTruckBody = zod.object({
   name: zod.string(),
+  brand: zod.string().nullish(),
+  model: zod.string().nullish(),
   vin: zod.string().nullish(),
   plate: zod.string().nullish(),
   status: zod.string(),
   assignedCrewId: zod.number().nullish(),
+  purchasePriceCents: zod.number().nullish(),
+  purchaseDate: zod.coerce.date().nullish(),
+  currentMileage: zod.number().nullish(),
+  serviceIntervalMiles: zod.number().nullish(),
 });
 
 export const UpdateTruckResponse = zod.object({
   truck: zod.object({
     id: zod.number(),
     name: zod.string(),
+    brand: zod.string().nullish(),
+    model: zod.string().nullish(),
     vin: zod.string().nullish(),
     plate: zod.string().nullish(),
     status: zod.string(),
     assignedCrewId: zod.number().nullish(),
+    purchasePriceCents: zod.number().nullish(),
+    purchaseDate: zod.coerce.date().nullish(),
+    currentMileage: zod.number(),
+    serviceIntervalMiles: zod.number(),
+    slug: zod.string().nullish(),
   }),
 });
 
@@ -518,9 +544,16 @@ export const ListEquipmentResponse = zod.object({
       id: zod.number(),
       name: zod.string(),
       type: zod.string(),
+      brand: zod.string().nullish(),
+      model: zod.string().nullish(),
       serial: zod.string().nullish(),
       status: zod.string(),
       assignedTruckId: zod.number().nullish(),
+      purchasePriceCents: zod.number().nullish(),
+      purchaseDate: zod.coerce.date().nullish(),
+      currentHours: zod.number(),
+      serviceIntervalHours: zod.number(),
+      slug: zod.string().nullish(),
     }),
   ),
 });
@@ -528,9 +561,15 @@ export const ListEquipmentResponse = zod.object({
 export const CreateEquipmentBody = zod.object({
   name: zod.string(),
   type: zod.string(),
+  brand: zod.string().nullish(),
+  model: zod.string().nullish(),
   serial: zod.string().nullish(),
   status: zod.string(),
   assignedTruckId: zod.number().nullish(),
+  purchasePriceCents: zod.number().nullish(),
+  purchaseDate: zod.coerce.date().nullish(),
+  currentHours: zod.number().nullish(),
+  serviceIntervalHours: zod.number().nullish(),
 });
 
 export const UpdateEquipmentParams = zod.object({
@@ -540,9 +579,15 @@ export const UpdateEquipmentParams = zod.object({
 export const UpdateEquipmentBody = zod.object({
   name: zod.string(),
   type: zod.string(),
+  brand: zod.string().nullish(),
+  model: zod.string().nullish(),
   serial: zod.string().nullish(),
   status: zod.string(),
   assignedTruckId: zod.number().nullish(),
+  purchasePriceCents: zod.number().nullish(),
+  purchaseDate: zod.coerce.date().nullish(),
+  currentHours: zod.number().nullish(),
+  serviceIntervalHours: zod.number().nullish(),
 });
 
 export const UpdateEquipmentResponse = zod.object({
@@ -550,9 +595,16 @@ export const UpdateEquipmentResponse = zod.object({
     id: zod.number(),
     name: zod.string(),
     type: zod.string(),
+    brand: zod.string().nullish(),
+    model: zod.string().nullish(),
     serial: zod.string().nullish(),
     status: zod.string(),
     assignedTruckId: zod.number().nullish(),
+    purchasePriceCents: zod.number().nullish(),
+    purchaseDate: zod.coerce.date().nullish(),
+    currentHours: zod.number(),
+    serviceIntervalHours: zod.number(),
+    slug: zod.string().nullish(),
   }),
 });
 
@@ -574,7 +626,11 @@ export const ListMaintenanceLogsResponse = zod.object({
       description: zod.string(),
       performedByUserId: zod.number().nullish(),
       performedAt: zod.coerce.date(),
-      costCents: zod.number(),
+      laborCostCents: zod.number(),
+      partsCostCents: zod.number(),
+      costCents: zod.number().describe("Cached total = labor + parts."),
+      mileageAtService: zod.number().nullish(),
+      hoursAtService: zod.number().nullish(),
     }),
   ),
 });
@@ -586,7 +642,10 @@ export const CreateMaintenanceLogBody = zod.object({
   description: zod.string(),
   performedByUserId: zod.number().nullish(),
   performedAt: zod.coerce.date().nullish(),
-  costCents: zod.number(),
+  laborCostCents: zod.number().nullish(),
+  partsCostCents: zod.number().nullish(),
+  mileageAtService: zod.number().nullish(),
+  hoursAtService: zod.number().nullish(),
 });
 
 export const UpdateMaintenanceLogParams = zod.object({
@@ -600,7 +659,10 @@ export const UpdateMaintenanceLogBody = zod.object({
   description: zod.string(),
   performedByUserId: zod.number().nullish(),
   performedAt: zod.coerce.date().nullish(),
-  costCents: zod.number(),
+  laborCostCents: zod.number().nullish(),
+  partsCostCents: zod.number().nullish(),
+  mileageAtService: zod.number().nullish(),
+  hoursAtService: zod.number().nullish(),
 });
 
 export const UpdateMaintenanceLogResponse = zod.object({
@@ -612,7 +674,11 @@ export const UpdateMaintenanceLogResponse = zod.object({
     description: zod.string(),
     performedByUserId: zod.number().nullish(),
     performedAt: zod.coerce.date(),
-    costCents: zod.number(),
+    laborCostCents: zod.number(),
+    partsCostCents: zod.number(),
+    costCents: zod.number().describe("Cached total = labor + parts."),
+    mileageAtService: zod.number().nullish(),
+    hoursAtService: zod.number().nullish(),
   }),
 });
 
@@ -622,6 +688,181 @@ export const DeleteMaintenanceLogParams = zod.object({
 
 export const DeleteMaintenanceLogResponse = zod.object({
   ok: zod.boolean(),
+});
+
+export const ListAssetsResponse = zod.object({
+  assets: zod.array(
+    zod.object({
+      kind: zod.enum(["TRUCK", "EQUIPMENT"]),
+      id: zod.number(),
+      slug: zod.string(),
+      name: zod.string(),
+      brand: zod.string().nullish(),
+      model: zod.string().nullish(),
+      identifier: zod
+        .string()
+        .nullish()
+        .describe("VIN for trucks, serial for equipment."),
+      status: zod.string(),
+      purchasePriceCents: zod.number().nullish(),
+      purchaseDate: zod.coerce.date().nullish(),
+      currentUsage: zod
+        .number()
+        .describe("Current mileage (trucks) or hours (equipment)."),
+      usageUnit: zod.enum(["MILES", "HOURS"]),
+      serviceIntervalUsage: zod.number(),
+      lastServiceUsage: zod.number().nullish(),
+      usageSinceLastService: zod.number().nullish(),
+      nextServiceDueAt: zod
+        .number()
+        .describe("Usage value at which the next service is due."),
+      usageUntilDue: zod
+        .number()
+        .describe(
+          "How many more miles \/ hours until the next service. Negative = overdue.",
+        ),
+      serviceState: zod.enum(["OK", "DUE_SOON", "OVERDUE"]),
+      lifeToDateSpendCents: zod.number(),
+      lastServicePerformedAt: zod.coerce.date().nullish(),
+    }),
+  ),
+});
+
+export const GetAssetBySlugParams = zod.object({
+  slug: zod.coerce.string(),
+});
+
+export const GetAssetBySlugResponse = zod.object({
+  asset: zod.object({
+    kind: zod.enum(["TRUCK", "EQUIPMENT"]),
+    id: zod.number(),
+    slug: zod.string(),
+    name: zod.string(),
+    brand: zod.string().nullish(),
+    model: zod.string().nullish(),
+    identifier: zod
+      .string()
+      .nullish()
+      .describe("VIN for trucks, serial for equipment."),
+    status: zod.string(),
+    purchasePriceCents: zod.number().nullish(),
+    purchaseDate: zod.coerce.date().nullish(),
+    currentUsage: zod
+      .number()
+      .describe("Current mileage (trucks) or hours (equipment)."),
+    usageUnit: zod.enum(["MILES", "HOURS"]),
+    serviceIntervalUsage: zod.number(),
+    lastServiceUsage: zod.number().nullish(),
+    usageSinceLastService: zod.number().nullish(),
+    nextServiceDueAt: zod
+      .number()
+      .describe("Usage value at which the next service is due."),
+    usageUntilDue: zod
+      .number()
+      .describe(
+        "How many more miles \/ hours until the next service. Negative = overdue.",
+      ),
+    serviceState: zod.enum(["OK", "DUE_SOON", "OVERDUE"]),
+    lifeToDateSpendCents: zod.number(),
+    lastServicePerformedAt: zod.coerce.date().nullish(),
+  }),
+  logs: zod.array(
+    zod.object({
+      id: zod.number(),
+      truckId: zod.number().nullish(),
+      equipmentId: zod.number().nullish(),
+      kind: zod.string(),
+      description: zod.string(),
+      performedByUserId: zod.number().nullish(),
+      performedAt: zod.coerce.date(),
+      laborCostCents: zod.number(),
+      partsCostCents: zod.number(),
+      costCents: zod.number().describe("Cached total = labor + parts."),
+      mileageAtService: zod.number().nullish(),
+      hoursAtService: zod.number().nullish(),
+    }),
+  ),
+  recentReadings: zod.array(
+    zod.object({
+      id: zod.number(),
+      truckId: zod.number().nullish(),
+      equipmentId: zod.number().nullish(),
+      mileage: zod.number().nullish(),
+      hours: zod.number().nullish(),
+      recordedAt: zod.coerce.date(),
+      recordedByUserId: zod.number().nullish(),
+      notes: zod.string().nullish(),
+    }),
+  ),
+});
+
+export const GetFleetPulseResponse = zod.object({
+  counts: zod.object({
+    active: zod.number(),
+    inShop: zod.number(),
+    outOfService: zod.number(),
+    total: zod.number(),
+  }),
+  overdue: zod.array(
+    zod.object({
+      kind: zod.enum(["TRUCK", "EQUIPMENT"]),
+      id: zod.number(),
+      slug: zod.string(),
+      name: zod.string(),
+      status: zod.string(),
+      usageUntilDue: zod.number(),
+      usageUnit: zod.enum(["MILES", "HOURS"]),
+      serviceState: zod.enum(["OK", "DUE_SOON", "OVERDUE"]),
+      lifeToDateSpendCents: zod.number(),
+    }),
+  ),
+  dueSoon: zod.array(
+    zod.object({
+      kind: zod.enum(["TRUCK", "EQUIPMENT"]),
+      id: zod.number(),
+      slug: zod.string(),
+      name: zod.string(),
+      status: zod.string(),
+      usageUntilDue: zod.number(),
+      usageUnit: zod.enum(["MILES", "HOURS"]),
+      serviceState: zod.enum(["OK", "DUE_SOON", "OVERDUE"]),
+      lifeToDateSpendCents: zod.number(),
+    }),
+  ),
+  monthlySpend: zod.array(
+    zod.object({
+      month: zod.string().describe("ISO month, e.g. 2026-04"),
+      totalCents: zod.number(),
+      laborCents: zod.number(),
+      partsCents: zod.number(),
+    }),
+  ),
+  topMoneyPits: zod.array(
+    zod.object({
+      kind: zod.enum(["TRUCK", "EQUIPMENT"]),
+      id: zod.number(),
+      slug: zod.string(),
+      name: zod.string(),
+      status: zod.string(),
+      usageUntilDue: zod.number(),
+      usageUnit: zod.enum(["MILES", "HOURS"]),
+      serviceState: zod.enum(["OK", "DUE_SOON", "OVERDUE"]),
+      lifeToDateSpendCents: zod.number(),
+    }),
+  ),
+  totals: zod.object({
+    last30DaysCents: zod.number(),
+    ytdCents: zod.number(),
+    lifetimeCents: zod.number(),
+  }),
+});
+
+export const CreateUsageReadingBody = zod.object({
+  truckId: zod.number().nullish(),
+  equipmentId: zod.number().nullish(),
+  mileage: zod.number().nullish(),
+  hours: zod.number().nullish(),
+  notes: zod.string().nullish(),
 });
 
 export const ListEmployeesResponse = zod.object({

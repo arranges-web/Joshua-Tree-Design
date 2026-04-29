@@ -341,12 +341,50 @@ export async function populateData(): Promise<void> {
   ]);
 
   // ── Fleet ─────────────────────────────────────────────────────────────────
+  // Trucks include brand/model/purchase data + odometer state so the Smart
+  // Asset Registry, QR-code action pages, and Pulse dashboard have rich data.
   const insertedTrucks = await db
     .insert(trucksTable)
     .values([
-      { name: "T-01 Bucket Truck", vin: "1FDXX0000000A1", plate: "JTREE-1", status: "ACTIVE",  assignedCrewId: alpha.id },
-      { name: "T-02 Chip Truck",   vin: "1FDXX0000000A2", plate: "JTREE-2", status: "IN_SHOP", assignedCrewId: beta.id  },
-      { name: "T-03 Crane Truck",  vin: "1FDXX0000000A3", plate: "JTREE-3", status: "ACTIVE",  assignedCrewId: gamma.id },
+      {
+        name: "T-01 Bucket Truck",
+        brand: "Ford",
+        model: "F-750 Bucket",
+        vin: "1FDXX0000000A1",
+        plate: "JTREE-1",
+        status: "ACTIVE",
+        assignedCrewId: alpha.id,
+        purchasePriceCents: 8_500_000,
+        purchaseDate: new Date(2021, 2, 14),
+        currentMileage: 64_820,
+        serviceIntervalMiles: 5_000,
+      },
+      {
+        name: "T-02 Chip Truck",
+        brand: "International",
+        model: "MV607 Chip Box",
+        vin: "1FDXX0000000A2",
+        plate: "JTREE-2",
+        status: "IN_SHOP",
+        assignedCrewId: beta.id,
+        purchasePriceCents: 9_200_000,
+        purchaseDate: new Date(2019, 7, 9),
+        currentMileage: 118_450,
+        serviceIntervalMiles: 5_000,
+      },
+      {
+        name: "T-03 Crane Truck",
+        brand: "Freightliner",
+        model: "M2-106 Crane",
+        vin: "1FDXX0000000A3",
+        plate: "JTREE-3",
+        status: "ACTIVE",
+        assignedCrewId: gamma.id,
+        purchasePriceCents: 14_750_000,
+        purchaseDate: new Date(2022, 5, 1),
+        currentMileage: 41_310,
+        serviceIntervalMiles: 7_500,
+      },
     ])
     .returning();
   const [t1, t2, t3] = insertedTrucks as Array<typeof insertedTrucks[number]>;
@@ -354,20 +392,60 @@ export async function populateData(): Promise<void> {
   const insertedEquip = await db
     .insert(equipmentTable)
     .values([
-      { name: "Stihl MS-462",     type: "Chainsaw", serial: "ST462-001", status: "ACTIVE",  assignedTruckId: t1.id },
-      { name: "Vermeer BC1500",   type: "Chipper",  serial: "VR1500-02", status: "IN_SHOP", assignedTruckId: t2.id },
-      { name: "Husqvarna 572 XP", type: "Chainsaw", serial: "HQ572-003", status: "IN_SHOP", assignedTruckId: t3.id },
+      {
+        name: "Stihl MS-462",
+        type: "Chainsaw",
+        brand: "Stihl",
+        model: "MS-462 C-M",
+        serial: "ST462-001",
+        status: "ACTIVE",
+        assignedTruckId: t1.id,
+        purchasePriceCents: 119_900,
+        purchaseDate: new Date(2023, 1, 4),
+        currentHours: 412,
+        serviceIntervalHours: 50,
+      },
+      {
+        name: "Vermeer BC1500",
+        type: "Chipper",
+        brand: "Vermeer",
+        model: "BC1500 XL",
+        serial: "VR1500-02",
+        status: "IN_SHOP",
+        assignedTruckId: t2.id,
+        purchasePriceCents: 7_850_000,
+        purchaseDate: new Date(2020, 4, 18),
+        currentHours: 2_385,
+        serviceIntervalHours: 250,
+      },
+      {
+        name: "Husqvarna 572 XP",
+        type: "Chainsaw",
+        brand: "Husqvarna",
+        model: "572 XP",
+        serial: "HQ572-003",
+        status: "IN_SHOP",
+        assignedTruckId: t3.id,
+        purchasePriceCents: 134_900,
+        purchaseDate: new Date(2024, 0, 21),
+        currentHours: 168,
+        serviceIntervalHours: 50,
+      },
     ])
     .returning();
   const [e1, e2, e3] = insertedEquip as Array<typeof insertedEquip[number]>;
 
+  // Each maintenance log captures labor + parts split and a usage snapshot so
+  // the Pulse dashboard and life-to-date money pits chart have real data.
   await db.insert(maintenanceLogsTable).values([
-    { truckId: t1.id,     kind: "SCHEDULED",  description: "Oil & filter change, lube fittings",           performedByUserId: mech.id, costCents: 12_500, performedAt: daysAgo(14) },
-    { truckId: t2.id,     kind: "REPAIR",     description: "Hydraulic line blow-out repair",                performedByUserId: mech.id, costCents: 87_500, performedAt: daysAgo(7)  },
-    { truckId: t3.id,     kind: "INSPECTION", description: "Annual FDOT safety inspection",                 performedByUserId: mech.id, costCents: 30_000, performedAt: daysAgo(30) },
-    { equipmentId: e1.id, kind: "SCHEDULED",  description: "Bar & chain replaced, guide bar straightened",  performedByUserId: mech.id, costCents: 4_500,  performedAt: daysAgo(10) },
-    { equipmentId: e2.id, kind: "REPAIR",     description: "Drum knife set replaced — excessive wear",      performedByUserId: mech.id, costCents: 22_000, performedAt: daysAgo(7)  },
-    { equipmentId: e3.id, kind: "REPAIR",     description: "Cylinder rebuild — compression failure",        performedByUserId: mech.id, costCents: 38_000, performedAt: daysAgo(3)  },
+    { truckId: t1.id,     kind: "SCHEDULED",  description: "Oil & filter change, lube fittings",            performedByUserId: mech.id, laborCostCents:  7_500, partsCostCents:  5_000, costCents: 12_500, performedAt: daysAgo(14), mileageAtService: 60_120 },
+    { truckId: t2.id,     kind: "REPAIR",     description: "Hydraulic line blow-out repair",                performedByUserId: mech.id, laborCostCents: 52_500, partsCostCents: 35_000, costCents: 87_500, performedAt: daysAgo(7),  mileageAtService: 117_800 },
+    { truckId: t2.id,     kind: "REPAIR",     description: "Replaced PTO clutch — slipping under load",     performedByUserId: mech.id, laborCostCents: 18_000, partsCostCents: 28_000, costCents: 46_000, performedAt: daysAgo(60), mileageAtService: 110_400 },
+    { truckId: t3.id,     kind: "INSPECTION", description: "Annual FDOT safety inspection",                 performedByUserId: mech.id, laborCostCents: 18_000, partsCostCents: 12_000, costCents: 30_000, performedAt: daysAgo(30), mileageAtService: 38_900 },
+    { equipmentId: e1.id, kind: "SCHEDULED",  description: "Bar & chain replaced, guide bar straightened",  performedByUserId: mech.id, laborCostCents:  2_700, partsCostCents:  1_800, costCents:  4_500, performedAt: daysAgo(10), hoursAtService: 380 },
+    { equipmentId: e2.id, kind: "REPAIR",     description: "Drum knife set replaced — excessive wear",      performedByUserId: mech.id, laborCostCents: 13_200, partsCostCents:  8_800, costCents: 22_000, performedAt: daysAgo(7),  hoursAtService: 2_310 },
+    { equipmentId: e2.id, kind: "REPAIR",     description: "Hydraulic pump rebuild",                        performedByUserId: mech.id, laborCostCents: 22_000, partsCostCents: 41_500, costCents: 63_500, performedAt: daysAgo(45), hoursAtService: 2_140 },
+    { equipmentId: e3.id, kind: "REPAIR",     description: "Cylinder rebuild — compression failure",        performedByUserId: mech.id, laborCostCents: 22_800, partsCostCents: 15_200, costCents: 38_000, performedAt: daysAgo(3),  hoursAtService: 155 },
   ]);
 
   // ── Service requests ──────────────────────────────────────────────────────

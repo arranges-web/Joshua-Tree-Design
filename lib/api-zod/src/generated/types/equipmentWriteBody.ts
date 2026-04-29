@@ -9,7 +9,13 @@
 export interface EquipmentWriteBody {
   name: string;
   type: string;
+  brand?: string | null;
+  model?: string | null;
   serial?: string | null;
   status: string;
   assignedTruckId?: number | null;
+  purchasePriceCents?: number | null;
+  purchaseDate?: Date | null;
+  currentHours?: number | null;
+  serviceIntervalHours?: number | null;
 }

@@ -1,7 +1,7 @@
 import app from "./app";
 import { logger } from "./lib/logger";
 import { syncDefaultPermissionMatrix } from "./lib/rbac/syncMatrix";
-import { seedIfEmpty } from "@workspace/db";
+import { seedIfEmpty, backfillFleetData } from "@workspace/db";
 
 const rawPort = process.env["PORT"];
 
@@ -35,6 +35,13 @@ async function startup() {
     await syncDefaultPermissionMatrix();
   } catch (err) {
     logger.error({ err }, "Failed to sync default permission matrix on boot");
+  }
+
+  // Enrich existing fleet rows with the new asset-registry fields. Idempotent.
+  try {
+    await backfillFleetData();
+  } catch (err) {
+    logger.error({ err }, "Failed to backfill fleet data on boot");
   }
 }
 

@@ -16,7 +16,9 @@ import { Leads } from "@/pages/Leads";
 import { Jobs } from "@/pages/Jobs";
 import { Quotes } from "@/pages/Quotes";
 import { Invoices } from "@/pages/Invoices";
-import { Fleet } from "@/pages/Fleet";
+import { FleetPulse } from "@/pages/FleetPulse";
+import { AssetRegistry } from "@/pages/AssetRegistry";
+import { AssetActionPage } from "@/pages/AssetActionPage";
 import { Maintenance } from "@/pages/Maintenance";
 import { Employees } from "@/pages/Employees";
 import { Permissions } from "@/pages/Permissions";
@@ -71,7 +73,9 @@ function AppRouter() {
               <Route path="/jobs" component={Jobs} />
               <Route path="/quotes" component={Quotes} />
               <Route path="/invoices" component={Invoices} />
-              <Route path="/fleet" component={Fleet} />
+              <Route path="/fleet" component={FleetPulse} />
+              <Route path="/assets" component={AssetRegistry} />
+              <Route path="/assets/:slug" component={AssetActionPage} />
               <Route path="/maintenance" component={Maintenance} />
               <Route path="/employees" component={Employees} />
               <Route path="/permissions" component={Permissions} />

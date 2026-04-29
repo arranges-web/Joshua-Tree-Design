@@ -9,8 +9,15 @@
 export interface Truck {
   id: number;
   name: string;
+  brand?: string | null;
+  model?: string | null;
   vin?: string | null;
   plate?: string | null;
   status: string;
   assignedCrewId?: number | null;
+  purchasePriceCents?: number | null;
+  purchaseDate?: Date | null;
+  currentMileage: number;
+  serviceIntervalMiles: number;
+  slug?: string | null;
 }

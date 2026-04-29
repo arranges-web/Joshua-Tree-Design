@@ -6,10 +6,14 @@ import {
   timestamp,
   pgEnum,
   index,
+  uniqueIndex,
 } from "drizzle-orm/pg-core";
 import { usersTable } from "./users";
 import { crewsTable } from "./jobs";
 
+// NOTE on status enums: the underlying Postgres enum keeps the legacy
+// "RETIRED" value for backwards compatibility. The UI renames it to
+// "Out of Service" — there is no separate OUT_OF_SERVICE value in the DB.
 export const truckStatusEnum = pgEnum("truck_status", [
   "ACTIVE",
   "IN_SHOP",
@@ -33,6 +37,8 @@ export const trucksTable = pgTable(
   {
     id: serial("id").primaryKey(),
     name: text("name").notNull(),
+    brand: text("brand"),
+    model: text("model"),
     vin: text("vin"),
     plate: text("plate"),
     status: truckStatusEnum("status").notNull().default("ACTIVE"),
@@ -40,8 +46,18 @@ export const trucksTable = pgTable(
       () => crewsTable.id,
       { onDelete: "set null" },
     ),
+    purchasePriceCents: integer("purchase_price_cents"),
+    purchaseDate: timestamp("purchase_date", { withTimezone: true }),
+    currentMileage: integer("current_mileage").notNull().default(0),
+    serviceIntervalMiles: integer("service_interval_miles")
+      .notNull()
+      .default(5000),
+    slug: text("slug"),
   },
-  (t) => [index("trucks_status_idx").on(t.status)],
+  (t) => [
+    index("trucks_status_idx").on(t.status),
+    uniqueIndex("trucks_slug_uq").on(t.slug),
+  ],
 );
 
 export const equipmentTable = pgTable(
@@ -50,14 +66,26 @@ export const equipmentTable = pgTable(
     id: serial("id").primaryKey(),
     name: text("name").notNull(),
     type: text("type").notNull(),
+    brand: text("brand"),
+    model: text("model"),
     serial: text("serial"),
     status: equipmentStatusEnum("status").notNull().default("ACTIVE"),
     assignedTruckId: integer("assigned_truck_id").references(
       () => trucksTable.id,
       { onDelete: "set null" },
     ),
+    purchasePriceCents: integer("purchase_price_cents"),
+    purchaseDate: timestamp("purchase_date", { withTimezone: true }),
+    currentHours: integer("current_hours").notNull().default(0),
+    serviceIntervalHours: integer("service_interval_hours")
+      .notNull()
+      .default(100),
+    slug: text("slug"),
   },
-  (t) => [index("equipment_status_idx").on(t.status)],
+  (t) => [
+    index("equipment_status_idx").on(t.status),
+    uniqueIndex("equipment_slug_uq").on(t.slug),
+  ],
 );
 
 export const maintenanceLogsTable = pgTable(
@@ -79,7 +107,13 @@ export const maintenanceLogsTable = pgTable(
     performedAt: timestamp("performed_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
+    laborCostCents: integer("labor_cost_cents").notNull().default(0),
+    partsCostCents: integer("parts_cost_cents").notNull().default(0),
+    // costCents is the cached total = labor + parts; kept for backwards compat
+    // and to keep dashboard sums fast. The API always sets it on write.
     costCents: integer("cost_cents").notNull().default(0),
+    mileageAtService: integer("mileage_at_service"),
+    hoursAtService: integer("hours_at_service"),
   },
   (t) => [
     index("maintenance_logs_truck_id_idx").on(t.truckId),
@@ -88,9 +122,38 @@ export const maintenanceLogsTable = pgTable(
   ],
 );
 
+export const usageReadingsTable = pgTable(
+  "usage_readings",
+  {
+    id: serial("id").primaryKey(),
+    truckId: integer("truck_id").references(() => trucksTable.id, {
+      onDelete: "cascade",
+    }),
+    equipmentId: integer("equipment_id").references(() => equipmentTable.id, {
+      onDelete: "cascade",
+    }),
+    mileage: integer("mileage"),
+    hours: integer("hours"),
+    recordedAt: timestamp("recorded_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    recordedByUserId: integer("recorded_by_user_id").references(
+      () => usersTable.id,
+      { onDelete: "set null" },
+    ),
+    notes: text("notes"),
+  },
+  (t) => [
+    index("usage_readings_truck_id_idx").on(t.truckId),
+    index("usage_readings_equipment_id_idx").on(t.equipmentId),
+    index("usage_readings_recorded_at_idx").on(t.recordedAt),
+  ],
+);
+
 export type Truck = typeof trucksTable.$inferSelect;
 export type Equipment = typeof equipmentTable.$inferSelect;
 export type MaintenanceLog = typeof maintenanceLogsTable.$inferSelect;
+export type UsageReading = typeof usageReadingsTable.$inferSelect;
 
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 export const insertTruckSchema = createInsertSchema(trucksTable);
@@ -99,3 +162,5 @@ export const insertEquipmentSchema = createInsertSchema(equipmentTable);
 export const selectEquipmentSchema = createSelectSchema(equipmentTable);
 export const insertMaintenanceLogSchema = createInsertSchema(maintenanceLogsTable);
 export const selectMaintenanceLogSchema = createSelectSchema(maintenanceLogsTable);
+export const insertUsageReadingSchema = createInsertSchema(usageReadingsTable);
+export const selectUsageReadingSchema = createSelectSchema(usageReadingsTable);

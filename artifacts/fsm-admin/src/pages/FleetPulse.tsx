@@ -1,0 +1,353 @@
+import { Link } from "wouter";
+import { useGetFleetPulse } from "@workspace/api-client-react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Activity,
+  AlertTriangle,
+  Clock,
+  CheckCircle2,
+  Wrench,
+  TrendingUp,
+  DollarSign,
+  ArrowRight,
+} from "lucide-react";
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+  Cell,
+} from "recharts";
+
+const usd = (cents: number | null | undefined) =>
+  new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: 0,
+  }).format((cents ?? 0) / 100);
+
+const num = (n: number) => new Intl.NumberFormat("en-US").format(n);
+
+function monthLabel(key: string) {
+  // key like "2025-04"
+  const [y, m] = key.split("-");
+  const d = new Date(Number(y), Number(m) - 1, 1);
+  return d.toLocaleString("en-US", { month: "short" });
+}
+
+export function FleetPulse() {
+  const { data, isLoading } = useGetFleetPulse();
+
+  if (isLoading) {
+    return (
+      <div className="space-y-4">
+        <Skeleton className="h-10 w-1/3" />
+        <div className="grid gap-3 md:grid-cols-4">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <Skeleton key={i} className="h-24 w-full" />
+          ))}
+        </div>
+        <Skeleton className="h-72 w-full" />
+      </div>
+    );
+  }
+
+  const counts = data?.counts ?? {
+    active: 0,
+    inShop: 0,
+    outOfService: 0,
+    total: 0,
+  };
+  const overdue = data?.overdue ?? [];
+  const dueSoon = data?.dueSoon ?? [];
+  const monthly = data?.monthlySpend ?? [];
+  const moneyPits = data?.topMoneyPits ?? [];
+  const totals = data?.totals ?? {
+    last30DaysCents: 0,
+    ytdCents: 0,
+    lifetimeCents: 0,
+  };
+
+  const chartData = monthly.map((m) => ({
+    month: monthLabel(m.month),
+    total: (m.totalCents ?? 0) / 100,
+    labor: (m.laborCents ?? 0) / 100,
+    parts: (m.partsCents ?? 0) / 100,
+  }));
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="flex items-center gap-2 text-3xl font-bold tracking-tight">
+            <Activity className="h-7 w-7 text-accent-foreground" />
+            Fleet Pulse
+          </h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            One screen to know if every truck and chainsaw is healthy and where the
+            money is going.
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <Button asChild variant="outline" size="sm">
+            <Link href="/assets">
+              <Wrench className="mr-2 h-4 w-4" /> Asset Registry
+            </Link>
+          </Button>
+        </div>
+      </div>
+
+      <div className="grid gap-3 md:grid-cols-4">
+        <KpiCard
+          label="Active"
+          value={num(counts.active)}
+          sub={`of ${counts.total} total`}
+          icon={CheckCircle2}
+          tone="emerald"
+        />
+        <KpiCard
+          label="In Shop"
+          value={num(counts.inShop)}
+          icon={Wrench}
+          tone="amber"
+        />
+        <KpiCard
+          label="Overdue Service"
+          value={num(overdue.length)}
+          sub={`${dueSoon.length} due soon`}
+          icon={AlertTriangle}
+          tone={overdue.length > 0 ? "rose" : "neutral"}
+        />
+        <KpiCard
+          label="Spend (30d)"
+          value={usd(totals.last30DaysCents)}
+          sub={`YTD ${usd(totals.ytdCents)}`}
+          icon={DollarSign}
+        />
+      </div>
+
+      <Card className="border-border/60">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <TrendingUp className="h-4 w-4" /> Monthly Maintenance Spend
+            <span className="ml-2 text-xs font-normal text-muted-foreground">
+              Last 12 months
+            </span>
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="h-72 w-full" data-testid="monthly-spend-chart">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart
+                data={chartData}
+                margin={{ top: 8, right: 16, left: 0, bottom: 0 }}
+              >
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
+                <XAxis
+                  dataKey="month"
+                  stroke="hsl(var(--muted-foreground))"
+                  fontSize={12}
+                  tickLine={false}
+                  axisLine={false}
+                />
+                <YAxis
+                  stroke="hsl(var(--muted-foreground))"
+                  fontSize={12}
+                  tickLine={false}
+                  axisLine={false}
+                  tickFormatter={(v) => `$${Math.round(Number(v))}`}
+                />
+                <Tooltip
+                  cursor={{ fill: "hsl(var(--muted) / 0.4)" }}
+                  contentStyle={{
+                    background: "hsl(var(--card))",
+                    border: "1px solid hsl(var(--border))",
+                    borderRadius: 6,
+                    fontSize: 12,
+                  }}
+                  formatter={(value: number, name: string) => [
+                    `$${value.toFixed(2)}`,
+                    name === "total" ? "Total" : name,
+                  ]}
+                />
+                <Bar dataKey="total" radius={[4, 4, 0, 0]}>
+                  {chartData.map((_, idx) => (
+                    <Cell key={idx} fill="hsl(var(--accent))" />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </CardContent>
+      </Card>
+
+      <div className="grid gap-4 lg:grid-cols-3">
+        <ServiceList
+          title="Overdue"
+          items={overdue}
+          icon={AlertTriangle}
+          tone="rose"
+          emptyText="Nothing overdue. "
+          testid="overdue-list"
+        />
+        <ServiceList
+          title="Due Soon"
+          items={dueSoon}
+          icon={Clock}
+          tone="amber"
+          emptyText="Nothing due in the near term."
+          testid="due-soon-list"
+        />
+        <Card className="border-border/60" data-testid="money-pits">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <DollarSign className="h-4 w-4 text-rose-600" />
+              Top 5 Money Pits
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-0">
+            {moneyPits.length === 0 ? (
+              <div className="px-6 py-8 text-center text-sm text-muted-foreground">
+                No spend recorded yet.
+              </div>
+            ) : (
+              <ol className="divide-y">
+                {moneyPits.map((m, i) => (
+                  <li key={`${m.kind}-${m.id}`} className="px-6 py-3">
+                    <Link
+                      href={`/assets/${m.slug}`}
+                      className="flex items-center justify-between gap-3 hover:underline"
+                    >
+                      <span className="flex items-center gap-2 truncate">
+                        <span className="font-mono text-xs text-muted-foreground">
+                          #{i + 1}
+                        </span>
+                        <span className="truncate text-sm font-medium">{m.name}</span>
+                      </span>
+                      <span className="font-mono text-sm font-semibold">
+                        {usd(m.lifeToDateSpendCents)}
+                      </span>
+                    </Link>
+                  </li>
+                ))}
+              </ol>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  );
+}
+
+function KpiCard({
+  label,
+  value,
+  sub,
+  icon: Icon,
+  tone = "neutral",
+}: {
+  label: string;
+  value: string;
+  sub?: string;
+  icon: React.ComponentType<{ className?: string }>;
+  tone?: "neutral" | "rose" | "amber" | "emerald";
+}) {
+  const toneClass =
+    tone === "rose"
+      ? "text-rose-700"
+      : tone === "amber"
+        ? "text-amber-700"
+        : tone === "emerald"
+          ? "text-emerald-700"
+          : "text-foreground";
+  return (
+    <Card className="border-border/60">
+      <CardContent className="flex items-start justify-between p-5">
+        <div>
+          <div className="text-xs font-mono uppercase tracking-wider text-muted-foreground">
+            {label}
+          </div>
+          <div className={`mt-2 text-2xl font-bold ${toneClass}`}>{value}</div>
+          {sub && (
+            <div className="mt-1 text-xs text-muted-foreground">{sub}</div>
+          )}
+        </div>
+        <div className="flex h-10 w-10 items-center justify-center rounded-md bg-muted text-muted-foreground">
+          <Icon className="h-5 w-5" />
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function ServiceList({
+  title,
+  items,
+  icon: Icon,
+  tone,
+  emptyText,
+  testid,
+}: {
+  title: string;
+  items: Array<{
+    kind: string;
+    id: number;
+    slug: string;
+    name: string;
+    usageUntilDue: number;
+    usageUnit: "MILES" | "HOURS";
+  }>;
+  icon: React.ComponentType<{ className?: string }>;
+  tone: "rose" | "amber";
+  emptyText: string;
+  testid: string;
+}) {
+  const toneClass = tone === "rose" ? "text-rose-600" : "text-amber-600";
+  return (
+    <Card className="border-border/60" data-testid={testid}>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-base">
+          <Icon className={`h-4 w-4 ${toneClass}`} />
+          {title}
+          <Badge variant="outline" className="ml-1">
+            {items.length}
+          </Badge>
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="p-0">
+        {items.length === 0 ? (
+          <div className="px-6 py-8 text-center text-sm text-muted-foreground">
+            {emptyText}
+          </div>
+        ) : (
+          <ul className="divide-y">
+            {items.map((m) => (
+              <li key={`${m.kind}-${m.id}`} className="px-6 py-3">
+                <Link
+                  href={`/assets/${m.slug}`}
+                  className="flex items-center justify-between gap-3 hover:underline"
+                >
+                  <span className="truncate text-sm font-medium">{m.name}</span>
+                  <span className="flex items-center gap-2">
+                    <span className={`font-mono text-xs ${toneClass}`}>
+                      {m.usageUntilDue >= 0
+                        ? `${num(m.usageUntilDue)} ${m.usageUnit.toLowerCase()}`
+                        : `−${num(Math.abs(m.usageUntilDue))} ${m.usageUnit.toLowerCase()}`}
+                    </span>
+                    <ArrowRight className="h-3.5 w-3.5 text-muted-foreground" />
+                  </span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        )}
+      </CardContent>
+    </Card>
+  );
+}

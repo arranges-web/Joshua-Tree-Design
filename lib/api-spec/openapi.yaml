@@ -532,6 +532,61 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Ok" }
 
+  /assets:
+    get:
+      operationId: listAssets
+      tags: [assets]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AssetListResponse" }
+
+  /assets/{slug}:
+    get:
+      operationId: getAssetBySlug
+      tags: [assets]
+      parameters:
+        - in: path
+          name: slug
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AssetDetailResponse" }
+        "404": { $ref: "#/components/responses/Error" }
+
+  /fleet-pulse:
+    get:
+      operationId: getFleetPulse
+      tags: [assets]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/FleetPulseResponse" }
+
+  /usage-readings:
+    post:
+      operationId: createUsageReading
+      tags: [assets]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UsageReadingWriteBody" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/UsageReadingResponse" }
+
   /admin/users:
     get:
       operationId: listEmployees
@@ -1061,23 +1116,36 @@ components:
 
     Truck:
       type: object
-      required: [id, name, status]
+      required: [id, name, status, currentMileage, serviceIntervalMiles]
       properties:
         id: { type: integer }
         name: { type: string }
+        brand: { type: string, nullable: true }
+        model: { type: string, nullable: true }
         vin: { type: string, nullable: true }
         plate: { type: string, nullable: true }
         status: { type: string }
         assignedCrewId: { type: integer, nullable: true }
+        purchasePriceCents: { type: integer, nullable: true }
+        purchaseDate: { type: string, format: date-time, nullable: true }
+        currentMileage: { type: integer }
+        serviceIntervalMiles: { type: integer }
+        slug: { type: string, nullable: true }
     TruckWriteBody:
       type: object
       required: [name, status]
       properties:
         name: { type: string }
+        brand: { type: string, nullable: true }
+        model: { type: string, nullable: true }
         vin: { type: string, nullable: true }
         plate: { type: string, nullable: true }
         status: { type: string }
         assignedCrewId: { type: integer, nullable: true }
+        purchasePriceCents: { type: integer, nullable: true }
+        purchaseDate: { type: string, format: date-time, nullable: true }
+        currentMileage: { type: integer, nullable: true }
+        serviceIntervalMiles: { type: integer, nullable: true }
     TruckResponse:
       type: object
       required: [truck]
@@ -1093,23 +1161,36 @@ components:
 
     Equipment:
       type: object
-      required: [id, name, type, status]
+      required: [id, name, type, status, currentHours, serviceIntervalHours]
       properties:
         id: { type: integer }
         name: { type: string }
         type: { type: string }
+        brand: { type: string, nullable: true }
+        model: { type: string, nullable: true }
         serial: { type: string, nullable: true }
         status: { type: string }
         assignedTruckId: { type: integer, nullable: true }
+        purchasePriceCents: { type: integer, nullable: true }
+        purchaseDate: { type: string, format: date-time, nullable: true }
+        currentHours: { type: integer }
+        serviceIntervalHours: { type: integer }
+        slug: { type: string, nullable: true }
     EquipmentWriteBody:
       type: object
       required: [name, type, status]
       properties:
         name: { type: string }
         type: { type: string }
+        brand: { type: string, nullable: true }
+        model: { type: string, nullable: true }
         serial: { type: string, nullable: true }
         status: { type: string }
         assignedTruckId: { type: integer, nullable: true }
+        purchasePriceCents: { type: integer, nullable: true }
+        purchaseDate: { type: string, format: date-time, nullable: true }
+        currentHours: { type: integer, nullable: true }
+        serviceIntervalHours: { type: integer, nullable: true }
     EquipmentResponse:
       type: object
       required: [equipment]
@@ -1125,7 +1206,7 @@ components:
 
     MaintenanceLog:
       type: object
-      required: [id, kind, description, performedAt, costCents]
+      required: [id, kind, description, performedAt, costCents, laborCostCents, partsCostCents]
       properties:
         id: { type: integer }
         truckId: { type: integer, nullable: true }
@@ -1134,10 +1215,14 @@ components:
         description: { type: string }
         performedByUserId: { type: integer, nullable: true }
         performedAt: { type: string, format: date-time }
-        costCents: { type: integer }
+        laborCostCents: { type: integer }
+        partsCostCents: { type: integer }
+        costCents: { type: integer, description: "Cached total = labor + parts." }
+        mileageAtService: { type: integer, nullable: true }
+        hoursAtService: { type: integer, nullable: true }
     MaintenanceLogWriteBody:
       type: object
-      required: [kind, description, costCents]
+      required: [kind, description]
       properties:
         truckId: { type: integer, nullable: true }
         equipmentId: { type: integer, nullable: true }
@@ -1145,7 +1230,10 @@ components:
         description: { type: string }
         performedByUserId: { type: integer, nullable: true }
         performedAt: { type: string, format: date-time, nullable: true }
-        costCents: { type: integer }
+        laborCostCents: { type: integer, nullable: true }
+        partsCostCents: { type: integer, nullable: true }
+        mileageAtService: { type: integer, nullable: true }
+        hoursAtService: { type: integer, nullable: true }
     MaintenanceLogResponse:
       type: object
       required: [log]
@@ -1158,6 +1246,140 @@ components:
         logs:
           type: array
           items: { $ref: "#/components/schemas/MaintenanceLog" }
+
+    Asset:
+      type: object
+      required:
+        - kind
+        - id
+        - slug
+        - name
+        - status
+        - currentUsage
+        - usageUnit
+        - serviceIntervalUsage
+        - nextServiceDueAt
+        - usageUntilDue
+        - serviceState
+        - lifeToDateSpendCents
+      properties:
+        kind: { type: string, enum: [TRUCK, EQUIPMENT] }
+        id: { type: integer }
+        slug: { type: string }
+        name: { type: string }
+        brand: { type: string, nullable: true }
+        model: { type: string, nullable: true }
+        identifier: { type: string, nullable: true, description: "VIN for trucks, serial for equipment." }
+        status: { type: string }
+        purchasePriceCents: { type: integer, nullable: true }
+        purchaseDate: { type: string, format: date-time, nullable: true }
+        currentUsage: { type: integer, description: "Current mileage (trucks) or hours (equipment)." }
+        usageUnit: { type: string, enum: [MILES, HOURS] }
+        serviceIntervalUsage: { type: integer }
+        lastServiceUsage: { type: integer, nullable: true }
+        usageSinceLastService: { type: integer, nullable: true }
+        nextServiceDueAt: { type: integer, description: "Usage value at which the next service is due." }
+        usageUntilDue: { type: integer, description: "How many more miles / hours until the next service. Negative = overdue." }
+        serviceState: { type: string, enum: [OK, DUE_SOON, OVERDUE] }
+        lifeToDateSpendCents: { type: integer }
+        lastServicePerformedAt: { type: string, format: date-time, nullable: true }
+    AssetListResponse:
+      type: object
+      required: [assets]
+      properties:
+        assets:
+          type: array
+          items: { $ref: "#/components/schemas/Asset" }
+    AssetDetailResponse:
+      type: object
+      required: [asset, logs, recentReadings]
+      properties:
+        asset: { $ref: "#/components/schemas/Asset" }
+        logs:
+          type: array
+          items: { $ref: "#/components/schemas/MaintenanceLog" }
+        recentReadings:
+          type: array
+          items: { $ref: "#/components/schemas/UsageReading" }
+
+    UsageReading:
+      type: object
+      required: [id, recordedAt]
+      properties:
+        id: { type: integer }
+        truckId: { type: integer, nullable: true }
+        equipmentId: { type: integer, nullable: true }
+        mileage: { type: integer, nullable: true }
+        hours: { type: integer, nullable: true }
+        recordedAt: { type: string, format: date-time }
+        recordedByUserId: { type: integer, nullable: true }
+        notes: { type: string, nullable: true }
+    UsageReadingWriteBody:
+      type: object
+      properties:
+        truckId: { type: integer, nullable: true }
+        equipmentId: { type: integer, nullable: true }
+        mileage: { type: integer, nullable: true }
+        hours: { type: integer, nullable: true }
+        notes: { type: string, nullable: true }
+    UsageReadingResponse:
+      type: object
+      required: [reading]
+      properties:
+        reading: { $ref: "#/components/schemas/UsageReading" }
+
+    FleetPulseAssetSummary:
+      type: object
+      required: [kind, id, slug, name, status, usageUntilDue, usageUnit, serviceState, lifeToDateSpendCents]
+      properties:
+        kind: { type: string, enum: [TRUCK, EQUIPMENT] }
+        id: { type: integer }
+        slug: { type: string }
+        name: { type: string }
+        status: { type: string }
+        usageUntilDue: { type: integer }
+        usageUnit: { type: string, enum: [MILES, HOURS] }
+        serviceState: { type: string, enum: [OK, DUE_SOON, OVERDUE] }
+        lifeToDateSpendCents: { type: integer }
+    FleetPulseMonthlySpend:
+      type: object
+      required: [month, totalCents, laborCents, partsCents]
+      properties:
+        month: { type: string, description: "ISO month, e.g. 2026-04" }
+        totalCents: { type: integer }
+        laborCents: { type: integer }
+        partsCents: { type: integer }
+    FleetPulseResponse:
+      type: object
+      required: [counts, overdue, dueSoon, monthlySpend, topMoneyPits, totals]
+      properties:
+        counts:
+          type: object
+          required: [active, inShop, outOfService, total]
+          properties:
+            active: { type: integer }
+            inShop: { type: integer }
+            outOfService: { type: integer }
+            total: { type: integer }
+        overdue:
+          type: array
+          items: { $ref: "#/components/schemas/FleetPulseAssetSummary" }
+        dueSoon:
+          type: array
+          items: { $ref: "#/components/schemas/FleetPulseAssetSummary" }
+        monthlySpend:
+          type: array
+          items: { $ref: "#/components/schemas/FleetPulseMonthlySpend" }
+        topMoneyPits:
+          type: array
+          items: { $ref: "#/components/schemas/FleetPulseAssetSummary" }
+        totals:
+          type: object
+          required: [last30DaysCents, ytdCents, lifetimeCents]
+          properties:
+            last30DaysCents: { type: integer }
+            ytdCents: { type: integer }
+            lifetimeCents: { type: integer }
 
     Employee:
       type: object

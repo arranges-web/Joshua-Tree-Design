@@ -8,8 +8,14 @@
 
 export interface TruckWriteBody {
   name: string;
+  brand?: string | null;
+  model?: string | null;
   vin?: string | null;
   plate?: string | null;
   status: string;
   assignedCrewId?: number | null;
+  purchasePriceCents?: number | null;
+  purchaseDate?: Date | null;
+  currentMileage?: number | null;
+  serviceIntervalMiles?: number | null;
 }

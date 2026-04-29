@@ -17,6 +17,8 @@ import type {
 } from "@tanstack/react-query";
 
 import type {
+  AssetDetailResponse,
+  AssetListResponse,
   AuthMeResponse,
   CustomerListResponse,
   CustomerProfileResponse,
@@ -32,6 +34,7 @@ import type {
   EquipmentResponse,
   EquipmentWriteBody,
   ErrorResponse,
+  FleetPulseResponse,
   HealthStatus,
   InvoiceListResponse,
   InvoiceResponse,
@@ -71,6 +74,8 @@ import type {
   TruckListResponse,
   TruckResponse,
   TruckWriteBody,
+  UsageReadingResponse,
+  UsageReadingWriteBody,
 } from "./api.schemas";
 
 import { customFetch } from "../custom-fetch";
@@ -2729,6 +2734,302 @@ export const useDeleteMaintenanceLog = <
   TContext
 > => {
   return useMutation(getDeleteMaintenanceLogMutationOptions(options));
+};
+
+export const getListAssetsUrl = () => {
+  return `/api/assets`;
+};
+
+export const listAssets = async (
+  options?: RequestInit,
+): Promise<AssetListResponse> => {
+  return customFetch<AssetListResponse>(getListAssetsUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListAssetsQueryKey = () => {
+  return [`/api/assets`] as const;
+};
+
+export const getListAssetsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listAssets>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listAssets>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListAssetsQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof listAssets>>> = ({
+    signal,
+  }) => listAssets({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listAssets>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListAssetsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listAssets>>
+>;
+export type ListAssetsQueryError = ErrorType<unknown>;
+
+export function useListAssets<
+  TData = Awaited<ReturnType<typeof listAssets>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listAssets>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListAssetsQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+export const getGetAssetBySlugUrl = (slug: string) => {
+  return `/api/assets/${slug}`;
+};
+
+export const getAssetBySlug = async (
+  slug: string,
+  options?: RequestInit,
+): Promise<AssetDetailResponse> => {
+  return customFetch<AssetDetailResponse>(getGetAssetBySlugUrl(slug), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetAssetBySlugQueryKey = (slug: string) => {
+  return [`/api/assets/${slug}`] as const;
+};
+
+export const getGetAssetBySlugQueryOptions = <
+  TData = Awaited<ReturnType<typeof getAssetBySlug>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  slug: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getAssetBySlug>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetAssetBySlugQueryKey(slug);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getAssetBySlug>>> = ({
+    signal,
+  }) => getAssetBySlug(slug, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!slug,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getAssetBySlug>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetAssetBySlugQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getAssetBySlug>>
+>;
+export type GetAssetBySlugQueryError = ErrorType<ErrorResponse>;
+
+export function useGetAssetBySlug<
+  TData = Awaited<ReturnType<typeof getAssetBySlug>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  slug: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getAssetBySlug>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetAssetBySlugQueryOptions(slug, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+export const getGetFleetPulseUrl = () => {
+  return `/api/fleet-pulse`;
+};
+
+export const getFleetPulse = async (
+  options?: RequestInit,
+): Promise<FleetPulseResponse> => {
+  return customFetch<FleetPulseResponse>(getGetFleetPulseUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetFleetPulseQueryKey = () => {
+  return [`/api/fleet-pulse`] as const;
+};
+
+export const getGetFleetPulseQueryOptions = <
+  TData = Awaited<ReturnType<typeof getFleetPulse>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getFleetPulse>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetFleetPulseQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getFleetPulse>>> = ({
+    signal,
+  }) => getFleetPulse({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getFleetPulse>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetFleetPulseQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getFleetPulse>>
+>;
+export type GetFleetPulseQueryError = ErrorType<unknown>;
+
+export function useGetFleetPulse<
+  TData = Awaited<ReturnType<typeof getFleetPulse>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getFleetPulse>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetFleetPulseQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+export const getCreateUsageReadingUrl = () => {
+  return `/api/usage-readings`;
+};
+
+export const createUsageReading = async (
+  usageReadingWriteBody: UsageReadingWriteBody,
+  options?: RequestInit,
+): Promise<UsageReadingResponse> => {
+  return customFetch<UsageReadingResponse>(getCreateUsageReadingUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(usageReadingWriteBody),
+  });
+};
+
+export const getCreateUsageReadingMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createUsageReading>>,
+    TError,
+    { data: BodyType<UsageReadingWriteBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createUsageReading>>,
+  TError,
+  { data: BodyType<UsageReadingWriteBody> },
+  TContext
+> => {
+  const mutationKey = ["createUsageReading"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createUsageReading>>,
+    { data: BodyType<UsageReadingWriteBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return createUsageReading(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreateUsageReadingMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createUsageReading>>
+>;
+export type CreateUsageReadingMutationBody = BodyType<UsageReadingWriteBody>;
+export type CreateUsageReadingMutationError = ErrorType<unknown>;
+
+export const useCreateUsageReading = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createUsageReading>>,
+    TError,
+    { data: BodyType<UsageReadingWriteBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createUsageReading>>,
+  TError,
+  { data: BodyType<UsageReadingWriteBody> },
+  TContext
+> => {
+  return useMutation(getCreateUsageReadingMutationOptions(options));
 };
 
 export const getListEmployeesUrl = () => {

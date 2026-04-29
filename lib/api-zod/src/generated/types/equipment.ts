@@ -10,7 +10,14 @@ export interface Equipment {
   id: number;
   name: string;
   type: string;
+  brand?: string | null;
+  model?: string | null;
   serial?: string | null;
   status: string;
   assignedTruckId?: number | null;
+  purchasePriceCents?: number | null;
+  purchaseDate?: Date | null;
+  currentHours: number;
+  serviceIntervalHours: number;
+  slug?: string | null;
 }

@@ -83,7 +83,7 @@ export function Login() {
                 <TreeDeciduous className="h-6 w-6" />
               </div>
               <div className="leading-tight">
-                <div className="font-serif text-2xl italic tracking-tight">
+                <div className="text-2xl font-bold tracking-tight">
                   Joshua Tree
                 </div>
                 <div className="text-[10px] font-mono uppercase tracking-[0.18em] text-muted-foreground">
@@ -148,7 +148,7 @@ export function Login() {
             <div className="text-[10px] font-mono uppercase tracking-[0.18em] text-muted-foreground">
               Test Accounts
             </div>
-            <h2 className="font-serif text-2xl italic">
+            <h2 className="text-2xl font-bold tracking-tight">
               Try every role, in one click.
             </h2>
             <p className="text-sm text-muted-foreground">
