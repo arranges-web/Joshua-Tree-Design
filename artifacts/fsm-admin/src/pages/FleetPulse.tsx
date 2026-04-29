@@ -62,6 +62,8 @@ export function FleetPulse() {
     active: 0,
     inShop: 0,
     outOfService: 0,
+    down: 0,
+    openRepairs: 0,
     total: 0,
   };
   const overdue = data?.overdue ?? [];
@@ -70,6 +72,7 @@ export function FleetPulse() {
   const moneyPits = data?.topMoneyPits ?? [];
   const recent = data?.recentMaintenance ?? [];
   const totals = data?.totals ?? {
+    mtdCents: 0,
     last30DaysCents: 0,
     ytdCents: 0,
     lifetimeCents: 0,
@@ -113,21 +116,22 @@ export function FleetPulse() {
           tone="emerald"
         />
         <KpiCard
-          label="In Shop"
-          value={num(counts.inShop)}
-          icon={Wrench}
-          tone="amber"
-        />
-        <KpiCard
-          label="Overdue Service"
-          value={num(overdue.length)}
-          sub={`${dueSoon.length} due soon`}
+          label="Down"
+          value={num(counts.down)}
+          sub="out of service"
           icon={AlertTriangle}
-          tone={overdue.length > 0 ? "rose" : "neutral"}
+          tone={counts.down > 0 ? "rose" : "neutral"}
         />
         <KpiCard
-          label="Spend (30d)"
-          value={usd(totals.last30DaysCents)}
+          label="Open Repairs"
+          value={num(counts.openRepairs)}
+          sub={`${overdue.length} overdue · ${dueSoon.length} due soon`}
+          icon={Wrench}
+          tone={counts.openRepairs > 0 ? "amber" : "neutral"}
+        />
+        <KpiCard
+          label="Spend MTD"
+          value={usd(totals.mtdCents)}
           sub={`YTD ${usd(totals.ytdCents)}`}
           icon={DollarSign}
         />

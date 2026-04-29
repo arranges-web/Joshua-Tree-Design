@@ -10,5 +10,9 @@ export type FleetPulseResponseCounts = {
   active: number;
   inShop: number;
   outOfService: number;
+  /** Assets that are RETIRED / Out of Service. */
+  down: number;
+  /** Assets currently IN_SHOP — open repairs. */
+  openRepairs: number;
   total: number;
 };

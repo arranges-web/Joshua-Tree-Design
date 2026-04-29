@@ -1304,6 +1304,8 @@ components:
         usageUntilDue: { type: integer, description: "How many more miles / hours until the next service. Negative = overdue." }
         serviceState: { type: string, enum: [OK, DUE_SOON, OVERDUE] }
         lifeToDateSpendCents: { type: integer }
+        ytdSpendCents: { type: integer, description: "Maintenance spend in the current calendar year." }
+        costPerUsageCents: { type: integer, nullable: true, description: "Lifetime spend / current usage. cents per mile (trucks) or cents per hour (equipment). null when usage is 0." }
         lastServicePerformedAt: { type: string, format: date-time, nullable: true }
     AssetListResponse:
       type: object
@@ -1352,7 +1354,7 @@ components:
 
     FleetPulseAssetSummary:
       type: object
-      required: [kind, id, slug, name, status, usageUntilDue, usageUnit, serviceState, lifeToDateSpendCents]
+      required: [kind, id, slug, name, status, usageUntilDue, usageUnit, serviceState, lifeToDateSpendCents, ytdSpendCents]
       properties:
         kind: { type: string, enum: [TRUCK, EQUIPMENT] }
         id: { type: integer }
@@ -1363,6 +1365,7 @@ components:
         usageUnit: { type: string, enum: [MILES, HOURS] }
         serviceState: { type: string, enum: [OK, DUE_SOON, OVERDUE] }
         lifeToDateSpendCents: { type: integer }
+        ytdSpendCents: { type: integer }
     FleetPulseMonthlySpend:
       type: object
       required: [month, totalCents, laborCents, partsCents]
@@ -1382,11 +1385,13 @@ components:
       properties:
         counts:
           type: object
-          required: [active, inShop, outOfService, total]
+          required: [active, inShop, outOfService, down, openRepairs, total]
           properties:
             active: { type: integer }
             inShop: { type: integer }
             outOfService: { type: integer }
+            down: { type: integer, description: "Assets that are RETIRED / Out of Service." }
+            openRepairs: { type: integer, description: "Assets currently IN_SHOP — open repairs." }
             total: { type: integer }
         overdue:
           type: array
@@ -1402,8 +1407,9 @@ components:
           items: { $ref: "#/components/schemas/FleetPulseAssetSummary" }
         totals:
           type: object
-          required: [last30DaysCents, ytdCents, lifetimeCents]
+          required: [mtdCents, last30DaysCents, ytdCents, lifetimeCents]
           properties:
+            mtdCents: { type: integer, description: "Maintenance spend month-to-date." }
             last30DaysCents: { type: integer }
             ytdCents: { type: integer }
             lifetimeCents: { type: integer }

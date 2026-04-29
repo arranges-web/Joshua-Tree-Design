@@ -48,6 +48,7 @@ import {
   Tag,
   Printer,
   ShieldAlert,
+  TrendingUp,
 } from "lucide-react";
 
 const usd = (cents: number | null | undefined) =>
@@ -175,7 +176,7 @@ export function AssetActionPage() {
               </div>
             </div>
             <ServiceStateBanner asset={asset} />
-            <div className="grid grid-cols-2 gap-3 pt-2 sm:grid-cols-4">
+            <div className="grid grid-cols-2 gap-3 pt-2 sm:grid-cols-5">
               <Stat label="Status" value={statusLabel(asset.status)} icon={Tag} />
               <Stat
                 label={asset.usageUnit === "MILES" ? "Odometer" : "Engine hours"}
@@ -186,6 +187,15 @@ export function AssetActionPage() {
                 label="Life-to-date"
                 value={usd(asset.lifeToDateSpendCents)}
                 icon={DollarSign}
+              />
+              <Stat
+                label={asset.usageUnit === "MILES" ? "Cost / mile" : "Cost / hour"}
+                value={
+                  asset.costPerUsageCents != null
+                    ? `${usd(asset.costPerUsageCents)}/${asset.usageUnit === "MILES" ? "mi" : "hr"}`
+                    : "—"
+                }
+                icon={TrendingUp}
               />
               <Stat
                 label="Purchased"

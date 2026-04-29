@@ -723,6 +723,16 @@ export const ListAssetsResponse = zod.object({
         ),
       serviceState: zod.enum(["OK", "DUE_SOON", "OVERDUE"]),
       lifeToDateSpendCents: zod.number(),
+      ytdSpendCents: zod
+        .number()
+        .optional()
+        .describe("Maintenance spend in the current calendar year."),
+      costPerUsageCents: zod
+        .number()
+        .nullish()
+        .describe(
+          "Lifetime spend \/ current usage. cents per mile (trucks) or cents per hour (equipment). null when usage is 0.",
+        ),
       lastServicePerformedAt: zod.coerce.date().nullish(),
     }),
   ),
@@ -764,6 +774,16 @@ export const GetAssetBySlugResponse = zod.object({
       ),
     serviceState: zod.enum(["OK", "DUE_SOON", "OVERDUE"]),
     lifeToDateSpendCents: zod.number(),
+    ytdSpendCents: zod
+      .number()
+      .optional()
+      .describe("Maintenance spend in the current calendar year."),
+    costPerUsageCents: zod
+      .number()
+      .nullish()
+      .describe(
+        "Lifetime spend \/ current usage. cents per mile (trucks) or cents per hour (equipment). null when usage is 0.",
+      ),
     lastServicePerformedAt: zod.coerce.date().nullish(),
   }),
   logs: zod.array(
@@ -836,6 +856,16 @@ export const SetAssetStatusResponse = zod.object({
       ),
     serviceState: zod.enum(["OK", "DUE_SOON", "OVERDUE"]),
     lifeToDateSpendCents: zod.number(),
+    ytdSpendCents: zod
+      .number()
+      .optional()
+      .describe("Maintenance spend in the current calendar year."),
+    costPerUsageCents: zod
+      .number()
+      .nullish()
+      .describe(
+        "Lifetime spend \/ current usage. cents per mile (trucks) or cents per hour (equipment). null when usage is 0.",
+      ),
     lastServicePerformedAt: zod.coerce.date().nullish(),
   }),
   logs: zod.array(
@@ -873,6 +903,10 @@ export const GetFleetPulseResponse = zod.object({
     active: zod.number(),
     inShop: zod.number(),
     outOfService: zod.number(),
+    down: zod.number().describe("Assets that are RETIRED \/ Out of Service."),
+    openRepairs: zod
+      .number()
+      .describe("Assets currently IN_SHOP — open repairs."),
     total: zod.number(),
   }),
   overdue: zod.array(
@@ -886,6 +920,7 @@ export const GetFleetPulseResponse = zod.object({
       usageUnit: zod.enum(["MILES", "HOURS"]),
       serviceState: zod.enum(["OK", "DUE_SOON", "OVERDUE"]),
       lifeToDateSpendCents: zod.number(),
+      ytdSpendCents: zod.number(),
     }),
   ),
   dueSoon: zod.array(
@@ -899,6 +934,7 @@ export const GetFleetPulseResponse = zod.object({
       usageUnit: zod.enum(["MILES", "HOURS"]),
       serviceState: zod.enum(["OK", "DUE_SOON", "OVERDUE"]),
       lifeToDateSpendCents: zod.number(),
+      ytdSpendCents: zod.number(),
     }),
   ),
   monthlySpend: zod.array(
@@ -920,9 +956,11 @@ export const GetFleetPulseResponse = zod.object({
       usageUnit: zod.enum(["MILES", "HOURS"]),
       serviceState: zod.enum(["OK", "DUE_SOON", "OVERDUE"]),
       lifeToDateSpendCents: zod.number(),
+      ytdSpendCents: zod.number(),
     }),
   ),
   totals: zod.object({
+    mtdCents: zod.number().describe("Maintenance spend month-to-date."),
     last30DaysCents: zod.number(),
     ytdCents: zod.number(),
     lifetimeCents: zod.number(),

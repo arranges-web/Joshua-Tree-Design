@@ -19,4 +19,5 @@ export interface FleetPulseAssetSummary {
   usageUnit: FleetPulseAssetSummaryUsageUnit;
   serviceState: FleetPulseAssetSummaryServiceState;
   lifeToDateSpendCents: number;
+  ytdSpendCents: number;
 }

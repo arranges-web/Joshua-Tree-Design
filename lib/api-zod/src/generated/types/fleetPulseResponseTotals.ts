@@ -7,6 +7,8 @@
  */
 
 export type FleetPulseResponseTotals = {
+  /** Maintenance spend month-to-date. */
+  mtdCents: number;
   last30DaysCents: number;
   ytdCents: number;
   lifetimeCents: number;

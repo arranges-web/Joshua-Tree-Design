@@ -33,5 +33,9 @@ export interface Asset {
   usageUntilDue: number;
   serviceState: AssetServiceState;
   lifeToDateSpendCents: number;
+  /** Maintenance spend in the current calendar year. */
+  ytdSpendCents?: number;
+  /** Lifetime spend / current usage. cents per mile (trucks) or cents per hour (equipment). null when usage is 0. */
+  costPerUsageCents?: number | null;
   lastServicePerformedAt?: Date | null;
 }

@@ -449,6 +449,8 @@ type AssetSummary = {
   usageUntilDue: number;
   serviceState: "OK" | "DUE_SOON" | "OVERDUE";
   lifeToDateSpendCents: number;
+  ytdSpendCents: number;
+  costPerUsageCents: number | null;
   lastServicePerformedAt: string | null;
 };
 
@@ -486,6 +488,7 @@ async function buildAssetList(): Promise<AssetSummary[]> {
   }
 
   const assets: AssetSummary[] = [];
+  const yearStartTs = new Date(new Date().getFullYear(), 0, 1).getTime();
 
   for (const t of trucks) {
     const myLogs = (truckLogs.get(t.id) ?? []).slice().sort((a, b) => {
@@ -494,9 +497,18 @@ async function buildAssetList(): Promise<AssetSummary[]> {
       );
     });
     const lifetime = myLogs.reduce((sum, l) => sum + (l.costCents ?? 0), 0);
-    const lastWithMileage = myLogs.find((l) => l.mileageAtService != null);
+    const ytd = myLogs.reduce(
+      (sum, l) =>
+        new Date(l.performedAt).getTime() >= yearStartTs ? sum + (l.costCents ?? 0) : sum,
+      0,
+    );
+    // Service interval is anchored on the most recent SCHEDULED service that
+    // captured a usage reading — that defines the next-due baseline.
+    const lastScheduled = myLogs.find(
+      (l) => l.kind === "SCHEDULED" && l.mileageAtService != null,
+    );
     const lastService = myLogs[0] ?? null;
-    const lastServiceUsage = lastWithMileage?.mileageAtService ?? null;
+    const lastServiceUsage = lastScheduled?.mileageAtService ?? null;
     const usageSinceLastService =
       lastServiceUsage != null ? Math.max(0, t.currentMileage - lastServiceUsage) : null;
     const nextDueAt = (lastServiceUsage ?? 0) + t.serviceIntervalMiles;
@@ -521,6 +533,9 @@ async function buildAssetList(): Promise<AssetSummary[]> {
       usageUntilDue,
       serviceState: deriveServiceState(usageUntilDue, t.serviceIntervalMiles),
       lifeToDateSpendCents: lifetime,
+      ytdSpendCents: ytd,
+      costPerUsageCents:
+        t.currentMileage > 0 ? Math.round(lifetime / t.currentMileage) : null,
       lastServicePerformedAt: lastService
         ? new Date(lastService.performedAt).toISOString()
         : null,
@@ -534,9 +549,16 @@ async function buildAssetList(): Promise<AssetSummary[]> {
       );
     });
     const lifetime = myLogs.reduce((sum, l) => sum + (l.costCents ?? 0), 0);
-    const lastWithHours = myLogs.find((l) => l.hoursAtService != null);
+    const ytd = myLogs.reduce(
+      (sum, l) =>
+        new Date(l.performedAt).getTime() >= yearStartTs ? sum + (l.costCents ?? 0) : sum,
+      0,
+    );
+    const lastScheduled = myLogs.find(
+      (l) => l.kind === "SCHEDULED" && l.hoursAtService != null,
+    );
     const lastService = myLogs[0] ?? null;
-    const lastServiceUsage = lastWithHours?.hoursAtService ?? null;
+    const lastServiceUsage = lastScheduled?.hoursAtService ?? null;
     const usageSinceLastService =
       lastServiceUsage != null ? Math.max(0, e.currentHours - lastServiceUsage) : null;
     const nextDueAt = (lastServiceUsage ?? 0) + e.serviceIntervalHours;
@@ -561,6 +583,9 @@ async function buildAssetList(): Promise<AssetSummary[]> {
       usageUntilDue,
       serviceState: deriveServiceState(usageUntilDue, e.serviceIntervalHours),
       lifeToDateSpendCents: lifetime,
+      ytdSpendCents: ytd,
+      costPerUsageCents:
+        e.currentHours > 0 ? Math.round(lifetime / e.currentHours) : null,
       lastServicePerformedAt: lastService
         ? new Date(lastService.performedAt).toISOString()
         : null,
@@ -601,8 +626,19 @@ function requireFleetView(): import("express").RequestHandler {
   };
 }
 
-router.get("/assets", requireAuth, requireFleetView(), async (_req, res) => {
-  const assets = await buildAssetList();
+// Per-kind viewer scope: filter assets to those the user is allowed to see.
+function viewableKinds(
+  user: NonNullable<import("express").Request["user"]>,
+): Set<"TRUCK" | "EQUIPMENT"> {
+  const kinds = new Set<"TRUCK" | "EQUIPMENT">();
+  if (hasSectionAccess(user, "fleet.trucks", "view")) kinds.add("TRUCK");
+  if (hasSectionAccess(user, "fleet.equipment", "view")) kinds.add("EQUIPMENT");
+  return kinds;
+}
+
+router.get("/assets", requireAuth, requireFleetView(), async (req, res) => {
+  const allowed = viewableKinds(req.user!);
+  const assets = (await buildAssetList()).filter((a) => allowed.has(a.kind));
   res.json({ assets });
 });
 
@@ -616,7 +652,8 @@ router.get(
       res.status(400).json({ error: "invalid_request" });
       return;
     }
-    const assets = await buildAssetList();
+    const allowed = viewableKinds(req.user!);
+    const assets = (await buildAssetList()).filter((a) => allowed.has(a.kind));
     const asset = assets.find((a) => a.slug === params.data.slug);
     if (!asset) {
       res.status(404).json({ error: "not_found" });
@@ -666,7 +703,8 @@ router.post(
       return;
     }
     const status = rawStatus as AllowedStatus;
-    const assets = await buildAssetList();
+    const allowedKinds = viewableKinds(req.user!);
+    const assets = (await buildAssetList()).filter((a) => allowedKinds.has(a.kind));
     const asset = assets.find((a) => a.slug === slug);
     if (!asset) {
       res.status(404).json({ error: "not_found" });
@@ -760,19 +798,32 @@ router.post(
 );
 
 // ---------- Fleet Pulse ----------
-router.get("/fleet-pulse", requireAuth, requireFleetView(), async (_req, res) => {
-  const assets = await buildAssetList();
+router.get("/fleet-pulse", requireAuth, requireFleetView(), async (req, res) => {
+  const allowedKinds = viewableKinds(req.user!);
+  const assets = (await buildAssetList()).filter((a) => allowedKinds.has(a.kind));
 
+  // Spec semantics:
+  //   active        = status ACTIVE
+  //   down          = RETIRED ("Out of Service")
+  //   openRepairs   = IN_SHOP (currently being repaired)
+  //   outOfService  = alias for down (kept for backward-compat consumers)
   const counts = {
     active: 0,
+    down: 0,
+    openRepairs: 0,
     inShop: 0,
     outOfService: 0,
     total: assets.length,
   };
   for (const a of assets) {
     if (a.status === "ACTIVE") counts.active++;
-    else if (a.status === "IN_SHOP") counts.inShop++;
-    else counts.outOfService++;
+    else if (a.status === "IN_SHOP") {
+      counts.inShop++;
+      counts.openRepairs++;
+    } else {
+      counts.outOfService++;
+      counts.down++;
+    }
   }
 
   const overdue = assets
@@ -781,17 +832,33 @@ router.get("/fleet-pulse", requireAuth, requireFleetView(), async (_req, res) =>
   const dueSoon = assets
     .filter((a) => a.serviceState === "DUE_SOON")
     .map(toPulseSummary);
+  // Top "money pits" rank by current-year spend (YTD), per spec.
   const topMoneyPits = assets
     .slice()
-    .sort((a, b) => b.lifeToDateSpendCents - a.lifeToDateSpendCents)
+    .sort((a, b) => b.ytdSpendCents - a.ytdSpendCents)
     .slice(0, 5)
     .map(toPulseSummary);
 
   // Monthly spend for last 12 months — and a recent-maintenance feed.
-  const logs = await db
+  // Scope logs to the user's allowed asset kinds so financial aggregates
+  // (totals, monthlySpend, recentMaintenance) never leak across permissions.
+  const allTruckIds = new Set<number>();
+  const allEquipIds = new Set<number>();
+  for (const a of assets) {
+    if (a.kind === "TRUCK") allTruckIds.add(a.id);
+    else allEquipIds.add(a.id);
+  }
+  const allLogs = await db
     .select()
     .from(maintenanceLogsTable)
     .orderBy(desc(maintenanceLogsTable.performedAt));
+  const logs = allLogs.filter((l) =>
+    l.truckId
+      ? allowedKinds.has("TRUCK") && allTruckIds.has(l.truckId)
+      : l.equipmentId
+        ? allowedKinds.has("EQUIPMENT") && allEquipIds.has(l.equipmentId)
+        : false,
+  );
   const assetBySlugIndex = new Map<string, AssetSummary>();
   for (const a of assets) {
     assetBySlugIndex.set(`${a.kind}-${a.id}`, a);
@@ -830,9 +897,11 @@ router.get("/fleet-pulse", requireAuth, requireFleetView(), async (_req, res) =>
     monthMap.set(key, { totalCents: 0, laborCents: 0, partsCents: 0 });
   }
   let last30 = 0;
+  let mtd = 0;
   let ytd = 0;
   let lifetime = 0;
   const since30 = Date.now() - 30 * 86_400_000;
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
   const yearStart = new Date(now.getFullYear(), 0, 1).getTime();
   for (const log of logs) {
     const d = new Date(log.performedAt);
@@ -847,6 +916,7 @@ router.get("/fleet-pulse", requireAuth, requireFleetView(), async (_req, res) =>
     const c = log.costCents ?? 0;
     lifetime += c;
     if (t >= yearStart) ytd += c;
+    if (t >= monthStart) mtd += c;
     if (t >= since30) last30 += c;
   }
   const monthlySpend = Array.from(monthMap.entries()).map(([month, v]) => ({
@@ -860,7 +930,12 @@ router.get("/fleet-pulse", requireAuth, requireFleetView(), async (_req, res) =>
     dueSoon,
     monthlySpend,
     topMoneyPits,
-    totals: { last30DaysCents: last30, ytdCents: ytd, lifetimeCents: lifetime },
+    totals: {
+      mtdCents: mtd,
+      last30DaysCents: last30,
+      ytdCents: ytd,
+      lifetimeCents: lifetime,
+    },
     recentMaintenance,
   });
 });
@@ -876,6 +951,7 @@ function toPulseSummary(a: AssetSummary) {
     usageUnit: a.usageUnit,
     serviceState: a.serviceState,
     lifeToDateSpendCents: a.lifeToDateSpendCents,
+    ytdSpendCents: a.ytdSpendCents,
   };
 }
 

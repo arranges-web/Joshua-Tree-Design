@@ -87,6 +87,9 @@ export function AssetRegistry() {
   const [statusFilter, setStatusFilter] = useState<
     "ALL" | "ACTIVE" | "IN_SHOP" | "RETIRED"
   >("ALL");
+  const [dueFilter, setDueFilter] = useState<
+    "ALL" | "OVERDUE" | "DUE_SOON" | "OK"
+  >("ALL");
 
   const assets = data?.assets ?? [];
 
@@ -94,6 +97,7 @@ export function AssetRegistry() {
     return assets.filter((a) => {
       if (kindFilter !== "ALL" && a.kind !== kindFilter) return false;
       if (statusFilter !== "ALL" && a.status !== statusFilter) return false;
+      if (dueFilter !== "ALL" && a.serviceState !== dueFilter) return false;
       if (query) {
         const q = query.toLowerCase();
         const haystack = [a.name, a.brand ?? "", a.model ?? "", a.identifier ?? ""]
@@ -103,7 +107,7 @@ export function AssetRegistry() {
       }
       return true;
     });
-  }, [assets, query, kindFilter, statusFilter]);
+  }, [assets, query, kindFilter, statusFilter, dueFilter]);
 
   const totals = useMemo(() => {
     const overdue = assets.filter((a) => a.serviceState === "OVERDUE").length;
@@ -181,6 +185,22 @@ export function AssetRegistry() {
               <SelectItem value="ACTIVE">Active</SelectItem>
               <SelectItem value="IN_SHOP">In Shop</SelectItem>
               <SelectItem value="RETIRED">Out of Service</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select
+            value={dueFilter}
+            onValueChange={(v) =>
+              setDueFilter(v as "ALL" | "OVERDUE" | "DUE_SOON" | "OK")
+            }
+          >
+            <SelectTrigger className="w-[170px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="ALL">All due statuses</SelectItem>
+              <SelectItem value="OVERDUE">Overdue</SelectItem>
+              <SelectItem value="DUE_SOON">Due soon</SelectItem>
+              <SelectItem value="OK">OK</SelectItem>
             </SelectContent>
           </Select>
           <div className="ml-auto text-xs text-muted-foreground">

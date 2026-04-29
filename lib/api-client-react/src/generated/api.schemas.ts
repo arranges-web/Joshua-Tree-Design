@@ -342,6 +342,10 @@ export interface Asset {
   usageUntilDue: number;
   serviceState: AssetServiceState;
   lifeToDateSpendCents: number;
+  /** Maintenance spend in the current calendar year. */
+  ytdSpendCents?: number;
+  /** Lifetime spend / current usage. cents per mile (trucks) or cents per hour (equipment). null when usage is 0. */
+  costPerUsageCents?: number | null;
   lastServicePerformedAt?: string | null;
 }
 
@@ -413,6 +417,7 @@ export interface FleetPulseAssetSummary {
   usageUnit: FleetPulseAssetSummaryUsageUnit;
   serviceState: FleetPulseAssetSummaryServiceState;
   lifeToDateSpendCents: number;
+  ytdSpendCents: number;
 }
 
 export interface FleetPulseMonthlySpend {
@@ -440,10 +445,16 @@ export type FleetPulseResponseCounts = {
   active: number;
   inShop: number;
   outOfService: number;
+  /** Assets that are RETIRED / Out of Service. */
+  down: number;
+  /** Assets currently IN_SHOP — open repairs. */
+  openRepairs: number;
   total: number;
 };
 
 export type FleetPulseResponseTotals = {
+  /** Maintenance spend month-to-date. */
+  mtdCents: number;
   last30DaysCents: number;
   ytdCents: number;
   lifetimeCents: number;
