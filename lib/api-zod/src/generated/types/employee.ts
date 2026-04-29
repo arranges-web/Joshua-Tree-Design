@@ -16,4 +16,6 @@ export interface Employee {
   departmentId?: number;
   isActive: boolean;
   createdAt: Date;
+  logCount?: number;
+  lastLoggedAt?: Date | null;
 }

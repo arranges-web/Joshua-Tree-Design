@@ -1030,6 +1030,8 @@ export const ListEmployeesResponse = zod.object({
       departmentId: zod.number().optional(),
       isActive: zod.boolean(),
       createdAt: zod.coerce.date(),
+      logCount: zod.number().optional(),
+      lastLoggedAt: zod.coerce.date().nullish(),
     }),
   ),
 });
@@ -1069,6 +1071,8 @@ export const UpdateEmployeeResponse = zod.object({
     departmentId: zod.number().optional(),
     isActive: zod.boolean(),
     createdAt: zod.coerce.date(),
+    logCount: zod.number().optional(),
+    lastLoggedAt: zod.coerce.date().nullish(),
   }),
 });
 

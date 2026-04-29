@@ -1482,6 +1482,8 @@ components:
         departmentId: { type: integer }
         isActive: { type: boolean }
         createdAt: { type: string, format: date-time }
+        logCount: { type: integer }
+        lastLoggedAt: { type: string, format: date-time, nullable: true }
     EmployeeCreateBody:
       type: object
       required: [email, fullName, password, roleId, departmentId]

@@ -89,6 +89,7 @@ function AppRouter() {
               <Route path="/assets" component={AssetRegistry} />
               <Route path="/assets/:slug" component={AssetActionPage} />
               <Route path="/maintenance" component={Maintenance} />
+              <Route path="/team" component={Employees} />
               <Route path="/employees" component={Employees} />
               <Route path="/permissions" component={Permissions} />
               <Route component={NotFound} />

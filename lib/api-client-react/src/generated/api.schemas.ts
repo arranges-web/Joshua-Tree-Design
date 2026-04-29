@@ -519,6 +519,8 @@ export interface Employee {
   departmentId?: number;
   isActive: boolean;
   createdAt: string;
+  logCount?: number;
+  lastLoggedAt?: string | null;
 }
 
 export interface EmployeeCreateBody {

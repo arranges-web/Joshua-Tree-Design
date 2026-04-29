@@ -1,12 +1,13 @@
 import { Router, type IRouter } from "express";
 import { z } from "zod";
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import {
   db,
   rolesTable,
   departmentsTable,
   usersTable,
   sectionPermissionsTable,
+  maintenanceLogsTable,
   SECTION_KEYS,
   ROLE_KEYS,
   type RoleKey,
@@ -211,25 +212,47 @@ router.get(
   requireAuth,
   requireSection("admin.users", "view"),
   async (_req, res) => {
-    const rows = await db
-      .select({
-        id: usersTable.id,
-        email: usersTable.email,
-        fullName: usersTable.fullName,
-        isActive: usersTable.isActive,
-        createdAt: usersTable.createdAt,
-        role: rolesTable.key,
-        department: departmentsTable.key,
-        roleId: rolesTable.id,
-        departmentId: departmentsTable.id,
-      })
-      .from(usersTable)
-      .innerJoin(rolesTable, eq(usersTable.roleId, rolesTable.id))
-      .innerJoin(
-        departmentsTable,
-        eq(usersTable.departmentId, departmentsTable.id),
-      );
-    res.json({ employees: rows });
+    const [rows, activityRows] = await Promise.all([
+      db
+        .select({
+          id: usersTable.id,
+          email: usersTable.email,
+          fullName: usersTable.fullName,
+          isActive: usersTable.isActive,
+          createdAt: usersTable.createdAt,
+          role: rolesTable.key,
+          department: departmentsTable.key,
+          roleId: rolesTable.id,
+          departmentId: departmentsTable.id,
+        })
+        .from(usersTable)
+        .innerJoin(rolesTable, eq(usersTable.roleId, rolesTable.id))
+        .innerJoin(
+          departmentsTable,
+          eq(usersTable.departmentId, departmentsTable.id),
+        ),
+      db
+        .select({
+          userId: maintenanceLogsTable.loggedByUserId,
+          logCount: sql<number>`count(*)::int`,
+          lastLoggedAt: sql<string | null>`max(${maintenanceLogsTable.performedAt})`,
+        })
+        .from(maintenanceLogsTable)
+        .where(sql`${maintenanceLogsTable.loggedByUserId} is not null`)
+        .groupBy(maintenanceLogsTable.loggedByUserId),
+    ]);
+
+    const activityMap = new Map(
+      activityRows.map((r) => [r.userId, { logCount: r.logCount, lastLoggedAt: r.lastLoggedAt }]),
+    );
+
+    const employees = rows.map((r) => ({
+      ...r,
+      logCount: activityMap.get(r.id)?.logCount ?? 0,
+      lastLoggedAt: activityMap.get(r.id)?.lastLoggedAt ?? null,
+    }));
+
+    res.json({ employees });
   },
 );
 
