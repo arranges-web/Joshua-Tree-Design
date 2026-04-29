@@ -46,7 +46,7 @@ const NAV_GROUPS: Array<{
     items: [
       { href: "/fleet", label: "Fleet Pulse", icon: Activity },
       { href: "/assets", label: "Asset Registry", icon: Package },
-      { href: "/maintenance", label: "Maintenance", icon: Wrench },
+      { href: "/maintenance", label: "Maintenance Log", icon: Wrench },
     ],
   },
   {
