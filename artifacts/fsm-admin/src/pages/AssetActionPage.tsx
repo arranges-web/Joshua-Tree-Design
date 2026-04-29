@@ -9,6 +9,7 @@ import {
   useCreateMaintenanceLog,
   useSetAssetStatus,
   useGetAssetStatusHistory,
+  getGetAssetStatusHistoryQueryKey,
   getListMaintenanceLogsQueryKey,
   getListAssetsQueryKey,
   getGetFleetPulseQueryKey,
@@ -705,6 +706,7 @@ function ChangeStatusCard({
           });
           queryClient.invalidateQueries({ queryKey: getListAssetsQueryKey() });
           queryClient.invalidateQueries({ queryKey: getGetFleetPulseQueryKey() });
+          queryClient.invalidateQueries({ queryKey: getGetAssetStatusHistoryQueryKey(asset.slug) });
           toast({ title: `Status changed to ${statusLabel(status)}` });
           setTouched(false);
         },
