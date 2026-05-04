@@ -42,10 +42,9 @@ export const trucksTable = pgTable(
     vin: text("vin"),
     plate: text("plate"),
     status: truckStatusEnum("status").notNull().default("ACTIVE"),
-    departmentId: integer("department_id").references(
-      () => departmentsTable.id,
-      { onDelete: "set null" },
-    ),
+    departmentId: integer("department_id")
+      .notNull()
+      .references(() => departmentsTable.id, { onDelete: "restrict" }),
     assignedCrewId: integer("assigned_crew_id").references(
       () => crewsTable.id,
       { onDelete: "set null" },
@@ -74,10 +73,9 @@ export const equipmentTable = pgTable(
     model: text("model"),
     serial: text("serial"),
     status: equipmentStatusEnum("status").notNull().default("ACTIVE"),
-    departmentId: integer("department_id").references(
-      () => departmentsTable.id,
-      { onDelete: "set null" },
-    ),
+    departmentId: integer("department_id")
+      .notNull()
+      .references(() => departmentsTable.id, { onDelete: "restrict" }),
     assignedTruckId: integer("assigned_truck_id").references(
       () => trucksTable.id,
       { onDelete: "set null" },

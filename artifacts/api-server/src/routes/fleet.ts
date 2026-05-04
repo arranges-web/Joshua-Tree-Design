@@ -84,6 +84,11 @@ router.post(
       }
       effectiveDeptId = userDept;
     }
+    // Every asset must be assigned to a department going forward.
+    if (effectiveDeptId == null) {
+      res.status(400).json({ error: "department_required", detail: "departmentId is required when creating a fleet asset" });
+      return;
+    }
     const [row] = await db
       .insert(trucksTable)
       .values({
@@ -147,8 +152,14 @@ router.patch(
     if (d.status !== undefined) patch.status = d.status as FleetStatus;
     if (d.assignedCrewId !== undefined)
       patch.assignedCrewId = d.assignedCrewId ?? null;
-    if (d.departmentId !== undefined)
-      patch.departmentId = d.departmentId ?? null;
+    if (d.departmentId !== undefined) {
+      // Admins may reassign but may not un-assign (departmentId must remain non-null).
+      if (d.departmentId == null) {
+        res.status(400).json({ error: "department_required", detail: "departmentId cannot be removed from an asset" });
+        return;
+      }
+      patch.departmentId = d.departmentId;
+    }
     if (d.purchasePriceCents !== undefined)
       patch.purchasePriceCents = d.purchasePriceCents ?? null;
     if (d.purchaseDate !== undefined)
@@ -228,6 +239,11 @@ router.post(
       }
       effectiveDeptId = userDept;
     }
+    // Every asset must be assigned to a department going forward.
+    if (effectiveDeptId == null) {
+      res.status(400).json({ error: "department_required", detail: "departmentId is required when creating a fleet asset" });
+      return;
+    }
     const [row] = await db
       .insert(equipmentTable)
       .values({
@@ -290,8 +306,14 @@ router.patch(
     if (d.status !== undefined) patch.status = d.status as FleetStatus;
     if (d.assignedTruckId !== undefined)
       patch.assignedTruckId = d.assignedTruckId ?? null;
-    if (d.departmentId !== undefined)
-      patch.departmentId = d.departmentId ?? null;
+    if (d.departmentId !== undefined) {
+      // Admins may reassign but may not un-assign (departmentId must remain non-null).
+      if (d.departmentId == null) {
+        res.status(400).json({ error: "department_required", detail: "departmentId cannot be removed from an asset" });
+        return;
+      }
+      patch.departmentId = d.departmentId;
+    }
     if (d.purchasePriceCents !== undefined)
       patch.purchasePriceCents = d.purchasePriceCents ?? null;
     if (d.purchaseDate !== undefined)

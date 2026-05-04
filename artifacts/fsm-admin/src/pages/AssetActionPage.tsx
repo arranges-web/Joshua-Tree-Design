@@ -663,19 +663,19 @@ function ChangeDepartmentCard({
   const updateEquipment = useUpdateEquipment();
 
   const [selectedDeptId, setSelectedDeptId] = useState<string>(
-    asset.departmentId != null ? String(asset.departmentId) : "__none__",
+    asset.departmentId != null ? String(asset.departmentId) : "",
   );
   const [touched, setTouched] = useState(false);
 
   if (!isAdmin || departments.length === 0) return null;
 
-  const currentVal = asset.departmentId != null ? String(asset.departmentId) : "__none__";
-  const dirty = touched && selectedDeptId !== currentVal;
+  const currentVal = asset.departmentId != null ? String(asset.departmentId) : "";
+  const dirty = touched && selectedDeptId !== currentVal && selectedDeptId !== "";
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!dirty) return;
-    const deptId = selectedDeptId === "__none__" ? null : Number(selectedDeptId);
+    if (!dirty || selectedDeptId === "") return;
+    const deptId = Number(selectedDeptId);
     const opts = {
       onSuccess: () => {
         queryClient.invalidateQueries({ queryKey: getGetAssetBySlugQueryKey(asset.slug) });
@@ -717,7 +717,6 @@ function ChangeDepartmentCard({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="__none__">— Unassigned —</SelectItem>
                 {departments.map((d) => (
                   <SelectItem key={d.id} value={String(d.id)}>
                     {d.label}

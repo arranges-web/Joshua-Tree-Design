@@ -58,10 +58,14 @@ function Brand() {
 }
 
 function DepartmentSwitcher() {
-  const { isAdmin, activeDeptId, setActiveDeptId } = useDepartmentFilter();
-  const { data: deptsData } = useListDepartments();
-
+  const { isAdmin } = useDepartmentFilter();
   if (!isAdmin) return null;
+  return <DepartmentSwitcherInner />;
+}
+
+function DepartmentSwitcherInner() {
+  const { activeDeptId, setActiveDeptId } = useDepartmentFilter();
+  const { data: deptsData } = useListDepartments();
 
   const depts = deptsData?.departments ?? [];
   const value = activeDeptId == null ? "all" : String(activeDeptId);
