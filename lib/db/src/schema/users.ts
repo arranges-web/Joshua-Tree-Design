@@ -12,7 +12,13 @@ import {
 // Role keys (kept as a TS const for type-safety). The actual `roles` table
 // is the source of truth at runtime so admins can extend roles via the
 // permission panel without code changes.
-export const ROLE_KEYS = ["ADMIN", "SALES", "CREW_LEAD", "MECHANIC"] as const;
+export const ROLE_KEYS = [
+  "ADMIN",
+  "SALES",
+  "CREW_LEAD",
+  "MECHANIC",
+  "ACCOUNTING_MANAGER",
+] as const;
 export type RoleKey = (typeof ROLE_KEYS)[number];
 
 export const DEPARTMENT_KEYS = ["Admin", "Sales", "Landscaping", "TreeService", "Fleet"] as const;

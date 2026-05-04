@@ -10,6 +10,7 @@ import {
   Activity,
   Package,
   Building2,
+  Calculator,
 } from "lucide-react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import {
@@ -24,10 +25,15 @@ import { useQueryClient } from "@tanstack/react-query";
 import { getGetMeQueryKey } from "@workspace/api-client-react";
 import { DepartmentProvider, useDepartmentFilter } from "@/context/DepartmentContext";
 
-const NAV_GROUPS: Array<{
+type NavItem = {
+  href: string;
   label: string;
-  items: Array<{ href: string; label: string; icon: typeof Users }>;
-}> = [
+  icon: typeof Users;
+  // Roles permitted to see this nav entry. ADMIN always sees everything.
+  roles?: ReadonlyArray<string>;
+};
+
+const NAV_GROUPS: Array<{ label: string; items: NavItem[] }> = [
   {
     label: "Fleet & Shop",
     items: [
@@ -35,6 +41,17 @@ const NAV_GROUPS: Array<{
       { href: "/assets", label: "Asset Registry", icon: Package },
       { href: "/maintenance", label: "Maintenance Log", icon: Wrench },
       { href: "/team", label: "Team", icon: Users },
+    ],
+  },
+  {
+    label: "Finance",
+    items: [
+      {
+        href: "/accounting",
+        label: "Accounting",
+        icon: Calculator,
+        roles: ["ADMIN", "ACCOUNTING_MANAGER"],
+      },
     ],
   },
 ];
@@ -112,9 +129,17 @@ function ShellInner({ children }: { children: React.ReactNode }) {
     });
   };
 
+  const role = authData?.user?.role ?? null;
+  const visibleGroups = NAV_GROUPS.map((group) => ({
+    ...group,
+    items: group.items.filter(
+      (item) => !item.roles || (role != null && item.roles.includes(role)),
+    ),
+  })).filter((group) => group.items.length > 0);
+
   const NavLinks = () => (
     <nav className="flex flex-col gap-5 py-4">
-      {NAV_GROUPS.map((group) => (
+      {visibleGroups.map((group) => (
         <div key={group.label} className="flex flex-col gap-1">
           <div className="px-3 pb-1 text-[10px] font-mono uppercase tracking-[0.18em] text-sidebar-foreground/50">
             {group.label}

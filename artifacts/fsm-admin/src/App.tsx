@@ -21,6 +21,7 @@ import { AssetActionPage } from "@/pages/AssetActionPage";
 import { Maintenance } from "@/pages/Maintenance";
 import { Employees } from "@/pages/Employees";
 import { Permissions } from "@/pages/Permissions";
+import { Accounting } from "@/pages/Accounting";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -92,6 +93,7 @@ function AppRouter() {
               <Route path="/team" component={Employees} />
               <Route path="/employees" component={Employees} />
               <Route path="/permissions" component={Permissions} />
+              <Route path="/accounting" component={Accounting} />
               <Route component={NotFound} />
             </Switch>
           </Shell>

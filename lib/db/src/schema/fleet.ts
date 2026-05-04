@@ -32,11 +32,19 @@ export const maintenanceKindEnum = pgEnum("maintenance_kind", [
   "INSPECTION",
 ]);
 
+// Trucks and trailers share the same physical-asset shape (VIN, plate,
+// make/model, departmental ownership). The `vehicle_type` discriminator
+// lets the registry surface them as separate top-level categories while
+// keeping a single insert/update code path. Trailers inherit the mileage
+// columns but the UI hides them — trailers don't track usage.
+export const vehicleTypeEnum = pgEnum("vehicle_type", ["TRUCK", "TRAILER"]);
+
 export const trucksTable = pgTable(
   "trucks",
   {
     id: serial("id").primaryKey(),
     name: text("name").notNull(),
+    vehicleType: vehicleTypeEnum("vehicle_type").notNull().default("TRUCK"),
     brand: text("brand"),
     model: text("model"),
     vin: text("vin"),
@@ -49,6 +57,11 @@ export const trucksTable = pgTable(
       () => crewsTable.id,
       { onDelete: "set null" },
     ),
+    lastAssignedByUserId: integer("last_assigned_by_user_id").references(
+      () => usersTable.id,
+      { onDelete: "set null" },
+    ),
+    lastAssignedAt: timestamp("last_assigned_at", { withTimezone: true }),
     purchasePriceCents: integer("purchase_price_cents"),
     purchaseDate: timestamp("purchase_date", { withTimezone: true }),
     currentMileage: integer("current_mileage").notNull().default(0),
@@ -63,12 +76,26 @@ export const trucksTable = pgTable(
   ],
 );
 
+// Two non-vehicle asset categories live in this table:
+//   HANDHELD — chainsaws, blowers, hand tools. Quantity > 1 supported
+//              so "30 shovels" is one row with quantity=30.
+//   CUSTOM   — anything else (heavy powered equipment, safety gear,
+//              consumables). `customCategoryLabel` is a free-form label
+//              ("Heavy Equipment", "Safety Gear") that drives grouping.
+export const equipmentCategoryEnum = pgEnum("equipment_category", [
+  "HANDHELD",
+  "CUSTOM",
+]);
+
 export const equipmentTable = pgTable(
   "equipment",
   {
     id: serial("id").primaryKey(),
     name: text("name").notNull(),
     type: text("type").notNull(),
+    category: equipmentCategoryEnum("category").notNull().default("HANDHELD"),
+    customCategoryLabel: text("custom_category_label"),
+    quantity: integer("quantity").notNull().default(1),
     brand: text("brand"),
     model: text("model"),
     serial: text("serial"),
@@ -80,6 +107,15 @@ export const equipmentTable = pgTable(
       () => trucksTable.id,
       { onDelete: "set null" },
     ),
+    assignedCrewId: integer("assigned_crew_id").references(
+      () => crewsTable.id,
+      { onDelete: "set null" },
+    ),
+    lastAssignedByUserId: integer("last_assigned_by_user_id").references(
+      () => usersTable.id,
+      { onDelete: "set null" },
+    ),
+    lastAssignedAt: timestamp("last_assigned_at", { withTimezone: true }),
     purchasePriceCents: integer("purchase_price_cents"),
     purchaseDate: timestamp("purchase_date", { withTimezone: true }),
     currentHours: integer("current_hours").notNull().default(0),
@@ -156,6 +192,39 @@ export const assetStatusLogTable = pgTable(
   ],
 );
 
+// Audit trail for crew-assignment changes. One row per change. Mirrors
+// the `asset_status_log` shape so a single (assetType, assetId) pair can
+// resolve back to the underlying truck/equipment row.
+//   - newCrewId == null && oldCrewId != null → "returned" / unassigned
+//   - newCrewId != null && oldCrewId == null → first assignment
+//   - both non-null with different ids       → reassignment
+export const assetAssignmentLogTable = pgTable(
+  "asset_assignment_log",
+  {
+    id: serial("id").primaryKey(),
+    assetType: text("asset_type").notNull(), // "TRUCK" | "EQUIPMENT"
+    assetId: integer("asset_id").notNull(),
+    oldCrewId: integer("old_crew_id").references(() => crewsTable.id, {
+      onDelete: "set null",
+    }),
+    newCrewId: integer("new_crew_id").references(() => crewsTable.id, {
+      onDelete: "set null",
+    }),
+    changedByUserId: integer("changed_by_user_id").references(
+      () => usersTable.id,
+      { onDelete: "set null" },
+    ),
+    changedAt: timestamp("changed_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    note: text("note"),
+  },
+  (t) => [
+    index("asset_assignment_log_asset_idx").on(t.assetType, t.assetId),
+    index("asset_assignment_log_changed_at_idx").on(t.changedAt),
+  ],
+);
+
 export const usageReadingsTable = pgTable(
   "usage_readings",
   {
@@ -189,6 +258,7 @@ export type Equipment = typeof equipmentTable.$inferSelect;
 export type MaintenanceLog = typeof maintenanceLogsTable.$inferSelect;
 export type UsageReading = typeof usageReadingsTable.$inferSelect;
 export type AssetStatusLog = typeof assetStatusLogTable.$inferSelect;
+export type AssetAssignmentLog = typeof assetAssignmentLogTable.$inferSelect;
 
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 export const insertTruckSchema = createInsertSchema(trucksTable);

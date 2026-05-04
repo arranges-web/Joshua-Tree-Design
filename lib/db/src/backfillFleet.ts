@@ -18,6 +18,7 @@ import {
 export async function backfillFleetData(): Promise<void> {
   await backfillTruckFixtures();
   await backfillEquipmentFixtures();
+  await backfillEquipmentCategories();
   await backfillMaintenanceLogs();
   await backfillSlugs();
   // Demo enrichment (extra synthetic assets) is gated to non-production
@@ -25,6 +26,7 @@ export async function backfillFleetData(): Promise<void> {
   // operators should add their own assets via the Asset Registry UI.
   if (process.env.NODE_ENV !== "production") {
     await ensureExtraAssets();
+    await ensureExtraTrailersAndHandhelds();
   }
 }
 
@@ -150,6 +152,47 @@ async function backfillEquipmentFixtures() {
         purchaseDate: fix.purchaseDate,
         currentHours: fix.currentHours,
         serviceIntervalHours: fix.serviceIntervalHours,
+      })
+      .where(eq(equipmentTable.id, e.id));
+  }
+}
+
+// Map pre-category equipment rows onto the new four-category model.
+// Chainsaws and similar tools become HANDHELD; chippers / grinders /
+// other large powered gear becomes CUSTOM with a "Heavy Equipment" label.
+// Idempotent: only touches rows whose category is still the default and
+// whose name is in our explicit migration map.
+const EQUIPMENT_CATEGORY_MIGRATION: Record<
+  string,
+  { category: "HANDHELD" | "CUSTOM"; customCategoryLabel: string | null }
+> = {
+  "Stihl MS-462": { category: "HANDHELD", customCategoryLabel: null },
+  "Husqvarna 572 XP": { category: "HANDHELD", customCategoryLabel: null },
+  "Vermeer BC1500": { category: "CUSTOM", customCategoryLabel: "Heavy Equipment" },
+  "Bandit 21XP Chipper": {
+    category: "CUSTOM",
+    customCategoryLabel: "Heavy Equipment",
+  },
+  "Toro STX-38 Stump Grinder": {
+    category: "CUSTOM",
+    customCategoryLabel: "Heavy Equipment",
+  },
+};
+
+async function backfillEquipmentCategories() {
+  const equipment = await db.select().from(equipmentTable);
+  for (const e of equipment) {
+    const fix = EQUIPMENT_CATEGORY_MIGRATION[e.name];
+    if (!fix) continue;
+    // Already migrated — don't trample admin edits.
+    if (e.category === fix.category && e.customCategoryLabel === fix.customCategoryLabel) {
+      continue;
+    }
+    await db
+      .update(equipmentTable)
+      .set({
+        category: fix.category,
+        customCategoryLabel: fix.customCategoryLabel,
       })
       .where(eq(equipmentTable.id, e.id));
   }
@@ -384,6 +427,193 @@ async function ensureExtraAssets() {
           hoursAtService: Math.max(0, fix.currentHours - 12),
         },
       ]);
+    }
+  }
+}
+
+// Demo data for the new asset categories: trailers (vehicle-like, no
+// mileage usage), handheld tools with quantity > 1, and custom-labelled
+// items. Idempotent — keyed by `name`. Only runs in non-production.
+const EXTRA_TRAILERS = [
+  {
+    name: "TR-01 Equipment Trailer",
+    brand: "Big Tex",
+    model: "14ET-20",
+    vin: "16VEX2024N0001",
+    plate: "JT-TR-01",
+    purchasePriceCents: 1_280_000,
+    purchaseDate: new Date(2024, 1, 12),
+  },
+  {
+    name: "TR-02 Mulch Dump Trailer",
+    brand: "PJ",
+    model: "DM-14",
+    vin: "4P5DM1424P0002",
+    plate: "JT-TR-02",
+    purchasePriceCents: 980_000,
+    purchaseDate: new Date(2023, 10, 4),
+  },
+];
+
+const EXTRA_HANDHELD = [
+  {
+    name: "Pole Saws",
+    type: "Pole Saw",
+    brand: "Stihl",
+    model: "HT 135",
+    quantity: 4,
+    purchasePriceCents: 79_900,
+    purchaseDate: new Date(2024, 5, 10),
+  },
+  {
+    name: "Shovels",
+    type: "Hand Tool",
+    brand: "Fiskars",
+    model: "Pro Round-Point",
+    quantity: 30,
+    purchasePriceCents: 4_500,
+    purchaseDate: new Date(2023, 2, 18),
+  },
+  {
+    name: "Hedge Trimmers",
+    type: "Trimmer",
+    brand: "Echo",
+    model: "HC-2020",
+    quantity: 6,
+    purchasePriceCents: 38_900,
+    purchaseDate: new Date(2024, 8, 1),
+  },
+];
+
+const EXTRA_CUSTOM = [
+  {
+    name: "Climbing Helmets",
+    type: "PPE",
+    brand: "Petzl",
+    model: "Vertex Vent",
+    quantity: 12,
+    customCategoryLabel: "Safety Gear",
+    purchasePriceCents: 14_900,
+    purchaseDate: new Date(2024, 3, 22),
+  },
+  {
+    name: "Climbing Harnesses",
+    type: "PPE",
+    brand: "Buckingham",
+    model: "BuckOhm",
+    quantity: 8,
+    customCategoryLabel: "Safety Gear",
+    purchasePriceCents: 39_900,
+    purchaseDate: new Date(2024, 4, 9),
+  },
+  {
+    name: "Battery Drills",
+    type: "Power Tool",
+    brand: "Milwaukee",
+    model: "M18 Fuel",
+    quantity: 5,
+    customCategoryLabel: "Power Tools",
+    purchasePriceCents: 24_900,
+    purchaseDate: new Date(2024, 6, 14),
+  },
+];
+
+async function ensureExtraTrailersAndHandhelds() {
+  const { departmentsTable } = await import("./schema");
+  const allDepts = await db.select().from(departmentsTable);
+  const fleetDeptId = allDepts.find((d) => d.key === "Fleet")?.id ?? allDepts[0]?.id;
+  const tsDeptId = allDepts.find((d) => d.key === "TreeService")?.id ?? fleetDeptId;
+  const lsDeptId = allDepts.find((d) => d.key === "Landscaping")?.id ?? fleetDeptId;
+  if (fleetDeptId == null) return;
+
+  // Trailers piggy-back on the trucks table via the vehicle_type
+  // discriminator; mileage stays at 0 because the UI hides usage for
+  // trailers — but the columns are NOT NULL so we still populate them.
+  const trucks = await db.select().from(trucksTable);
+  const truckNames = new Set(trucks.map((t) => t.name));
+  for (const fix of EXTRA_TRAILERS) {
+    if (truckNames.has(fix.name)) continue;
+    const [row] = await db
+      .insert(trucksTable)
+      .values({
+        name: fix.name,
+        vehicleType: "TRAILER",
+        brand: fix.brand,
+        model: fix.model,
+        vin: fix.vin,
+        plate: fix.plate,
+        status: "ACTIVE",
+        departmentId: fleetDeptId,
+        purchasePriceCents: fix.purchasePriceCents,
+        purchaseDate: fix.purchaseDate,
+        currentMileage: 0,
+        serviceIntervalMiles: 0,
+      })
+      .returning();
+    if (row) {
+      await db
+        .update(trucksTable)
+        .set({ slug: makeAssetSlug("truck", row.id, row.name) })
+        .where(eq(trucksTable.id, row.id));
+    }
+  }
+
+  const equip = await db.select().from(equipmentTable);
+  const equipNames = new Set(equip.map((e) => e.name));
+  // Handheld goes under TreeService (chainsaw-adjacent crews); custom
+  // gear is split across Landscaping / TreeService for variety.
+  for (const fix of EXTRA_HANDHELD) {
+    if (equipNames.has(fix.name)) continue;
+    const [row] = await db
+      .insert(equipmentTable)
+      .values({
+        name: fix.name,
+        type: fix.type,
+        category: "HANDHELD",
+        quantity: fix.quantity,
+        brand: fix.brand,
+        model: fix.model,
+        status: "ACTIVE",
+        departmentId: tsDeptId ?? fleetDeptId,
+        purchasePriceCents: fix.purchasePriceCents,
+        purchaseDate: fix.purchaseDate,
+        currentHours: 0,
+        serviceIntervalHours: 0,
+      })
+      .returning();
+    if (row) {
+      await db
+        .update(equipmentTable)
+        .set({ slug: makeAssetSlug("equip", row.id, row.name) })
+        .where(eq(equipmentTable.id, row.id));
+    }
+  }
+
+  for (const fix of EXTRA_CUSTOM) {
+    if (equipNames.has(fix.name)) continue;
+    const [row] = await db
+      .insert(equipmentTable)
+      .values({
+        name: fix.name,
+        type: fix.type,
+        category: "CUSTOM",
+        customCategoryLabel: fix.customCategoryLabel,
+        quantity: fix.quantity,
+        brand: fix.brand,
+        model: fix.model,
+        status: "ACTIVE",
+        departmentId: lsDeptId ?? fleetDeptId,
+        purchasePriceCents: fix.purchasePriceCents,
+        purchaseDate: fix.purchaseDate,
+        currentHours: 0,
+        serviceIntervalHours: 0,
+      })
+      .returning();
+    if (row) {
+      await db
+        .update(equipmentTable)
+        .set({ slug: makeAssetSlug("equip", row.id, row.name) })
+        .where(eq(equipmentTable.id, row.id));
     }
   }
 }

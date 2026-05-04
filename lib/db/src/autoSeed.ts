@@ -29,6 +29,7 @@ const ROLE_LABELS: Record<RoleKey, string> = {
   SALES: "Sales / Estimator",
   CREW_LEAD: "Field Crew Lead",
   MECHANIC: "Mechanic / Fleet",
+  ACCOUNTING_MANAGER: "Accounting Manager",
 };
 
 const DEPT_LABELS: Record<DepartmentKey, string> = {
@@ -63,6 +64,7 @@ const DEFAULT_MATRIX: Record<
     "sales.calendar": { canView: true, canEdit: true },
     "reports.financials": { canView: false, canEdit: false },
     leads: { canView: true, canEdit: true },
+    accounting: { canView: false, canEdit: false },
   },
   CREW_LEAD: {
     "dashboard.global": { canView: false, canEdit: false },
@@ -81,6 +83,7 @@ const DEFAULT_MATRIX: Record<
     "sales.calendar": { canView: false, canEdit: false },
     "reports.financials": { canView: false, canEdit: false },
     leads: { canView: false, canEdit: false },
+    accounting: { canView: false, canEdit: false },
   },
   MECHANIC: {
     "dashboard.global": { canView: false, canEdit: false },
@@ -99,6 +102,26 @@ const DEFAULT_MATRIX: Record<
     "sales.calendar": { canView: false, canEdit: false },
     "reports.financials": { canView: false, canEdit: false },
     leads: { canView: false, canEdit: false },
+    accounting: { canView: false, canEdit: false },
+  },
+  ACCOUNTING_MANAGER: {
+    "dashboard.global": { canView: true, canEdit: false },
+    customers: { canView: true, canEdit: false },
+    jobs: { canView: true, canEdit: false },
+    quotes: { canView: true, canEdit: false },
+    invoices: { canView: true, canEdit: false },
+    "fleet.trucks": { canView: true, canEdit: false },
+    "fleet.equipment": { canView: true, canEdit: false },
+    "fleet.maintenance": { canView: true, canEdit: false },
+    "admin.users": { canView: false, canEdit: false },
+    "admin.permissions": { canView: false, canEdit: false },
+    "field.job_site": { canView: false, canEdit: false },
+    "field.photos": { canView: false, canEdit: false },
+    "field.safety": { canView: false, canEdit: false },
+    "sales.calendar": { canView: false, canEdit: false },
+    "reports.financials": { canView: true, canEdit: false },
+    leads: { canView: false, canEdit: false },
+    accounting: { canView: true, canEdit: false },
   },
 };
 
@@ -157,6 +180,7 @@ export async function populateData(): Promise<void> {
     { email: "lead2@joshuatreeinc.test",    fullName: "Cathy CrewLead", role: "CREW_LEAD" as RoleKey, dept: "Landscaping" as DepartmentKey },
     { email: "lead3@joshuatreeinc.test",    fullName: "Bobby CrewLead", role: "CREW_LEAD" as RoleKey, dept: "TreeService"  as DepartmentKey },
     { email: "mechanic@joshuatreeinc.test", fullName: "Mike Mechanic",  role: "MECHANIC"  as RoleKey, dept: "Fleet"        as DepartmentKey },
+    { email: "accounting@joshuatreeinc.test", fullName: "Anna Accountant", role: "ACCOUNTING_MANAGER" as RoleKey, dept: "Admin"      as DepartmentKey },
   ];
   const insertedUsers = await db
     .insert(usersTable)
