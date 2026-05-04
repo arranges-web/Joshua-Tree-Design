@@ -134,6 +134,8 @@ router.patch(
       res.status(403).json({ error: "forbidden", detail: "only admins may change department assignment" });
       return;
     }
+    // Verify non-admin callers can only mutate assets in their own department.
+    if (!(await assertAssetInScope(req, res, { truckId: params.data.id }))) return;
     // PATCH semantics: only update fields explicitly present in the body so
     // partial updates do not unintentionally clear existing values.
     const patch: Record<string, unknown> = {};
@@ -178,6 +180,7 @@ router.delete(
       res.status(400).json({ error: "invalid_request" });
       return;
     }
+    if (!(await assertAssetInScope(req, res, { truckId: params.data.id }))) return;
     const deleted = await db
       .delete(trucksTable)
       .where(eq(trucksTable.id, params.data.id))
@@ -275,6 +278,8 @@ router.patch(
       res.status(403).json({ error: "forbidden", detail: "only admins may change department assignment" });
       return;
     }
+    // Verify non-admin callers can only mutate assets in their own department.
+    if (!(await assertAssetInScope(req, res, { equipmentId: params.data.id }))) return;
     // PATCH semantics: only update fields explicitly present in the body.
     const patch: Record<string, unknown> = {};
     if (d.name !== undefined) patch.name = d.name;
@@ -318,6 +323,7 @@ router.delete(
       res.status(400).json({ error: "invalid_request" });
       return;
     }
+    if (!(await assertAssetInScope(req, res, { equipmentId: params.data.id }))) return;
     const deleted = await db
       .delete(equipmentTable)
       .where(eq(equipmentTable.id, params.data.id))
@@ -438,6 +444,11 @@ router.post(
         .json({ error: "must_target_exactly_one_asset" });
       return;
     }
+    // Verify non-admin callers can only log against assets in their own dept.
+    if (!(await assertAssetInScope(req, res, {
+      truckId: parsed.data.truckId,
+      equipmentId: parsed.data.equipmentId,
+    }))) return;
     const [row] = await db
       .insert(maintenanceLogsTable)
       // buildLogValues("create") always sets description/labor/parts/cost.
@@ -490,6 +501,7 @@ router.patch(
       res.status(400).json({ error: "invalid_request" });
       return;
     }
+    if (!(await assertMaintenanceLogInScope(req, res, params.data.id))) return;
     const values = buildLogValues(body.data, "patch") as Record<
       string,
       unknown
@@ -543,6 +555,7 @@ router.delete(
       res.status(400).json({ error: "invalid_request" });
       return;
     }
+    if (!(await assertMaintenanceLogInScope(req, res, params.data.id))) return;
     const deleted = await db
       .delete(maintenanceLogsTable)
       .where(eq(maintenanceLogsTable.id, params.data.id))
@@ -789,6 +802,76 @@ function resolveDeptId(req: import("express").Request): number | undefined {
   return user.departmentId;
 }
 
+/**
+ * For non-admin callers, verify the target truck/equipment belongs to the same
+ * department as the caller.  Returns true on success (or for admins); returns
+ * false after sending a 403/404 response so the caller can immediately return.
+ */
+async function assertAssetInScope(
+  req: import("express").Request,
+  res: import("express").Response,
+  opts: { truckId?: number | null; equipmentId?: number | null },
+): Promise<boolean> {
+  const user = req.user!;
+  if (user.role === "ADMIN") return true;
+
+  const userDept = user.departmentId;
+
+  if (opts.truckId != null) {
+    const [truck] = await db
+      .select({ departmentId: trucksTable.departmentId })
+      .from(trucksTable)
+      .where(eq(trucksTable.id, opts.truckId));
+    if (!truck) {
+      res.status(404).json({ error: "not_found" });
+      return false;
+    }
+    if (truck.departmentId !== userDept) {
+      res.status(403).json({ error: "forbidden", detail: "asset belongs to a different department" });
+      return false;
+    }
+  }
+
+  if (opts.equipmentId != null) {
+    const [equip] = await db
+      .select({ departmentId: equipmentTable.departmentId })
+      .from(equipmentTable)
+      .where(eq(equipmentTable.id, opts.equipmentId));
+    if (!equip) {
+      res.status(404).json({ error: "not_found" });
+      return false;
+    }
+    if (equip.departmentId !== userDept) {
+      res.status(403).json({ error: "forbidden", detail: "asset belongs to a different department" });
+      return false;
+    }
+  }
+
+  return true;
+}
+
+/**
+ * Same as assertAssetInScope but resolves the asset from a maintenance log id.
+ */
+async function assertMaintenanceLogInScope(
+  req: import("express").Request,
+  res: import("express").Response,
+  logId: number,
+): Promise<boolean> {
+  const user = req.user!;
+  if (user.role === "ADMIN") return true;
+
+  const [log] = await db
+    .select({ truckId: maintenanceLogsTable.truckId, equipmentId: maintenanceLogsTable.equipmentId })
+    .from(maintenanceLogsTable)
+    .where(eq(maintenanceLogsTable.id, logId));
+  if (!log) {
+    res.status(404).json({ error: "not_found" });
+    return false;
+  }
+  return assertAssetInScope(req, res, { truckId: log.truckId, equipmentId: log.equipmentId });
+}
+
 router.get("/assets", requireAuth, requireFleetView(), async (req, res) => {
   const allowed = viewableKinds(req.user!);
   const assets = (await buildAssetList(resolveDeptId(req))).filter((a) => allowed.has(a.kind));
@@ -874,7 +957,9 @@ router.post(
     }
     const status = rawStatus as AllowedStatus;
     const allowedKinds = viewableKinds(req.user!);
-    const assets = (await buildAssetList()).filter((a) => allowedKinds.has(a.kind));
+    // Scope to user's department for non-admins so they cannot change status
+    // of assets belonging to a different department.
+    const assets = (await buildAssetList(resolveDeptId(req))).filter((a) => allowedKinds.has(a.kind));
     const asset = assets.find((a) => a.slug === slug);
     if (!asset) {
       res.status(404).json({ error: "not_found" });
@@ -902,7 +987,7 @@ router.post(
       });
     }
     // Re-query so we return the freshest summary, including derived fields.
-    const refreshed = (await buildAssetList()).find((a) => a.slug === slug);
+    const refreshed = (await buildAssetList(resolveDeptId(req))).find((a) => a.slug === slug);
     res.json({ asset: refreshed, logs: [], recentReadings: [] });
   },
 );
@@ -984,6 +1069,8 @@ router.post(
       res.status(400).json({ error: "equipment_requires_hours" });
       return;
     }
+    // Verify non-admin callers can only record readings for their own dept's assets.
+    if (!(await assertAssetInScope(req, res, { truckId, equipmentId }))) return;
 
     const userId = req.user?.id ?? null;
     const [row] = await db
