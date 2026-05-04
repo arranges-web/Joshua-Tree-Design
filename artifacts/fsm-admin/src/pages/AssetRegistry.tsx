@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { Link } from "wouter";
-import { useListAssets } from "@workspace/api-client-react";
+import { useListAssets, type Asset } from "@workspace/api-client-react";
+import { useListCrews, type AssetExt } from "@/lib/extra-api";
 import { useDepartmentFilter } from "@/context/DepartmentContext";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -32,6 +33,10 @@ import {
   QrCode,
   DollarSign,
   Building2,
+  Users as UsersIcon,
+  Caravan,
+  Hammer,
+  Boxes,
 } from "lucide-react";
 
 const usd = (cents: number | null | undefined) =>
@@ -83,14 +88,37 @@ function ServiceBadge({ state }: { state: "OK" | "DUE_SOON" | "OVERDUE" }) {
 }
 
 type SortKey = "NAME" | "STATUS" | "SERVICE_DUE" | "YTD_SPEND" | "LIFETIME_SPEND";
+type CategoryFilter = "ALL" | "TRUCK" | "TRAILER" | "HANDHELD" | "CUSTOM";
 
 const SERVICE_RANK = { OVERDUE: 0, DUE_SOON: 1, OK: 2 };
+
+// The orval-generated `Asset` type doesn't yet know about the new
+// server fields, and its `usageUnit` is narrower than what we now
+// return (NONE for trailers / quantity items). We omit the conflicting
+// field so the AssetExt override actually widens it.
+type RegistryAsset = Omit<Asset, "usageUnit"> & AssetExt;
+
+function categoryIcon(c: AssetExt["category"]) {
+  if (c === "TRUCK") return Truck;
+  if (c === "TRAILER") return Caravan;
+  if (c === "HANDHELD") return Hammer;
+  return Boxes;
+}
+
+function categoryLabel(a: RegistryAsset) {
+  if (a.category === "CUSTOM") return a.customCategoryLabel || "Custom";
+  if (a.category === "HANDHELD") return "Handheld";
+  if (a.category === "TRAILER") return "Trailer";
+  return "Truck";
+}
 
 export function AssetRegistry() {
   const { activeDeptId } = useDepartmentFilter();
   const { data, isLoading } = useListAssets(activeDeptId != null ? { departmentId: activeDeptId } : {});
+  const { data: crewsData } = useListCrews();
   const [query, setQuery] = useState("");
-  const [kindFilter, setKindFilter] = useState<"ALL" | "TRUCK" | "EQUIPMENT">("ALL");
+  const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>("ALL");
+  const [crewFilter, setCrewFilter] = useState<string>("ALL");
   const [statusFilter, setStatusFilter] = useState<
     "ALL" | "ACTIVE" | "IN_SHOP" | "RETIRED"
   >("ALL");
@@ -99,16 +127,31 @@ export function AssetRegistry() {
   >("ALL");
   const [sortKey, setSortKey] = useState<SortKey>("SERVICE_DUE");
 
-  const assets = data?.assets ?? [];
+  const assets = (data?.assets ?? []) as RegistryAsset[];
+  const crews = crewsData?.crews ?? [];
 
   const filtered = useMemo(() => {
     const list = assets.filter((a) => {
-      if (kindFilter !== "ALL" && a.kind !== kindFilter) return false;
+      if (categoryFilter !== "ALL" && a.category !== categoryFilter) return false;
       if (statusFilter !== "ALL" && a.status !== statusFilter) return false;
       if (dueFilter !== "ALL" && a.serviceState !== dueFilter) return false;
+      if (crewFilter !== "ALL") {
+        if (crewFilter === "UNASSIGNED") {
+          if (a.assignedCrewId != null) return false;
+        } else if (String(a.assignedCrewId ?? "") !== crewFilter) {
+          return false;
+        }
+      }
       if (query) {
         const q = query.toLowerCase();
-        const haystack = [a.name, a.brand ?? "", a.model ?? "", a.identifier ?? ""]
+        const haystack = [
+          a.name,
+          a.brand ?? "",
+          a.model ?? "",
+          a.identifier ?? "",
+          a.customCategoryLabel ?? "",
+          a.assignedCrewName ?? "",
+        ]
           .join(" ")
           .toLowerCase();
         if (!haystack.includes(q)) return false;
@@ -119,17 +162,24 @@ export function AssetRegistry() {
       if (sortKey === "NAME") return a.name.localeCompare(b.name);
       if (sortKey === "STATUS") return a.status.localeCompare(b.status);
       if (sortKey === "SERVICE_DUE")
-        return SERVICE_RANK[a.serviceState] - SERVICE_RANK[b.serviceState];
+        return (
+          SERVICE_RANK[a.serviceState as keyof typeof SERVICE_RANK] -
+          SERVICE_RANK[b.serviceState as keyof typeof SERVICE_RANK]
+        );
       if (sortKey === "YTD_SPEND") return (b.ytdSpendCents ?? 0) - (a.ytdSpendCents ?? 0);
       if (sortKey === "LIFETIME_SPEND") return b.lifeToDateSpendCents - a.lifeToDateSpendCents;
       return 0;
     });
     return list;
-  }, [assets, query, kindFilter, statusFilter, dueFilter, sortKey]);
+  }, [assets, query, categoryFilter, crewFilter, statusFilter, dueFilter, sortKey]);
 
   const totals = useMemo(() => {
-    const overdue = assets.filter((a) => a.serviceState === "OVERDUE").length;
-    const dueSoon = assets.filter((a) => a.serviceState === "DUE_SOON").length;
+    // "Service" rollups only count usage-tracked assets (trucks +
+    // hour-metered equipment) — quantity-tracked items don't have a
+    // due-date concept and shouldn't inflate "OK" counts either.
+    const trackedAssets = assets.filter((a) => a.usageUnit !== "NONE");
+    const overdue = trackedAssets.filter((a) => a.serviceState === "OVERDUE").length;
+    const dueSoon = trackedAssets.filter((a) => a.serviceState === "DUE_SOON").length;
     const lifetime = assets.reduce((s, a) => s + a.lifeToDateSpendCents, 0);
     return { overdue, dueSoon, lifetime, count: assets.length };
   }, [assets]);
@@ -175,18 +225,32 @@ export function AssetRegistry() {
             className="max-w-sm"
           />
           <Select
-            value={kindFilter}
-            onValueChange={(v) =>
-              setKindFilter(v as "ALL" | "TRUCK" | "EQUIPMENT")
-            }
+            value={categoryFilter}
+            onValueChange={(v) => setCategoryFilter(v as CategoryFilter)}
           >
             <SelectTrigger className="w-[160px]">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="ALL">All kinds</SelectItem>
+              <SelectItem value="ALL">All categories</SelectItem>
               <SelectItem value="TRUCK">Trucks</SelectItem>
-              <SelectItem value="EQUIPMENT">Equipment</SelectItem>
+              <SelectItem value="TRAILER">Trailers</SelectItem>
+              <SelectItem value="HANDHELD">Handheld</SelectItem>
+              <SelectItem value="CUSTOM">Custom</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select value={crewFilter} onValueChange={(v) => setCrewFilter(v)}>
+            <SelectTrigger className="w-[180px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="ALL">All crews</SelectItem>
+              <SelectItem value="UNASSIGNED">Unassigned</SelectItem>
+              {crews.map((c) => (
+                <SelectItem key={c.id} value={String(c.id)}>
+                  {c.name}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
           <Select
@@ -258,7 +322,9 @@ export function AssetRegistry() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className="w-[30%]">Asset</TableHead>
+                <TableHead className="w-[28%]">Asset</TableHead>
+                <TableHead>Category</TableHead>
+                <TableHead>Crew</TableHead>
                 <TableHead>Status</TableHead>
                 {!activeDeptId && <TableHead>Department</TableHead>}
                 <TableHead>Service</TableHead>
@@ -268,92 +334,130 @@ export function AssetRegistry() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filtered.map((a) => (
-                <TableRow
-                  key={`${a.kind}-${a.id}`}
-                  data-testid={`asset-row-${a.slug}`}
-                >
-                  <TableCell>
-                    <div className="flex items-start gap-3">
-                      <div className="mt-0.5 flex h-8 w-8 items-center justify-center rounded-md bg-muted text-muted-foreground">
-                        {a.kind === "TRUCK" ? (
-                          <Truck className="h-4 w-4" />
-                        ) : (
-                          <Package className="h-4 w-4" />
-                        )}
-                      </div>
-                      <div>
-                        <Link
-                          href={`/assets/${a.slug}`}
-                          className="font-semibold hover:underline"
-                        >
-                          {a.name}
-                        </Link>
-                        <div className="text-xs text-muted-foreground">
-                          {[a.brand, a.model].filter(Boolean).join(" · ") ||
-                            "No make/model"}
-                        </div>
-                        {a.identifier && (
-                          <div className="font-mono text-[11px] text-muted-foreground/80">
-                            {a.kind === "TRUCK" ? "VIN" : "S/N"} {a.identifier}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant="outline" className={statusBadgeClass(a.status)}>
-                      {statusLabel(a.status)}
-                    </Badge>
-                  </TableCell>
-                  {!activeDeptId && (
+              {filtered.map((a) => {
+                const Icon = categoryIcon(a.category);
+                const tracksUsage = a.usageUnit !== "NONE";
+                const usageWord = a.usageUnit === "MILES" ? "miles" : "hours";
+                return (
+                  <TableRow
+                    key={`${a.kind}-${a.id}`}
+                    data-testid={`asset-row-${a.slug}`}
+                  >
                     <TableCell>
-                      {a.departmentName ? (
-                        <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                          <Building2 className="h-3 w-3 shrink-0" />
-                          {a.departmentName}
-                        </span>
+                      <div className="flex items-start gap-3">
+                        <div className="mt-0.5 flex h-8 w-8 items-center justify-center rounded-md bg-muted text-muted-foreground">
+                          <Icon className="h-4 w-4" />
+                        </div>
+                        <div>
+                          <Link
+                            href={`/assets/${a.slug}`}
+                            className="font-semibold hover:underline"
+                          >
+                            {a.name}
+                          </Link>
+                          <div className="text-xs text-muted-foreground">
+                            {[a.brand, a.model].filter(Boolean).join(" · ") ||
+                              "No make/model"}
+                          </div>
+                          {a.identifier && (
+                            <div className="font-mono text-[11px] text-muted-foreground/80">
+                              {a.kind === "TRUCK" ? "VIN" : "S/N"} {a.identifier}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex flex-col gap-0.5">
+                        <span className="text-sm">{categoryLabel(a)}</span>
+                        {a.quantity > 1 && (
+                          <span className="font-mono text-[11px] text-muted-foreground">
+                            qty {num(a.quantity)}
+                          </span>
+                        )}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      {a.assignedCrewName ? (
+                        <div className="flex flex-col gap-0.5">
+                          <span className="flex items-center gap-1 text-sm">
+                            <UsersIcon className="h-3 w-3 shrink-0 text-muted-foreground" />
+                            {a.assignedCrewName}
+                          </span>
+                          {a.lastAssignedByName && (
+                            <span className="text-[11px] text-muted-foreground">
+                              by {a.lastAssignedByName}
+                            </span>
+                          )}
+                        </div>
                       ) : (
-                        <span className="text-xs text-muted-foreground/50">—</span>
+                        <span className="text-xs text-muted-foreground/50">Unassigned</span>
                       )}
                     </TableCell>
-                  )}
-                  <TableCell>
-                    <div className="space-y-1">
-                      <ServiceBadge state={a.serviceState} />
-                      <div className="text-xs text-muted-foreground">
-                        {a.usageUntilDue >= 0
-                          ? `${num(a.usageUntilDue)} ${a.usageUnit.toLowerCase()} until due`
-                          : `${num(Math.abs(a.usageUntilDue))} ${a.usageUnit.toLowerCase()} overdue`}
-                      </div>
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-right font-mono text-sm">
-                    {num(a.currentUsage)}
-                    <div className="text-[10px] uppercase tracking-wide text-muted-foreground">
-                      {a.usageUnit === "MILES" ? "miles" : "hours"}
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-right font-mono text-sm font-semibold">
-                    {usd(a.lifeToDateSpendCents)}
-                  </TableCell>
-                  <TableCell>
-                    <Button
-                      asChild
-                      variant="ghost"
-                      size="sm"
-                      className="gap-1"
-                      data-testid={`asset-open-${a.slug}`}
-                    >
-                      <Link href={`/assets/${a.slug}`}>
-                        <QrCode className="h-3.5 w-3.5" />
-                        Open
-                        <ArrowRight className="h-3.5 w-3.5" />
-                      </Link>
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))}
+                    <TableCell>
+                      <Badge variant="outline" className={statusBadgeClass(a.status)}>
+                        {statusLabel(a.status)}
+                      </Badge>
+                    </TableCell>
+                    {!activeDeptId && (
+                      <TableCell>
+                        {a.departmentName ? (
+                          <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                            <Building2 className="h-3 w-3 shrink-0" />
+                            {a.departmentName}
+                          </span>
+                        ) : (
+                          <span className="text-xs text-muted-foreground/50">—</span>
+                        )}
+                      </TableCell>
+                    )}
+                    <TableCell>
+                      {tracksUsage ? (
+                        <div className="space-y-1">
+                          <ServiceBadge state={a.serviceState} />
+                          <div className="text-xs text-muted-foreground">
+                            {a.usageUntilDue >= 0
+                              ? `${num(a.usageUntilDue)} ${usageWord} until due`
+                              : `${num(Math.abs(a.usageUntilDue))} ${usageWord} overdue`}
+                          </div>
+                        </div>
+                      ) : (
+                        <span className="text-xs text-muted-foreground/50">N/A</span>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-right font-mono text-sm">
+                      {tracksUsage ? (
+                        <>
+                          {num(a.currentUsage)}
+                          <div className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                            {a.usageUnit === "MILES" ? "miles" : "hours"}
+                          </div>
+                        </>
+                      ) : (
+                        <span className="text-muted-foreground/50">—</span>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-right font-mono text-sm font-semibold">
+                      {usd(a.lifeToDateSpendCents)}
+                    </TableCell>
+                    <TableCell>
+                      <Button
+                        asChild
+                        variant="ghost"
+                        size="sm"
+                        className="gap-1"
+                        data-testid={`asset-open-${a.slug}`}
+                      >
+                        <Link href={`/assets/${a.slug}`}>
+                          <QrCode className="h-3.5 w-3.5" />
+                          Open
+                          <ArrowRight className="h-3.5 w-3.5" />
+                        </Link>
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
             </TableBody>
           </Table>
         </div>

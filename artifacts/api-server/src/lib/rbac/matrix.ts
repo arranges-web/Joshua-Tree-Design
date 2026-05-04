@@ -28,6 +28,7 @@ export const DEFAULT_MATRIX: Record<RoleKey, Record<SectionKey, Permission>> = {
     "sales.calendar": { canView: true, canEdit: true },
     "reports.financials": { canView: false, canEdit: false },
     leads: { canView: true, canEdit: true },
+    accounting: { canView: false, canEdit: false },
   },
 
   CREW_LEAD: {
@@ -47,6 +48,7 @@ export const DEFAULT_MATRIX: Record<RoleKey, Record<SectionKey, Permission>> = {
     "sales.calendar": { canView: false, canEdit: false },
     "reports.financials": { canView: false, canEdit: false },
     leads: { canView: false, canEdit: false },
+    accounting: { canView: false, canEdit: false },
   },
 
   MECHANIC: {
@@ -66,6 +68,30 @@ export const DEFAULT_MATRIX: Record<RoleKey, Record<SectionKey, Permission>> = {
     "sales.calendar": { canView: false, canEdit: false },
     "reports.financials": { canView: false, canEdit: false },
     leads: { canView: false, canEdit: false },
+    accounting: { canView: false, canEdit: false },
+  },
+
+  // Cross-org read-only finance role. Sees customers/jobs/quotes/invoices
+  // and fleet maintenance spend at view-level, plus the accounting page.
+  // Cannot edit anything — accounting reviews data, doesn't mutate it.
+  ACCOUNTING_MANAGER: {
+    "dashboard.global": { canView: true, canEdit: false },
+    customers: { canView: true, canEdit: false },
+    jobs: { canView: true, canEdit: false },
+    quotes: { canView: true, canEdit: false },
+    invoices: { canView: true, canEdit: false },
+    "fleet.trucks": { canView: true, canEdit: false },
+    "fleet.equipment": { canView: true, canEdit: false },
+    "fleet.maintenance": { canView: true, canEdit: false },
+    "admin.users": { canView: false, canEdit: false },
+    "admin.permissions": { canView: false, canEdit: false },
+    "field.job_site": { canView: false, canEdit: false },
+    "field.photos": { canView: false, canEdit: false },
+    "field.safety": { canView: false, canEdit: false },
+    "sales.calendar": { canView: false, canEdit: false },
+    "reports.financials": { canView: true, canEdit: false },
+    leads: { canView: false, canEdit: false },
+    accounting: { canView: true, canEdit: false },
   },
 };
 

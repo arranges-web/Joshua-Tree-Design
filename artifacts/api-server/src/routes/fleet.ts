@@ -1,5 +1,6 @@
 import { Router, type IRouter } from "express";
-import { eq, and, sql, desc } from "drizzle-orm";
+import { z } from "zod";
+import { eq, and, sql, desc, inArray } from "drizzle-orm";
 import {
   db,
   trucksTable,
@@ -7,6 +8,8 @@ import {
   maintenanceLogsTable,
   usageReadingsTable,
   assetStatusLogTable,
+  assetAssignmentLogTable,
+  crewsTable,
   usersTable,
   departmentsTable,
   type MaintenanceLog,
@@ -34,6 +37,24 @@ const router: IRouter = Router();
 
 type FleetStatus = "ACTIVE" | "IN_SHOP" | "RETIRED";
 type MaintenanceKind = "SCHEDULED" | "REPAIR" | "INSPECTION";
+
+// Extension schemas for fields not yet in the OpenAPI spec. These let
+// the route handlers accept the new category / quantity / vehicleType
+// payloads without regenerating the orval client. The UI sends them as
+// regular body fields and we layer them on top of the generated parse.
+const truckExtensionSchema = z
+  .object({
+    vehicleType: z.enum(["TRUCK", "TRAILER"]).optional(),
+  })
+  .passthrough();
+
+const equipmentExtensionSchema = z
+  .object({
+    category: z.enum(["HANDHELD", "CUSTOM"]).optional(),
+    quantity: z.number().int().min(1).optional(),
+    customCategoryLabel: z.string().min(1).max(60).nullable().optional(),
+  })
+  .passthrough();
 
 // Helper — slugify a name into a stable URL fragment.
 function slugify(name: string): string {
@@ -89,10 +110,14 @@ router.post(
       res.status(400).json({ error: "department_required", detail: "departmentId is required when creating a fleet asset" });
       return;
     }
+    const truckExt = truckExtensionSchema.safeParse(req.body);
+    const vehicleType =
+      truckExt.success && truckExt.data.vehicleType ? truckExt.data.vehicleType : "TRUCK";
     const [row] = await db
       .insert(trucksTable)
       .values({
         name: d.name,
+        vehicleType,
         brand: d.brand ?? null,
         model: d.model ?? null,
         vin: d.vin ?? null,
@@ -167,6 +192,11 @@ router.patch(
     if (d.currentMileage != null) patch.currentMileage = d.currentMileage;
     if (d.serviceIntervalMiles != null)
       patch.serviceIntervalMiles = d.serviceIntervalMiles;
+
+    const truckExt = truckExtensionSchema.safeParse(req.body);
+    if (truckExt.success && truckExt.data.vehicleType !== undefined) {
+      patch.vehicleType = truckExt.data.vehicleType;
+    }
 
     const [row] = await db
       .update(trucksTable)
@@ -244,11 +274,31 @@ router.post(
       res.status(400).json({ error: "department_required", detail: "departmentId is required when creating a fleet asset" });
       return;
     }
+    const equipExt = equipmentExtensionSchema.safeParse(req.body);
+    const category =
+      equipExt.success && equipExt.data.category ? equipExt.data.category : "HANDHELD";
+    const quantity =
+      equipExt.success && equipExt.data.quantity != null ? equipExt.data.quantity : 1;
+    // CUSTOM rows must carry a free-form label; HANDHELD rows must not.
+    let customCategoryLabel: string | null = null;
+    if (category === "CUSTOM") {
+      const label = equipExt.success ? equipExt.data.customCategoryLabel ?? null : null;
+      if (!label) {
+        res
+          .status(400)
+          .json({ error: "custom_category_label_required", detail: "CUSTOM items require a category label" });
+        return;
+      }
+      customCategoryLabel = label;
+    }
     const [row] = await db
       .insert(equipmentTable)
       .values({
         name: d.name,
         type: d.type,
+        category,
+        quantity,
+        customCategoryLabel,
         brand: d.brand ?? null,
         model: d.model ?? null,
         serial: d.serial ?? null,
@@ -321,6 +371,15 @@ router.patch(
     if (d.currentHours != null) patch.currentHours = d.currentHours;
     if (d.serviceIntervalHours != null)
       patch.serviceIntervalHours = d.serviceIntervalHours;
+
+    const equipExt = equipmentExtensionSchema.safeParse(req.body);
+    if (equipExt.success) {
+      if (equipExt.data.category !== undefined) patch.category = equipExt.data.category;
+      if (equipExt.data.quantity !== undefined) patch.quantity = equipExt.data.quantity;
+      if (equipExt.data.customCategoryLabel !== undefined) {
+        patch.customCategoryLabel = equipExt.data.customCategoryLabel;
+      }
+    }
 
     const [row] = await db
       .update(equipmentTable)
@@ -591,8 +650,16 @@ router.delete(
 );
 
 // ---------- Asset Registry ----------
+// Top-level taxonomy that the registry surfaces. TRUCK / TRAILER come from
+// the trucks table (`vehicle_type` discriminator); HANDHELD / CUSTOM come
+// from equipment.category.
+type AssetCategory = "TRUCK" | "TRAILER" | "HANDHELD" | "CUSTOM";
+
 type AssetSummary = {
   kind: "TRUCK" | "EQUIPMENT";
+  category: AssetCategory;
+  customCategoryLabel: string | null;
+  quantity: number;
   id: number;
   slug: string;
   name: string;
@@ -602,10 +669,15 @@ type AssetSummary = {
   status: string;
   departmentId: number | null;
   departmentName: string | null;
+  assignedCrewId: number | null;
+  assignedCrewName: string | null;
+  lastAssignedAt: string | null;
+  lastAssignedByUserId: number | null;
+  lastAssignedByName: string | null;
   purchasePriceCents: number | null;
   purchaseDate: string | null;
   currentUsage: number;
-  usageUnit: "MILES" | "HOURS";
+  usageUnit: "MILES" | "HOURS" | "NONE";
   serviceIntervalUsage: number;
   lastServiceUsage: number | null;
   usageSinceLastService: number | null;
@@ -620,6 +692,12 @@ type AssetSummary = {
 
 const DUE_SOON_FRACTION = 0.1; // within 10% of interval
 
+// Sentinel value reported on usage-less assets (trailers, quantity-tracked
+// handheld/custom items). JSON cannot encode Infinity, so we use a finite
+// "essentially never" value the UI tests with `usageUnit === "NONE"`
+// before formatting.
+const USAGE_UNTIL_DUE_NA = 999_999_999;
+
 function deriveServiceState(
   usageUntilDue: number,
   intervalUsage: number,
@@ -631,7 +709,7 @@ function deriveServiceState(
 }
 
 async function buildAssetList(departmentId?: number): Promise<AssetSummary[]> {
-  const [trucks, equipment, logs, deptRows] = await Promise.all([
+  const [trucks, equipment, logs, deptRows, crewRows] = await Promise.all([
     departmentId != null
       ? db.select().from(trucksTable).where(eq(trucksTable.departmentId, departmentId))
       : db.select().from(trucksTable),
@@ -640,9 +718,27 @@ async function buildAssetList(departmentId?: number): Promise<AssetSummary[]> {
       : db.select().from(equipmentTable),
     db.select().from(maintenanceLogsTable),
     db.select({ id: departmentsTable.id, label: departmentsTable.label }).from(departmentsTable),
+    db.select({ id: crewsTable.id, name: crewsTable.name }).from(crewsTable),
   ]);
 
   const deptMap = new Map(deptRows.map((d) => [d.id, d.label]));
+  const crewMap = new Map(crewRows.map((c) => [c.id, c.name]));
+
+  // Resolve any "last assigned by" user names in a single batched query so
+  // every row carries a printable actor without N+1 lookups.
+  const lastAssignedUserIds = Array.from(
+    new Set([
+      ...trucks.map((t) => t.lastAssignedByUserId).filter((n): n is number => n != null),
+      ...equipment.map((e) => e.lastAssignedByUserId).filter((n): n is number => n != null),
+    ]),
+  );
+  const userNameRows = lastAssignedUserIds.length
+    ? await db
+        .select({ id: usersTable.id, fullName: usersTable.fullName })
+        .from(usersTable)
+        .where(inArray(usersTable.id, lastAssignedUserIds))
+    : [];
+  const userNameMap = new Map(userNameRows.map((u) => [u.id, u.fullName]));
 
   const truckLogs = new Map<number, typeof logs>();
   const equipLogs = new Map<number, typeof logs>();
@@ -684,8 +780,15 @@ async function buildAssetList(departmentId?: number): Promise<AssetSummary[]> {
       lastServiceUsage != null ? Math.max(0, t.currentMileage - lastServiceUsage) : null;
     const nextDueAt = (lastServiceUsage ?? 0) + t.serviceIntervalMiles;
     const usageUntilDue = nextDueAt - t.currentMileage;
+    // Trailers share the trucks table but don't track usage. The UI hides
+    // the odometer column for them, and we report serviceState=OK so they
+    // don't pollute the "due soon / overdue" rollups.
+    const isTrailer = t.vehicleType === "TRAILER";
     assets.push({
       kind: "TRUCK",
+      category: isTrailer ? "TRAILER" : "TRUCK",
+      customCategoryLabel: null,
+      quantity: 1,
       id: t.id,
       slug: t.slug ?? makeAssetSlug("truck", t.id, t.name),
       name: t.name,
@@ -695,20 +798,33 @@ async function buildAssetList(departmentId?: number): Promise<AssetSummary[]> {
       status: t.status,
       departmentId: t.departmentId ?? null,
       departmentName: t.departmentId != null ? (deptMap.get(t.departmentId) ?? null) : null,
+      assignedCrewId: t.assignedCrewId ?? null,
+      assignedCrewName:
+        t.assignedCrewId != null ? (crewMap.get(t.assignedCrewId) ?? null) : null,
+      lastAssignedAt: t.lastAssignedAt ? t.lastAssignedAt.toISOString() : null,
+      lastAssignedByUserId: t.lastAssignedByUserId ?? null,
+      lastAssignedByName:
+        t.lastAssignedByUserId != null
+          ? (userNameMap.get(t.lastAssignedByUserId) ?? null)
+          : null,
       purchasePriceCents: t.purchasePriceCents,
       purchaseDate: t.purchaseDate ? t.purchaseDate.toISOString() : null,
-      currentUsage: t.currentMileage,
-      usageUnit: "MILES",
+      currentUsage: isTrailer ? 0 : t.currentMileage,
+      usageUnit: isTrailer ? "NONE" : "MILES",
       serviceIntervalUsage: t.serviceIntervalMiles,
       lastServiceUsage,
       usageSinceLastService,
       nextServiceDueAt: nextDueAt,
-      usageUntilDue,
-      serviceState: deriveServiceState(usageUntilDue, t.serviceIntervalMiles),
+      usageUntilDue: isTrailer ? USAGE_UNTIL_DUE_NA : usageUntilDue,
+      serviceState: isTrailer
+        ? "OK"
+        : deriveServiceState(usageUntilDue, t.serviceIntervalMiles),
       lifeToDateSpendCents: lifetime,
       ytdSpendCents: ytd,
       costPerUsageCents:
-        t.currentMileage > 0 ? Math.round(lifetime / t.currentMileage) : null,
+        !isTrailer && t.currentMileage > 0
+          ? Math.round(lifetime / t.currentMileage)
+          : null,
       lastServicePerformedAt: lastService
         ? new Date(lastService.performedAt).toISOString()
         : null,
@@ -736,8 +852,14 @@ async function buildAssetList(departmentId?: number): Promise<AssetSummary[]> {
       lastServiceUsage != null ? Math.max(0, e.currentHours - lastServiceUsage) : null;
     const nextDueAt = (lastServiceUsage ?? 0) + e.serviceIntervalHours;
     const usageUntilDue = nextDueAt - e.currentHours;
+    // Quantity-tracked items (typically zero or a single fixed run-time
+    // engine) don't drive a service-due cadence — surface them as OK.
+    const tracksHours = e.serviceIntervalHours > 0 && e.currentHours > 0;
     assets.push({
       kind: "EQUIPMENT",
+      category: e.category,
+      customCategoryLabel: e.customCategoryLabel ?? null,
+      quantity: e.quantity ?? 1,
       id: e.id,
       slug: e.slug ?? makeAssetSlug("equip", e.id, e.name),
       name: e.name,
@@ -747,20 +869,31 @@ async function buildAssetList(departmentId?: number): Promise<AssetSummary[]> {
       status: e.status,
       departmentId: e.departmentId ?? null,
       departmentName: e.departmentId != null ? (deptMap.get(e.departmentId) ?? null) : null,
+      assignedCrewId: e.assignedCrewId ?? null,
+      assignedCrewName:
+        e.assignedCrewId != null ? (crewMap.get(e.assignedCrewId) ?? null) : null,
+      lastAssignedAt: e.lastAssignedAt ? e.lastAssignedAt.toISOString() : null,
+      lastAssignedByUserId: e.lastAssignedByUserId ?? null,
+      lastAssignedByName:
+        e.lastAssignedByUserId != null
+          ? (userNameMap.get(e.lastAssignedByUserId) ?? null)
+          : null,
       purchasePriceCents: e.purchasePriceCents,
       purchaseDate: e.purchaseDate ? e.purchaseDate.toISOString() : null,
-      currentUsage: e.currentHours,
-      usageUnit: "HOURS",
+      currentUsage: tracksHours ? e.currentHours : 0,
+      usageUnit: tracksHours ? "HOURS" : "NONE",
       serviceIntervalUsage: e.serviceIntervalHours,
       lastServiceUsage,
       usageSinceLastService,
       nextServiceDueAt: nextDueAt,
-      usageUntilDue,
-      serviceState: deriveServiceState(usageUntilDue, e.serviceIntervalHours),
+      usageUntilDue: tracksHours ? usageUntilDue : USAGE_UNTIL_DUE_NA,
+      serviceState: tracksHours
+        ? deriveServiceState(usageUntilDue, e.serviceIntervalHours)
+        : "OK",
       lifeToDateSpendCents: lifetime,
       ytdSpendCents: ytd,
       costPerUsageCents:
-        e.currentHours > 0 ? Math.round(lifetime / e.currentHours) : null,
+        tracksHours ? Math.round(lifetime / e.currentHours) : null,
       lastServicePerformedAt: lastService
         ? new Date(lastService.performedAt).toISOString()
         : null,
@@ -1058,6 +1191,190 @@ router.get(
       changedByName: h.changedByUserId
         ? (userNameMap.get(h.changedByUserId) ?? null)
         : null,
+    }));
+    res.json({ history });
+  },
+);
+
+// ---------- Crews (for assignment dropdowns) ----------
+// Lightweight list — name + id only — used by the asset-assignment UI.
+// Anyone with fleet view permission can see crew names.
+router.get(
+  "/crews",
+  requireAuth,
+  requireFleetView(),
+  async (_req, res) => {
+    const rows = await db
+      .select({ id: crewsTable.id, name: crewsTable.name })
+      .from(crewsTable)
+      .orderBy(crewsTable.name);
+    res.json({ crews: rows });
+  },
+);
+
+// ---------- Crew Assignment ----------
+// POST /assets/:slug/assign — set or clear the assigned crew for any
+// asset. Writes both the row's `assigned_crew_id` (and last-assigned
+// metadata) and an audit log entry. Idempotent: if the new crew matches
+// the current one, no log row is written. Set `crewId` to null to
+// "return" the asset.
+const assignAssetSchema = z.object({
+  crewId: z.number().int().nullable(),
+  note: z.string().max(500).optional(),
+});
+
+router.post(
+  "/assets/:slug/assign",
+  requireAuth,
+  requireFleetView(),
+  async (req, res) => {
+    const slug = String(req.params.slug ?? "");
+    const parsed = assignAssetSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: "invalid_body" });
+      return;
+    }
+    const { crewId: newCrewId, note } = parsed.data;
+
+    // Require the same edit scope as status changes — assigning equipment
+    // to a crew is an edit on the asset.
+    const allowedKinds = viewableKinds(req.user!);
+    const sectionForKind = (kind: "TRUCK" | "EQUIPMENT") =>
+      kind === "TRUCK" ? "fleet.trucks" : "fleet.equipment";
+
+    const assets = (await buildAssetList(resolveDeptId(req))).filter((a) =>
+      allowedKinds.has(a.kind),
+    );
+    const asset = assets.find((a) => a.slug === slug);
+    if (!asset) {
+      res.status(404).json({ error: "not_found" });
+      return;
+    }
+    if (!hasSectionAccess(req.user!, sectionForKind(asset.kind), "edit")) {
+      res.status(403).json({ error: "forbidden", section: sectionForKind(asset.kind), action: "edit" });
+      return;
+    }
+
+    // Validate the crew exists if a non-null id was provided.
+    if (newCrewId != null) {
+      const [crew] = await db
+        .select({ id: crewsTable.id })
+        .from(crewsTable)
+        .where(eq(crewsTable.id, newCrewId));
+      if (!crew) {
+        res.status(400).json({ error: "unknown_crew" });
+        return;
+      }
+    }
+
+    const oldCrewId = asset.assignedCrewId ?? null;
+    const now = new Date();
+
+    if (asset.kind === "TRUCK") {
+      await db
+        .update(trucksTable)
+        .set({
+          assignedCrewId: newCrewId ?? null,
+          lastAssignedByUserId: req.user?.id ?? null,
+          lastAssignedAt: now,
+        })
+        .where(eq(trucksTable.id, asset.id));
+    } else {
+      await db
+        .update(equipmentTable)
+        .set({
+          assignedCrewId: newCrewId ?? null,
+          lastAssignedByUserId: req.user?.id ?? null,
+          lastAssignedAt: now,
+        })
+        .where(eq(equipmentTable.id, asset.id));
+    }
+
+    if ((oldCrewId ?? null) !== (newCrewId ?? null)) {
+      await db.insert(assetAssignmentLogTable).values({
+        assetType: asset.kind,
+        assetId: asset.id,
+        oldCrewId: oldCrewId,
+        newCrewId: newCrewId ?? null,
+        changedByUserId: req.user?.id ?? null,
+        note: note ?? null,
+      });
+    }
+
+    const refreshed = (await buildAssetList(resolveDeptId(req))).find((a) => a.slug === slug);
+    res.json({ asset: refreshed });
+  },
+);
+
+router.get(
+  "/assets/:slug/assignment-history",
+  requireAuth,
+  requireFleetView(),
+  async (req, res) => {
+    const slug = String(req.params.slug ?? "");
+    const allowedKinds = viewableKinds(req.user!);
+    const assets = (await buildAssetList()).filter((a) => allowedKinds.has(a.kind));
+    const asset = assets.find((a) => a.slug === slug);
+    if (!asset) {
+      res.status(404).json({ error: "not_found" });
+      return;
+    }
+
+    const rawHistory = await db
+      .select()
+      .from(assetAssignmentLogTable)
+      .where(
+        and(
+          eq(assetAssignmentLogTable.assetType, asset.kind),
+          eq(assetAssignmentLogTable.assetId, asset.id),
+        ),
+      )
+      .orderBy(desc(assetAssignmentLogTable.changedAt))
+      .limit(100);
+
+    // Resolve crew names + actor names in batched queries so the response
+    // is self-contained.
+    const crewIds = Array.from(
+      new Set(
+        [
+          ...rawHistory.map((h) => h.oldCrewId),
+          ...rawHistory.map((h) => h.newCrewId),
+        ].filter((id): id is number => id != null),
+      ),
+    );
+    const userIds = Array.from(
+      new Set(
+        rawHistory.map((h) => h.changedByUserId).filter((id): id is number => id != null),
+      ),
+    );
+    const [crewNameRows, userNameRows] = await Promise.all([
+      crewIds.length
+        ? db
+            .select({ id: crewsTable.id, name: crewsTable.name })
+            .from(crewsTable)
+            .where(inArray(crewsTable.id, crewIds))
+        : Promise.resolve([]),
+      userIds.length
+        ? db
+            .select({ id: usersTable.id, fullName: usersTable.fullName })
+            .from(usersTable)
+            .where(inArray(usersTable.id, userIds))
+        : Promise.resolve([]),
+    ]);
+    const crewNameMap = new Map(crewNameRows.map((r) => [r.id, r.name]));
+    const userNameMap = new Map(userNameRows.map((r) => [r.id, r.fullName]));
+
+    const history = rawHistory.map((h) => ({
+      id: h.id,
+      changedAt: new Date(h.changedAt).toISOString(),
+      oldCrewId: h.oldCrewId,
+      oldCrewName: h.oldCrewId != null ? crewNameMap.get(h.oldCrewId) ?? null : null,
+      newCrewId: h.newCrewId,
+      newCrewName: h.newCrewId != null ? crewNameMap.get(h.newCrewId) ?? null : null,
+      changedByUserId: h.changedByUserId,
+      changedByName:
+        h.changedByUserId != null ? userNameMap.get(h.changedByUserId) ?? null : null,
+      note: h.note ?? null,
     }));
     res.json({ history });
   },

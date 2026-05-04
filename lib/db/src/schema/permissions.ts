@@ -29,6 +29,7 @@ export const SECTION_KEYS = [
   "sales.calendar",
   "reports.financials",
   "leads",
+  "accounting",
 ] as const;
 export type SectionKey = (typeof SECTION_KEYS)[number];
 

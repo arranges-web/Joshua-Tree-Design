@@ -17,6 +17,13 @@ import {
   useUpdateTruck,
   useUpdateEquipment,
 } from "@workspace/api-client-react";
+import {
+  useListCrews,
+  useAssignAsset,
+  useAssignmentHistory,
+  getAssignmentHistoryKey,
+  type AssetExt,
+} from "@/lib/extra-api";
 import { useDepartmentFilter } from "@/context/DepartmentContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -42,7 +49,6 @@ import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
 import {
   Truck,
-  Package,
   ArrowLeft,
   Wrench,
   Gauge,
@@ -58,6 +64,11 @@ import {
   History,
   User,
   Building2,
+  Users as UsersIcon,
+  Caravan,
+  Hammer,
+  Boxes,
+  Hash,
 } from "lucide-react";
 
 const usd = (cents: number | null | undefined) =>
@@ -145,9 +156,29 @@ export function AssetActionPage() {
     );
   }
 
-  const asset = data.asset;
+  // Widen the orval-generated asset type with our new fields, and drop
+  // the narrower usageUnit so the AssetExt override (which knows about
+  // "NONE") wins.
+  const asset = data.asset as Omit<typeof data.asset, "usageUnit"> & AssetExt;
   const logs = data.logs ?? [];
   const qrUrl = `${window.location.origin}${window.location.pathname.replace(/\/assets\/.*/, "")}/assets/${asset.slug}`;
+  const tracksUsage = asset.usageUnit !== "NONE";
+  const CategoryIcon =
+    asset.category === "TRUCK"
+      ? Truck
+      : asset.category === "TRAILER"
+        ? Caravan
+        : asset.category === "HANDHELD"
+          ? Hammer
+          : Boxes;
+  const categoryDisplayLabel =
+    asset.category === "CUSTOM"
+      ? asset.customCategoryLabel || "Custom"
+      : asset.category === "HANDHELD"
+        ? "Handheld"
+        : asset.category === "TRAILER"
+          ? "Trailer"
+          : "Truck";
 
   return (
     <div className="space-y-6">
@@ -161,7 +192,7 @@ export function AssetActionPage() {
           variant="outline"
           className="font-mono text-[10px] uppercase tracking-wider"
         >
-          {asset.kind === "TRUCK" ? "Truck" : "Equipment"} · {asset.slug}
+          {categoryDisplayLabel} · {asset.slug}
         </Badge>
       </div>
 
@@ -170,11 +201,7 @@ export function AssetActionPage() {
           <div className="space-y-3">
             <div className="flex items-center gap-3">
               <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-accent text-accent-foreground">
-                {asset.kind === "TRUCK" ? (
-                  <Truck className="h-6 w-6" />
-                ) : (
-                  <Package className="h-6 w-6" />
-                )}
+                <CategoryIcon className="h-6 w-6" />
               </div>
               <div>
                 <h1 className="text-3xl font-bold tracking-tight">{asset.name}</h1>
@@ -182,36 +209,110 @@ export function AssetActionPage() {
                   {[asset.brand, asset.model].filter(Boolean).join(" · ") ||
                     "Make / model not set"}
                 </div>
+                <div className="mt-0.5 flex flex-wrap items-center gap-2">
+                  <Badge variant="secondary" className="text-[11px]">
+                    {categoryDisplayLabel}
+                  </Badge>
+                  {asset.quantity > 1 && (
+                    <Badge
+                      variant="outline"
+                      className="text-[11px] font-mono"
+                      data-testid="asset-quantity-badge"
+                    >
+                      <Hash className="mr-1 h-3 w-3" />
+                      qty {asset.quantity}
+                    </Badge>
+                  )}
+                </div>
               </div>
             </div>
-            <ServiceStateBanner asset={asset} />
+            {tracksUsage && (
+              <ServiceStateBanner
+                asset={
+                  asset as Parameters<typeof ServiceStateBanner>[0]["asset"]
+                }
+              />
+            )}
             {asset.departmentName && (
               <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                 <Building2 className="h-3.5 w-3.5 shrink-0" />
                 <span>{asset.departmentName}</span>
               </div>
             )}
+            {asset.assignedCrewName ? (
+              <div
+                className="flex items-center gap-1.5 text-xs text-muted-foreground"
+                data-testid="asset-current-crew"
+              >
+                <UsersIcon className="h-3.5 w-3.5 shrink-0" />
+                <span>
+                  Assigned to{" "}
+                  <span className="font-semibold text-foreground">
+                    {asset.assignedCrewName}
+                  </span>
+                  {asset.lastAssignedByName && (
+                    <>
+                      {" "}
+                      <span className="text-muted-foreground">
+                        by {asset.lastAssignedByName}
+                      </span>
+                    </>
+                  )}
+                  {asset.lastAssignedAt && (
+                    <>
+                      {" "}
+                      <span className="text-muted-foreground">
+                        · {new Date(asset.lastAssignedAt).toLocaleDateString()}
+                      </span>
+                    </>
+                  )}
+                </span>
+              </div>
+            ) : (
+              <div className="flex items-center gap-1.5 text-xs text-muted-foreground/60">
+                <UsersIcon className="h-3.5 w-3.5 shrink-0" />
+                <span>Not assigned to any crew</span>
+              </div>
+            )}
             <div className="grid grid-cols-2 gap-3 pt-2 sm:grid-cols-5">
               <Stat label="Status" value={statusLabel(asset.status)} icon={Tag} />
-              <Stat
-                label={asset.usageUnit === "MILES" ? "Odometer" : "Engine hours"}
-                value={`${num(asset.currentUsage)} ${asset.usageUnit === "MILES" ? "mi" : "hrs"}`}
-                icon={Gauge}
-              />
-              <Stat
-                label="Life-to-date"
-                value={usd(asset.lifeToDateSpendCents)}
-                icon={DollarSign}
-              />
-              <Stat
-                label={asset.usageUnit === "MILES" ? "Cost / mile" : "Cost / hour"}
-                value={
-                  asset.costPerUsageCents != null
-                    ? `${usd(asset.costPerUsageCents)}/${asset.usageUnit === "MILES" ? "mi" : "hr"}`
-                    : "—"
-                }
-                icon={TrendingUp}
-              />
+              {tracksUsage ? (
+                <>
+                  <Stat
+                    label={asset.usageUnit === "MILES" ? "Odometer" : "Engine hours"}
+                    value={`${num(asset.currentUsage)} ${asset.usageUnit === "MILES" ? "mi" : "hrs"}`}
+                    icon={Gauge}
+                  />
+                  <Stat
+                    label="Life-to-date"
+                    value={usd(asset.lifeToDateSpendCents)}
+                    icon={DollarSign}
+                  />
+                  <Stat
+                    label={asset.usageUnit === "MILES" ? "Cost / mile" : "Cost / hour"}
+                    value={
+                      asset.costPerUsageCents != null
+                        ? `${usd(asset.costPerUsageCents)}/${asset.usageUnit === "MILES" ? "mi" : "hr"}`
+                        : "—"
+                    }
+                    icon={TrendingUp}
+                  />
+                </>
+              ) : (
+                <>
+                  <Stat label="Quantity" value={num(asset.quantity)} icon={Hash} />
+                  <Stat
+                    label="Life-to-date"
+                    value={usd(asset.lifeToDateSpendCents)}
+                    icon={DollarSign}
+                  />
+                  <Stat
+                    label="Crew"
+                    value={asset.assignedCrewName ?? "Unassigned"}
+                    icon={UsersIcon}
+                  />
+                </>
+              )}
               <Stat
                 label="Purchased"
                 value={
@@ -267,16 +368,35 @@ export function AssetActionPage() {
           <TabsTrigger value="ledger">
             Maintenance Ledger ({logs.length})
           </TabsTrigger>
+          <TabsTrigger value="assignments" data-testid="tab-assignments">
+            Assignment History
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="actions" className="space-y-4">
-          <div className="grid gap-4 md:grid-cols-2">
-            <UsageReadingForm asset={asset} />
-            <QuickServiceForm asset={asset} />
-          </div>
+          {tracksUsage ? (
+            <div className="grid gap-4 md:grid-cols-2">
+              <UsageReadingForm
+                asset={asset as Parameters<typeof UsageReadingForm>[0]["asset"]}
+              />
+              <QuickServiceForm
+                asset={asset as Parameters<typeof QuickServiceForm>[0]["asset"]}
+              />
+            </div>
+          ) : (
+            <div className="rounded-md border bg-muted/30 px-4 py-3 text-xs text-muted-foreground">
+              Usage and scheduled service don't apply to {categoryDisplayLabel.toLowerCase()} items.
+              Use the assignment and status controls below.
+            </div>
+          )}
+          <AssignCrewCard asset={asset} />
           <ChangeStatusCard asset={asset} />
           <ChangeDepartmentCard asset={asset} />
           <StatusHistoryCard slug={asset.slug} />
+        </TabsContent>
+
+        <TabsContent value="assignments">
+          <AssignmentHistoryCard slug={asset.slug} />
         </TabsContent>
 
         <TabsContent value="ledger">
@@ -782,6 +902,176 @@ function StatusHistoryCard({ slug }: { slug: string }) {
             </li>
           ))}
         </ul>
+      </CardContent>
+    </Card>
+  );
+}
+
+function AssignCrewCard({
+  asset,
+}: {
+  asset: { slug: string; assignedCrewId: number | null };
+}) {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const { data: crewsData } = useListCrews();
+  const mutation = useAssignAsset(asset.slug);
+  const crews = crewsData?.crews ?? [];
+  const initialValue = asset.assignedCrewId != null ? String(asset.assignedCrewId) : "NONE";
+  const [selected, setSelected] = useState<string>(initialValue);
+  const [touched, setTouched] = useState(false);
+
+  const dirty = touched && selected !== initialValue;
+
+  const submit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!dirty) return;
+    const crewId = selected === "NONE" ? null : Number(selected);
+    mutation.mutate(
+      { crewId },
+      {
+        onSuccess: () => {
+          queryClient.invalidateQueries({
+            queryKey: getGetAssetBySlugQueryKey(asset.slug),
+          });
+          queryClient.invalidateQueries({ queryKey: getListAssetsQueryKey() });
+          queryClient.invalidateQueries({ queryKey: getGetFleetPulseQueryKey() });
+          queryClient.invalidateQueries({
+            queryKey: getAssignmentHistoryKey(asset.slug),
+          });
+          toast({
+            title:
+              crewId == null
+                ? "Returned from crew"
+                : `Assigned to ${crews.find((c) => c.id === crewId)?.name ?? "crew"}`,
+          });
+          setTouched(false);
+        },
+        onError: () =>
+          toast({ title: "Could not update assignment", variant: "destructive" }),
+      },
+    );
+  };
+
+  return (
+    <Card className="border-border/60" data-testid="assign-crew-card">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-base">
+          <UsersIcon className="h-4 w-4" /> Assign to Crew
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        <form onSubmit={submit} className="flex flex-wrap items-end gap-3">
+          <div className="space-y-2">
+            <Label htmlFor="crew-select">Crew</Label>
+            <Select
+              value={selected}
+              onValueChange={(v) => {
+                setSelected(v);
+                setTouched(true);
+              }}
+            >
+              <SelectTrigger id="crew-select" className="w-56" data-testid="crew-select">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="NONE">Unassigned</SelectItem>
+                {crews.map((c) => (
+                  <SelectItem key={c.id} value={String(c.id)}>
+                    {c.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <Button
+            type="submit"
+            disabled={!dirty || mutation.isPending}
+            data-testid="assign-crew-submit"
+          >
+            Save assignment
+          </Button>
+          <p className="basis-full text-xs text-muted-foreground">
+            Reassigning records the change to the assignment log so you can
+            trace who handed the asset off, and when.
+          </p>
+        </form>
+      </CardContent>
+    </Card>
+  );
+}
+
+function AssignmentHistoryCard({ slug }: { slug: string }) {
+  const { data, isLoading } = useAssignmentHistory(slug);
+  const history = data?.history ?? [];
+
+  return (
+    <Card className="border-border/60">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-base">
+          <History className="h-4 w-4" /> Assignment History
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="p-0">
+        {isLoading ? (
+          <div className="space-y-2 p-4">
+            <Skeleton className="h-10 w-full" />
+            <Skeleton className="h-10 w-full" />
+          </div>
+        ) : history.length === 0 ? (
+          <div className="py-12 text-center text-sm text-muted-foreground">
+            No crew assignments recorded yet.
+          </div>
+        ) : (
+          <ul className="divide-y">
+            {history.map((entry) => {
+              const verb =
+                entry.oldCrewId == null
+                  ? "Assigned"
+                  : entry.newCrewId == null
+                    ? "Returned"
+                    : "Reassigned";
+              return (
+                <li
+                  key={entry.id}
+                  className="grid gap-1 px-4 py-3 sm:grid-cols-[1fr_auto]"
+                  data-testid={`assignment-entry-${entry.id}`}
+                >
+                  <div>
+                    <div className="flex flex-wrap items-center gap-2 text-sm">
+                      <Badge variant="outline" className="text-[10px] uppercase">
+                        {verb}
+                      </Badge>
+                      {entry.oldCrewName && (
+                        <>
+                          <span className="text-muted-foreground">
+                            {entry.oldCrewName}
+                          </span>
+                          <span className="text-muted-foreground">→</span>
+                        </>
+                      )}
+                      <span className="font-medium">
+                        {entry.newCrewName ?? "Unassigned"}
+                      </span>
+                      {entry.changedByName && (
+                        <span className="flex items-center gap-1 text-[11px] text-muted-foreground">
+                          <User className="h-3 w-3" />
+                          {entry.changedByName}
+                        </span>
+                      )}
+                    </div>
+                    {entry.note && (
+                      <div className="mt-1 text-xs text-muted-foreground">{entry.note}</div>
+                    )}
+                  </div>
+                  <span className="text-xs text-muted-foreground sm:text-right">
+                    {new Date(entry.changedAt).toLocaleString()}
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+        )}
       </CardContent>
     </Card>
   );
