@@ -359,6 +359,11 @@ paths:
     get:
       operationId: listTrucks
       tags: [fleet]
+      parameters:
+        - in: query
+          name: departmentId
+          required: false
+          schema: { type: integer }
       responses:
         "200":
           description: OK
@@ -418,6 +423,11 @@ paths:
     get:
       operationId: listEquipment
       tags: [fleet]
+      parameters:
+        - in: query
+          name: departmentId
+          required: false
+          schema: { type: integer }
       responses:
         "200":
           description: OK

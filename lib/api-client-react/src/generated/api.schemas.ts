@@ -877,6 +877,14 @@ export interface CustomerProfileResponse {
  */
 export type ErrorResponse = ErrorBody;
 
+export type ListTrucksParams = {
+  departmentId?: number;
+};
+
+export type ListEquipmentParams = {
+  departmentId?: number;
+};
+
 export type ListMaintenanceLogsParams = {
   departmentId?: number;
 };

@@ -52,8 +52,10 @@ import type {
   LeadUpdateBody,
   LeadWriteBody,
   ListAssetsParams,
+  ListEquipmentParams,
   ListLeadsParams,
   ListMaintenanceLogsParams,
+  ListTrucksParams,
   LoginRequest,
   MaintenanceLogListResponse,
   MaintenanceLogResponse,
@@ -1820,41 +1822,57 @@ export const useDeleteInvoice = <
   return useMutation(getDeleteInvoiceMutationOptions(options));
 };
 
-export const getListTrucksUrl = () => {
-  return `/api/trucks`;
+export const getListTrucksUrl = (params?: ListTrucksParams) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/trucks?${stringifiedParams}`
+    : `/api/trucks`;
 };
 
 export const listTrucks = async (
+  params?: ListTrucksParams,
   options?: RequestInit,
 ): Promise<TruckListResponse> => {
-  return customFetch<TruckListResponse>(getListTrucksUrl(), {
+  return customFetch<TruckListResponse>(getListTrucksUrl(params), {
     ...options,
     method: "GET",
   });
 };
 
-export const getListTrucksQueryKey = () => {
-  return [`/api/trucks`] as const;
+export const getListTrucksQueryKey = (params?: ListTrucksParams) => {
+  return [`/api/trucks`, ...(params ? [params] : [])] as const;
 };
 
 export const getListTrucksQueryOptions = <
   TData = Awaited<ReturnType<typeof listTrucks>>,
   TError = ErrorType<unknown>,
->(options?: {
-  query?: UseQueryOptions<
-    Awaited<ReturnType<typeof listTrucks>>,
-    TError,
-    TData
-  >;
-  request?: SecondParameter<typeof customFetch>;
-}) => {
+>(
+  params?: ListTrucksParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listTrucks>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
   const { query: queryOptions, request: requestOptions } = options ?? {};
 
-  const queryKey = queryOptions?.queryKey ?? getListTrucksQueryKey();
+  const queryKey = queryOptions?.queryKey ?? getListTrucksQueryKey(params);
 
   const queryFn: QueryFunction<Awaited<ReturnType<typeof listTrucks>>> = ({
     signal,
-  }) => listTrucks({ signal, ...requestOptions });
+  }) => listTrucks(params, { signal, ...requestOptions });
 
   return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
     Awaited<ReturnType<typeof listTrucks>>,
@@ -1871,15 +1889,18 @@ export type ListTrucksQueryError = ErrorType<unknown>;
 export function useListTrucks<
   TData = Awaited<ReturnType<typeof listTrucks>>,
   TError = ErrorType<unknown>,
->(options?: {
-  query?: UseQueryOptions<
-    Awaited<ReturnType<typeof listTrucks>>,
-    TError,
-    TData
-  >;
-  request?: SecondParameter<typeof customFetch>;
-}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
-  const queryOptions = getListTrucksQueryOptions(options);
+>(
+  params?: ListTrucksParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listTrucks>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListTrucksQueryOptions(params, options);
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;
@@ -2127,41 +2148,57 @@ export const useDeleteTruck = <
   return useMutation(getDeleteTruckMutationOptions(options));
 };
 
-export const getListEquipmentUrl = () => {
-  return `/api/equipment`;
+export const getListEquipmentUrl = (params?: ListEquipmentParams) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/equipment?${stringifiedParams}`
+    : `/api/equipment`;
 };
 
 export const listEquipment = async (
+  params?: ListEquipmentParams,
   options?: RequestInit,
 ): Promise<EquipmentListResponse> => {
-  return customFetch<EquipmentListResponse>(getListEquipmentUrl(), {
+  return customFetch<EquipmentListResponse>(getListEquipmentUrl(params), {
     ...options,
     method: "GET",
   });
 };
 
-export const getListEquipmentQueryKey = () => {
-  return [`/api/equipment`] as const;
+export const getListEquipmentQueryKey = (params?: ListEquipmentParams) => {
+  return [`/api/equipment`, ...(params ? [params] : [])] as const;
 };
 
 export const getListEquipmentQueryOptions = <
   TData = Awaited<ReturnType<typeof listEquipment>>,
   TError = ErrorType<unknown>,
->(options?: {
-  query?: UseQueryOptions<
-    Awaited<ReturnType<typeof listEquipment>>,
-    TError,
-    TData
-  >;
-  request?: SecondParameter<typeof customFetch>;
-}) => {
+>(
+  params?: ListEquipmentParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listEquipment>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
   const { query: queryOptions, request: requestOptions } = options ?? {};
 
-  const queryKey = queryOptions?.queryKey ?? getListEquipmentQueryKey();
+  const queryKey = queryOptions?.queryKey ?? getListEquipmentQueryKey(params);
 
   const queryFn: QueryFunction<Awaited<ReturnType<typeof listEquipment>>> = ({
     signal,
-  }) => listEquipment({ signal, ...requestOptions });
+  }) => listEquipment(params, { signal, ...requestOptions });
 
   return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
     Awaited<ReturnType<typeof listEquipment>>,
@@ -2178,15 +2215,18 @@ export type ListEquipmentQueryError = ErrorType<unknown>;
 export function useListEquipment<
   TData = Awaited<ReturnType<typeof listEquipment>>,
   TError = ErrorType<unknown>,
->(options?: {
-  query?: UseQueryOptions<
-    Awaited<ReturnType<typeof listEquipment>>,
-    TError,
-    TData
-  >;
-  request?: SecondParameter<typeof customFetch>;
-}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
-  const queryOptions = getListEquipmentQueryOptions(options);
+>(
+  params?: ListEquipmentParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listEquipment>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListEquipmentQueryOptions(params, options);
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;

@@ -119,11 +119,13 @@ function MaintenanceFormDialog({ log, trigger, isOpen: controlledIsOpen, setIsOp
   
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const { activeDeptId } = useDepartmentFilter();
   const createMutation = useCreateMaintenanceLog();
   const updateMutation = useUpdateMaintenanceLog();
   
-  const { data: trucksData } = useListTrucks();
-  const { data: equipmentData } = useListEquipment();
+  const deptParams = activeDeptId != null ? { departmentId: activeDeptId } : {};
+  const { data: trucksData } = useListTrucks(deptParams);
+  const { data: equipmentData } = useListEquipment(deptParams);
   const { data: employeesData } = useListEmployees();
   
   const [formData, setFormData] = useState({

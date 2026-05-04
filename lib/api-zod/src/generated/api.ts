@@ -462,6 +462,10 @@ export const DeleteInvoiceResponse = zod.object({
   ok: zod.boolean(),
 });
 
+export const ListTrucksQueryParams = zod.object({
+  departmentId: zod.coerce.number().optional(),
+});
+
 export const ListTrucksResponse = zod.object({
   trucks: zod.array(
     zod.object({
@@ -540,6 +544,10 @@ export const DeleteTruckParams = zod.object({
 
 export const DeleteTruckResponse = zod.object({
   ok: zod.boolean(),
+});
+
+export const ListEquipmentQueryParams = zod.object({
+  departmentId: zod.coerce.number().optional(),
 });
 
 export const ListEquipmentResponse = zod.object({

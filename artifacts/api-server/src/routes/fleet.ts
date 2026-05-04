@@ -54,8 +54,11 @@ router.get(
   "/trucks",
   requireAuth,
   requireSection("fleet.trucks", "view"),
-  async (_req, res) => {
-    const rows = await db.select().from(trucksTable).limit(500);
+  async (req, res) => {
+    const deptId = resolveDeptId(req);
+    const rows = deptId != null
+      ? await db.select().from(trucksTable).where(eq(trucksTable.departmentId, deptId)).limit(500)
+      : await db.select().from(trucksTable).limit(500);
     res.json({ trucks: rows });
   },
 );
@@ -71,6 +74,16 @@ router.post(
       return;
     }
     const d = parsed.data;
+    // Non-admins can only create assets within their own department.
+    let effectiveDeptId: number | null = d.departmentId ?? null;
+    if (req.user!.role !== "ADMIN") {
+      const userDept = req.user!.departmentId ?? null;
+      if (effectiveDeptId != null && effectiveDeptId !== userDept) {
+        res.status(403).json({ error: "forbidden", detail: "cannot assign asset to another department" });
+        return;
+      }
+      effectiveDeptId = userDept;
+    }
     const [row] = await db
       .insert(trucksTable)
       .values({
@@ -81,7 +94,7 @@ router.post(
         plate: d.plate ?? null,
         status: d.status as FleetStatus,
         assignedCrewId: d.assignedCrewId ?? null,
-        departmentId: d.departmentId ?? null,
+        departmentId: effectiveDeptId,
         purchasePriceCents: d.purchasePriceCents ?? null,
         purchaseDate: d.purchaseDate ? new Date(d.purchaseDate) : null,
         ...(d.currentMileage != null ? { currentMileage: d.currentMileage } : {}),
@@ -182,8 +195,11 @@ router.get(
   "/equipment",
   requireAuth,
   requireSection("fleet.equipment", "view"),
-  async (_req, res) => {
-    const rows = await db.select().from(equipmentTable).limit(500);
+  async (req, res) => {
+    const deptId = resolveDeptId(req);
+    const rows = deptId != null
+      ? await db.select().from(equipmentTable).where(eq(equipmentTable.departmentId, deptId)).limit(500)
+      : await db.select().from(equipmentTable).limit(500);
     res.json({ equipment: rows });
   },
 );
@@ -199,6 +215,16 @@ router.post(
       return;
     }
     const d = parsed.data;
+    // Non-admins can only create assets within their own department.
+    let effectiveDeptId: number | null = d.departmentId ?? null;
+    if (req.user!.role !== "ADMIN") {
+      const userDept = req.user!.departmentId ?? null;
+      if (effectiveDeptId != null && effectiveDeptId !== userDept) {
+        res.status(403).json({ error: "forbidden", detail: "cannot assign asset to another department" });
+        return;
+      }
+      effectiveDeptId = userDept;
+    }
     const [row] = await db
       .insert(equipmentTable)
       .values({
@@ -209,7 +235,7 @@ router.post(
         serial: d.serial ?? null,
         status: d.status as FleetStatus,
         assignedTruckId: d.assignedTruckId ?? null,
-        departmentId: d.departmentId ?? null,
+        departmentId: effectiveDeptId,
         purchasePriceCents: d.purchasePriceCents ?? null,
         purchaseDate: d.purchaseDate ? new Date(d.purchaseDate) : null,
         ...(d.currentHours != null ? { currentHours: d.currentHours } : {}),
