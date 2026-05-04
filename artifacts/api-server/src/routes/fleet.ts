@@ -9,6 +9,7 @@ import {
   assetStatusLogTable,
   usersTable,
   departmentsTable,
+  type MaintenanceLog,
 } from "@workspace/db";
 import {
   CreateTruckBody,
@@ -115,6 +116,11 @@ router.patch(
       return;
     }
     const d = body.data;
+    // Non-admins may not reassign a vehicle to a different department.
+    if (d.departmentId !== undefined && req.user!.role !== "ADMIN") {
+      res.status(403).json({ error: "forbidden", detail: "only admins may change department assignment" });
+      return;
+    }
     // PATCH semantics: only update fields explicitly present in the body so
     // partial updates do not unintentionally clear existing values.
     const patch: Record<string, unknown> = {};
@@ -238,6 +244,11 @@ router.patch(
       return;
     }
     const d = body.data;
+    // Non-admins may not reassign equipment to a different department.
+    if (d.departmentId !== undefined && req.user!.role !== "ADMIN") {
+      res.status(403).json({ error: "forbidden", detail: "only admins may change department assignment" });
+      return;
+    }
     // PATCH semantics: only update fields explicitly present in the body.
     const patch: Record<string, unknown> = {};
     if (d.name !== undefined) patch.name = d.name;
@@ -348,7 +359,7 @@ router.get(
   requireSection("fleet.maintenance", "view"),
   async (req, res) => {
     const deptId = resolveDeptId(req);
-    let rows: Awaited<ReturnType<typeof db.select>>[];
+    let rows: MaintenanceLog[];
     if (deptId != null) {
       // Filter in SQL so the LIMIT applies only to matching dept rows.
       rows = await db
