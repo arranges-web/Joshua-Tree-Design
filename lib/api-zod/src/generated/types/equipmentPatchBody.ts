@@ -6,17 +6,17 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export interface TruckWriteBody {
-  name: string;
+export interface EquipmentPatchBody {
+  name?: string;
+  type?: string;
   brand?: string | null;
   model?: string | null;
-  vin?: string | null;
-  plate?: string | null;
-  status: string;
-  assignedCrewId?: number | null;
+  serial?: string | null;
+  status?: string;
+  assignedTruckId?: number | null;
   departmentId?: number | null;
   purchasePriceCents?: number | null;
   purchaseDate?: Date | null;
-  currentMileage?: number | null;
-  serviceIntervalMiles?: number | null;
+  currentHours?: number | null;
+  serviceIntervalHours?: number | null;
 }

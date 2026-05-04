@@ -13,7 +13,11 @@ import {
   getListMaintenanceLogsQueryKey,
   getListAssetsQueryKey,
   getGetFleetPulseQueryKey,
+  useListDepartments,
+  useUpdateTruck,
+  useUpdateEquipment,
 } from "@workspace/api-client-react";
+import { useDepartmentFilter } from "@/context/DepartmentContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -53,6 +57,7 @@ import {
   TrendingUp,
   History,
   User,
+  Building2,
 } from "lucide-react";
 
 const usd = (cents: number | null | undefined) =>
@@ -180,6 +185,12 @@ export function AssetActionPage() {
               </div>
             </div>
             <ServiceStateBanner asset={asset} />
+            {asset.departmentName && (
+              <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <Building2 className="h-3.5 w-3.5 shrink-0" />
+                <span>{asset.departmentName}</span>
+              </div>
+            )}
             <div className="grid grid-cols-2 gap-3 pt-2 sm:grid-cols-5">
               <Stat label="Status" value={statusLabel(asset.status)} icon={Tag} />
               <Stat
@@ -264,6 +275,7 @@ export function AssetActionPage() {
             <QuickServiceForm asset={asset} />
           </div>
           <ChangeStatusCard asset={asset} />
+          <ChangeDepartmentCard asset={asset} />
           <StatusHistoryCard slug={asset.slug} />
         </TabsContent>
 
@@ -630,6 +642,92 @@ function QuickServiceForm({
             data-testid="service-submit"
           >
             Save Service Entry
+          </Button>
+        </form>
+      </CardContent>
+    </Card>
+  );
+}
+
+function ChangeDepartmentCard({
+  asset,
+}: {
+  asset: { slug: string; kind: string; id: number; departmentId?: number | null };
+}) {
+  const { isAdmin } = useDepartmentFilter();
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const { data: deptData } = useListDepartments();
+  const departments = deptData?.departments ?? [];
+  const updateTruck = useUpdateTruck();
+  const updateEquipment = useUpdateEquipment();
+
+  const [selectedDeptId, setSelectedDeptId] = useState<string>(
+    asset.departmentId != null ? String(asset.departmentId) : "__none__",
+  );
+  const [touched, setTouched] = useState(false);
+
+  if (!isAdmin || departments.length === 0) return null;
+
+  const currentVal = asset.departmentId != null ? String(asset.departmentId) : "__none__";
+  const dirty = touched && selectedDeptId !== currentVal;
+
+  const submit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!dirty) return;
+    const deptId = selectedDeptId === "__none__" ? null : Number(selectedDeptId);
+    const opts = {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: getGetAssetBySlugQueryKey(asset.slug) });
+        queryClient.invalidateQueries({ queryKey: getListAssetsQueryKey() });
+        queryClient.invalidateQueries({ queryKey: getGetFleetPulseQueryKey() });
+        toast({ title: "Department updated" });
+        setTouched(false);
+      },
+      onError: () => toast({ title: "Could not update department", variant: "destructive" }),
+    };
+    if (asset.kind === "TRUCK") {
+      updateTruck.mutate({ id: asset.id, data: { departmentId: deptId } }, opts);
+    } else {
+      updateEquipment.mutate({ id: asset.id, data: { departmentId: deptId } }, opts);
+    }
+  };
+
+  const isPending = updateTruck.isPending || updateEquipment.isPending;
+
+  return (
+    <Card className="border-border/60">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-base">
+          <Building2 className="h-4 w-4" /> Assign Department
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        <form onSubmit={submit} className="flex flex-wrap items-end gap-3">
+          <div className="space-y-2">
+            <Label htmlFor="asset-dept">Department</Label>
+            <Select
+              value={selectedDeptId}
+              onValueChange={(v) => {
+                setSelectedDeptId(v);
+                setTouched(true);
+              }}
+            >
+              <SelectTrigger id="asset-dept" className="w-56">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__none__">— Unassigned —</SelectItem>
+                {departments.map((d) => (
+                  <SelectItem key={d.id} value={String(d.id)}>
+                    {d.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <Button type="submit" disabled={!dirty || isPending}>
+            Save department
           </Button>
         </form>
       </CardContent>

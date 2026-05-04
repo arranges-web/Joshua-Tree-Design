@@ -33,6 +33,7 @@ import type {
   EmployeeResponse,
   EmployeeUpdateBody,
   EquipmentListResponse,
+  EquipmentPatchBody,
   EquipmentResponse,
   EquipmentWriteBody,
   ErrorResponse,
@@ -77,6 +78,7 @@ import type {
   SectionPermissionListResponse,
   SectionPermissionUpdateBody,
   TruckListResponse,
+  TruckPatchBody,
   TruckResponse,
   TruckWriteBody,
   UsageReadingResponse,
@@ -1972,14 +1974,14 @@ export const getUpdateTruckUrl = (id: number) => {
 
 export const updateTruck = async (
   id: number,
-  truckWriteBody: TruckWriteBody,
+  truckPatchBody: TruckPatchBody,
   options?: RequestInit,
 ): Promise<TruckResponse> => {
   return customFetch<TruckResponse>(getUpdateTruckUrl(id), {
     ...options,
     method: "PATCH",
     headers: { "Content-Type": "application/json", ...options?.headers },
-    body: JSON.stringify(truckWriteBody),
+    body: JSON.stringify(truckPatchBody),
   });
 };
 
@@ -1990,14 +1992,14 @@ export const getUpdateTruckMutationOptions = <
   mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof updateTruck>>,
     TError,
-    { id: number; data: BodyType<TruckWriteBody> },
+    { id: number; data: BodyType<TruckPatchBody> },
     TContext
   >;
   request?: SecondParameter<typeof customFetch>;
 }): UseMutationOptions<
   Awaited<ReturnType<typeof updateTruck>>,
   TError,
-  { id: number; data: BodyType<TruckWriteBody> },
+  { id: number; data: BodyType<TruckPatchBody> },
   TContext
 > => {
   const mutationKey = ["updateTruck"];
@@ -2011,7 +2013,7 @@ export const getUpdateTruckMutationOptions = <
 
   const mutationFn: MutationFunction<
     Awaited<ReturnType<typeof updateTruck>>,
-    { id: number; data: BodyType<TruckWriteBody> }
+    { id: number; data: BodyType<TruckPatchBody> }
   > = (props) => {
     const { id, data } = props ?? {};
 
@@ -2024,7 +2026,7 @@ export const getUpdateTruckMutationOptions = <
 export type UpdateTruckMutationResult = NonNullable<
   Awaited<ReturnType<typeof updateTruck>>
 >;
-export type UpdateTruckMutationBody = BodyType<TruckWriteBody>;
+export type UpdateTruckMutationBody = BodyType<TruckPatchBody>;
 export type UpdateTruckMutationError = ErrorType<unknown>;
 
 export const useUpdateTruck = <
@@ -2034,14 +2036,14 @@ export const useUpdateTruck = <
   mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof updateTruck>>,
     TError,
-    { id: number; data: BodyType<TruckWriteBody> },
+    { id: number; data: BodyType<TruckPatchBody> },
     TContext
   >;
   request?: SecondParameter<typeof customFetch>;
 }): UseMutationResult<
   Awaited<ReturnType<typeof updateTruck>>,
   TError,
-  { id: number; data: BodyType<TruckWriteBody> },
+  { id: number; data: BodyType<TruckPatchBody> },
   TContext
 > => {
   return useMutation(getUpdateTruckMutationOptions(options));
@@ -2279,14 +2281,14 @@ export const getUpdateEquipmentUrl = (id: number) => {
 
 export const updateEquipment = async (
   id: number,
-  equipmentWriteBody: EquipmentWriteBody,
+  equipmentPatchBody: EquipmentPatchBody,
   options?: RequestInit,
 ): Promise<EquipmentResponse> => {
   return customFetch<EquipmentResponse>(getUpdateEquipmentUrl(id), {
     ...options,
     method: "PATCH",
     headers: { "Content-Type": "application/json", ...options?.headers },
-    body: JSON.stringify(equipmentWriteBody),
+    body: JSON.stringify(equipmentPatchBody),
   });
 };
 
@@ -2297,14 +2299,14 @@ export const getUpdateEquipmentMutationOptions = <
   mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof updateEquipment>>,
     TError,
-    { id: number; data: BodyType<EquipmentWriteBody> },
+    { id: number; data: BodyType<EquipmentPatchBody> },
     TContext
   >;
   request?: SecondParameter<typeof customFetch>;
 }): UseMutationOptions<
   Awaited<ReturnType<typeof updateEquipment>>,
   TError,
-  { id: number; data: BodyType<EquipmentWriteBody> },
+  { id: number; data: BodyType<EquipmentPatchBody> },
   TContext
 > => {
   const mutationKey = ["updateEquipment"];
@@ -2318,7 +2320,7 @@ export const getUpdateEquipmentMutationOptions = <
 
   const mutationFn: MutationFunction<
     Awaited<ReturnType<typeof updateEquipment>>,
-    { id: number; data: BodyType<EquipmentWriteBody> }
+    { id: number; data: BodyType<EquipmentPatchBody> }
   > = (props) => {
     const { id, data } = props ?? {};
 
@@ -2331,7 +2333,7 @@ export const getUpdateEquipmentMutationOptions = <
 export type UpdateEquipmentMutationResult = NonNullable<
   Awaited<ReturnType<typeof updateEquipment>>
 >;
-export type UpdateEquipmentMutationBody = BodyType<EquipmentWriteBody>;
+export type UpdateEquipmentMutationBody = BodyType<EquipmentPatchBody>;
 export type UpdateEquipmentMutationError = ErrorType<unknown>;
 
 export const useUpdateEquipment = <
@@ -2341,14 +2343,14 @@ export const useUpdateEquipment = <
   mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof updateEquipment>>,
     TError,
-    { id: number; data: BodyType<EquipmentWriteBody> },
+    { id: number; data: BodyType<EquipmentPatchBody> },
     TContext
   >;
   request?: SecondParameter<typeof customFetch>;
 }): UseMutationResult<
   Awaited<ReturnType<typeof updateEquipment>>,
   TError,
-  { id: number; data: BodyType<EquipmentWriteBody> },
+  { id: number; data: BodyType<EquipmentPatchBody> },
   TContext
 > => {
   return useMutation(getUpdateEquipmentMutationOptions(options));

@@ -490,6 +490,7 @@ export const CreateTruckBody = zod.object({
   plate: zod.string().nullish(),
   status: zod.string(),
   assignedCrewId: zod.number().nullish(),
+  departmentId: zod.number().nullish(),
   purchasePriceCents: zod.number().nullish(),
   purchaseDate: zod.coerce.date().nullish(),
   currentMileage: zod.number().nullish(),
@@ -501,13 +502,14 @@ export const UpdateTruckParams = zod.object({
 });
 
 export const UpdateTruckBody = zod.object({
-  name: zod.string(),
+  name: zod.string().optional(),
   brand: zod.string().nullish(),
   model: zod.string().nullish(),
   vin: zod.string().nullish(),
   plate: zod.string().nullish(),
-  status: zod.string(),
+  status: zod.string().optional(),
   assignedCrewId: zod.number().nullish(),
+  departmentId: zod.number().nullish(),
   purchasePriceCents: zod.number().nullish(),
   purchaseDate: zod.coerce.date().nullish(),
   currentMileage: zod.number().nullish(),
@@ -568,6 +570,7 @@ export const CreateEquipmentBody = zod.object({
   serial: zod.string().nullish(),
   status: zod.string(),
   assignedTruckId: zod.number().nullish(),
+  departmentId: zod.number().nullish(),
   purchasePriceCents: zod.number().nullish(),
   purchaseDate: zod.coerce.date().nullish(),
   currentHours: zod.number().nullish(),
@@ -579,13 +582,14 @@ export const UpdateEquipmentParams = zod.object({
 });
 
 export const UpdateEquipmentBody = zod.object({
-  name: zod.string(),
-  type: zod.string(),
+  name: zod.string().optional(),
+  type: zod.string().optional(),
   brand: zod.string().nullish(),
   model: zod.string().nullish(),
   serial: zod.string().nullish(),
-  status: zod.string(),
+  status: zod.string().optional(),
   assignedTruckId: zod.number().nullish(),
+  departmentId: zod.number().nullish(),
   purchasePriceCents: zod.number().nullish(),
   purchaseDate: zod.coerce.date().nullish(),
   currentHours: zod.number().nullish(),
@@ -719,6 +723,7 @@ export const ListAssetsResponse = zod.object({
         .describe("VIN for trucks, serial for equipment."),
       status: zod.string(),
       departmentId: zod.number().nullish(),
+      departmentName: zod.string().nullish(),
       purchasePriceCents: zod.number().nullish(),
       purchaseDate: zod.coerce.date().nullish(),
       currentUsage: zod
@@ -771,6 +776,7 @@ export const GetAssetBySlugResponse = zod.object({
       .describe("VIN for trucks, serial for equipment."),
     status: zod.string(),
     departmentId: zod.number().nullish(),
+    departmentName: zod.string().nullish(),
     purchasePriceCents: zod.number().nullish(),
     purchaseDate: zod.coerce.date().nullish(),
     currentUsage: zod
@@ -856,6 +862,7 @@ export const SetAssetStatusResponse = zod.object({
       .describe("VIN for trucks, serial for equipment."),
     status: zod.string(),
     departmentId: zod.number().nullish(),
+    departmentName: zod.string().nullish(),
     purchasePriceCents: zod.number().nullish(),
     purchaseDate: zod.coerce.date().nullish(),
     currentUsage: zod

@@ -8,6 +8,7 @@ import {
   usageReadingsTable,
   assetStatusLogTable,
   usersTable,
+  departmentsTable,
 } from "@workspace/db";
 import {
   CreateTruckBody,
@@ -79,6 +80,7 @@ router.post(
         plate: d.plate ?? null,
         status: d.status as FleetStatus,
         assignedCrewId: d.assignedCrewId ?? null,
+        departmentId: d.departmentId ?? null,
         purchasePriceCents: d.purchasePriceCents ?? null,
         purchaseDate: d.purchaseDate ? new Date(d.purchaseDate) : null,
         ...(d.currentMileage != null ? { currentMileage: d.currentMileage } : {}),
@@ -124,6 +126,8 @@ router.patch(
     if (d.status !== undefined) patch.status = d.status as FleetStatus;
     if (d.assignedCrewId !== undefined)
       patch.assignedCrewId = d.assignedCrewId ?? null;
+    if (d.departmentId !== undefined)
+      patch.departmentId = d.departmentId ?? null;
     if (d.purchasePriceCents !== undefined)
       patch.purchasePriceCents = d.purchasePriceCents ?? null;
     if (d.purchaseDate !== undefined)
@@ -199,6 +203,7 @@ router.post(
         serial: d.serial ?? null,
         status: d.status as FleetStatus,
         assignedTruckId: d.assignedTruckId ?? null,
+        departmentId: d.departmentId ?? null,
         purchasePriceCents: d.purchasePriceCents ?? null,
         purchaseDate: d.purchaseDate ? new Date(d.purchaseDate) : null,
         ...(d.currentHours != null ? { currentHours: d.currentHours } : {}),
@@ -243,6 +248,8 @@ router.patch(
     if (d.status !== undefined) patch.status = d.status as FleetStatus;
     if (d.assignedTruckId !== undefined)
       patch.assignedTruckId = d.assignedTruckId ?? null;
+    if (d.departmentId !== undefined)
+      patch.departmentId = d.departmentId ?? null;
     if (d.purchasePriceCents !== undefined)
       patch.purchasePriceCents = d.purchasePriceCents ?? null;
     if (d.purchaseDate !== undefined)
@@ -341,27 +348,27 @@ router.get(
   requireSection("fleet.maintenance", "view"),
   async (req, res) => {
     const deptId = resolveDeptId(req);
-    let truckIdSet: Set<number> | null = null;
-    let equipIdSet: Set<number> | null = null;
+    let rows: Awaited<ReturnType<typeof db.select>>[];
     if (deptId != null) {
-      const [deptTrucks, deptEquip] = await Promise.all([
-        db.select({ id: trucksTable.id }).from(trucksTable).where(eq(trucksTable.departmentId, deptId)),
-        db.select({ id: equipmentTable.id }).from(equipmentTable).where(eq(equipmentTable.departmentId, deptId)),
-      ]);
-      truckIdSet = new Set(deptTrucks.map((t) => t.id));
-      equipIdSet = new Set(deptEquip.map((e) => e.id));
-    }
-    const allRows = await db
-      .select()
-      .from(maintenanceLogsTable)
-      .orderBy(desc(maintenanceLogsTable.performedAt))
-      .limit(500);
-    const rows = deptId != null
-      ? allRows.filter((r) =>
-          (r.truckId != null && truckIdSet!.has(r.truckId)) ||
-          (r.equipmentId != null && equipIdSet!.has(r.equipmentId)),
+      // Filter in SQL so the LIMIT applies only to matching dept rows.
+      rows = await db
+        .select({ log: maintenanceLogsTable })
+        .from(maintenanceLogsTable)
+        .leftJoin(trucksTable, eq(maintenanceLogsTable.truckId, trucksTable.id))
+        .leftJoin(equipmentTable, eq(maintenanceLogsTable.equipmentId, equipmentTable.id))
+        .where(
+          sql`(${trucksTable.departmentId} = ${deptId} OR ${equipmentTable.departmentId} = ${deptId})`,
         )
-      : allRows;
+        .orderBy(desc(maintenanceLogsTable.performedAt))
+        .limit(500)
+        .then((r) => r.map((x) => x.log));
+    } else {
+      rows = await db
+        .select()
+        .from(maintenanceLogsTable)
+        .orderBy(desc(maintenanceLogsTable.performedAt))
+        .limit(500);
+    }
     const loggedByIds = [...new Set(rows.map((r) => r.loggedByUserId).filter((id): id is number => id != null))];
     let userMap: Record<number, string> = {};
     if (loggedByIds.length > 0) {
@@ -522,6 +529,7 @@ type AssetSummary = {
   identifier: string | null;
   status: string;
   departmentId: number | null;
+  departmentName: string | null;
   purchasePriceCents: number | null;
   purchaseDate: string | null;
   currentUsage: number;
@@ -551,7 +559,7 @@ function deriveServiceState(
 }
 
 async function buildAssetList(departmentId?: number): Promise<AssetSummary[]> {
-  const [trucks, equipment, logs] = await Promise.all([
+  const [trucks, equipment, logs, deptRows] = await Promise.all([
     departmentId != null
       ? db.select().from(trucksTable).where(eq(trucksTable.departmentId, departmentId))
       : db.select().from(trucksTable),
@@ -559,7 +567,10 @@ async function buildAssetList(departmentId?: number): Promise<AssetSummary[]> {
       ? db.select().from(equipmentTable).where(eq(equipmentTable.departmentId, departmentId))
       : db.select().from(equipmentTable),
     db.select().from(maintenanceLogsTable),
+    db.select({ id: departmentsTable.id, label: departmentsTable.label }).from(departmentsTable),
   ]);
+
+  const deptMap = new Map(deptRows.map((d) => [d.id, d.label]));
 
   const truckLogs = new Map<number, typeof logs>();
   const equipLogs = new Map<number, typeof logs>();
@@ -611,6 +622,7 @@ async function buildAssetList(departmentId?: number): Promise<AssetSummary[]> {
       identifier: t.vin,
       status: t.status,
       departmentId: t.departmentId ?? null,
+      departmentName: t.departmentId != null ? (deptMap.get(t.departmentId) ?? null) : null,
       purchasePriceCents: t.purchasePriceCents,
       purchaseDate: t.purchaseDate ? t.purchaseDate.toISOString() : null,
       currentUsage: t.currentMileage,
@@ -662,6 +674,7 @@ async function buildAssetList(departmentId?: number): Promise<AssetSummary[]> {
       identifier: e.serial,
       status: e.status,
       departmentId: e.departmentId ?? null,
+      departmentName: e.departmentId != null ? (deptMap.get(e.departmentId) ?? null) : null,
       purchasePriceCents: e.purchasePriceCents,
       purchaseDate: e.purchaseDate ? e.purchaseDate.toISOString() : null,
       currentUsage: e.currentHours,

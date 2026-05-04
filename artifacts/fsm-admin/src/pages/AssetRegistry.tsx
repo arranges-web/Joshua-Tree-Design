@@ -31,6 +31,7 @@ import {
   ArrowRight,
   QrCode,
   DollarSign,
+  Building2,
 } from "lucide-react";
 
 const usd = (cents: number | null | undefined) =>
@@ -259,6 +260,7 @@ export function AssetRegistry() {
               <TableRow>
                 <TableHead className="w-[30%]">Asset</TableHead>
                 <TableHead>Status</TableHead>
+                {!activeDeptId && <TableHead>Department</TableHead>}
                 <TableHead>Service</TableHead>
                 <TableHead className="text-right">Usage</TableHead>
                 <TableHead className="text-right">Life-to-date</TableHead>
@@ -304,6 +306,18 @@ export function AssetRegistry() {
                       {statusLabel(a.status)}
                     </Badge>
                   </TableCell>
+                  {!activeDeptId && (
+                    <TableCell>
+                      {a.departmentName ? (
+                        <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                          <Building2 className="h-3 w-3 shrink-0" />
+                          {a.departmentName}
+                        </span>
+                      ) : (
+                        <span className="text-xs text-muted-foreground/50">—</span>
+                      )}
+                    </TableCell>
+                  )}
                   <TableCell>
                     <div className="space-y-1">
                       <ServiceBadge state={a.serviceState} />

@@ -14,6 +14,7 @@ export interface EquipmentWriteBody {
   serial?: string | null;
   status: string;
   assignedTruckId?: number | null;
+  departmentId?: number | null;
   purchasePriceCents?: number | null;
   purchaseDate?: Date | null;
   currentHours?: number | null;

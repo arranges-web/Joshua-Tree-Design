@@ -392,7 +392,7 @@ paths:
         required: true
         content:
           application/json:
-            schema: { $ref: "#/components/schemas/TruckWriteBody" }
+            schema: { $ref: "#/components/schemas/TruckPatchBody" }
       responses:
         "200":
           description: OK
@@ -451,7 +451,7 @@ paths:
         required: true
         content:
           application/json:
-            schema: { $ref: "#/components/schemas/EquipmentWriteBody" }
+            schema: { $ref: "#/components/schemas/EquipmentPatchBody" }
       responses:
         "200":
           description: OK
@@ -1197,6 +1197,22 @@ components:
         plate: { type: string, nullable: true }
         status: { type: string }
         assignedCrewId: { type: integer, nullable: true }
+        departmentId: { type: integer, nullable: true }
+        purchasePriceCents: { type: integer, nullable: true }
+        purchaseDate: { type: string, format: date-time, nullable: true }
+        currentMileage: { type: integer, nullable: true }
+        serviceIntervalMiles: { type: integer, nullable: true }
+    TruckPatchBody:
+      type: object
+      properties:
+        name: { type: string }
+        brand: { type: string, nullable: true }
+        model: { type: string, nullable: true }
+        vin: { type: string, nullable: true }
+        plate: { type: string, nullable: true }
+        status: { type: string }
+        assignedCrewId: { type: integer, nullable: true }
+        departmentId: { type: integer, nullable: true }
         purchasePriceCents: { type: integer, nullable: true }
         purchaseDate: { type: string, format: date-time, nullable: true }
         currentMileage: { type: integer, nullable: true }
@@ -1242,6 +1258,22 @@ components:
         serial: { type: string, nullable: true }
         status: { type: string }
         assignedTruckId: { type: integer, nullable: true }
+        departmentId: { type: integer, nullable: true }
+        purchasePriceCents: { type: integer, nullable: true }
+        purchaseDate: { type: string, format: date-time, nullable: true }
+        currentHours: { type: integer, nullable: true }
+        serviceIntervalHours: { type: integer, nullable: true }
+    EquipmentPatchBody:
+      type: object
+      properties:
+        name: { type: string }
+        type: { type: string }
+        brand: { type: string, nullable: true }
+        model: { type: string, nullable: true }
+        serial: { type: string, nullable: true }
+        status: { type: string }
+        assignedTruckId: { type: integer, nullable: true }
+        departmentId: { type: integer, nullable: true }
         purchasePriceCents: { type: integer, nullable: true }
         purchaseDate: { type: string, format: date-time, nullable: true }
         currentHours: { type: integer, nullable: true }
@@ -1348,6 +1380,7 @@ components:
         identifier: { type: string, nullable: true, description: "VIN for trucks, serial for equipment." }
         status: { type: string }
         departmentId: { type: integer, nullable: true }
+        departmentName: { type: string, nullable: true }
         purchasePriceCents: { type: integer, nullable: true }
         purchaseDate: { type: string, format: date-time, nullable: true }
         currentUsage: { type: integer, description: "Current mileage (trucks) or hours (equipment)." }

@@ -206,6 +206,22 @@ export interface TruckWriteBody {
   plate?: string | null;
   status: string;
   assignedCrewId?: number | null;
+  departmentId?: number | null;
+  purchasePriceCents?: number | null;
+  purchaseDate?: string | null;
+  currentMileage?: number | null;
+  serviceIntervalMiles?: number | null;
+}
+
+export interface TruckPatchBody {
+  name?: string;
+  brand?: string | null;
+  model?: string | null;
+  vin?: string | null;
+  plate?: string | null;
+  status?: string;
+  assignedCrewId?: number | null;
+  departmentId?: number | null;
   purchasePriceCents?: number | null;
   purchaseDate?: string | null;
   currentMileage?: number | null;
@@ -244,6 +260,22 @@ export interface EquipmentWriteBody {
   serial?: string | null;
   status: string;
   assignedTruckId?: number | null;
+  departmentId?: number | null;
+  purchasePriceCents?: number | null;
+  purchaseDate?: string | null;
+  currentHours?: number | null;
+  serviceIntervalHours?: number | null;
+}
+
+export interface EquipmentPatchBody {
+  name?: string;
+  type?: string;
+  brand?: string | null;
+  model?: string | null;
+  serial?: string | null;
+  status?: string;
+  assignedTruckId?: number | null;
+  departmentId?: number | null;
   purchasePriceCents?: number | null;
   purchaseDate?: string | null;
   currentHours?: number | null;
@@ -347,6 +379,7 @@ export interface Asset {
   identifier?: string | null;
   status: string;
   departmentId?: number | null;
+  departmentName?: string | null;
   purchasePriceCents?: number | null;
   purchaseDate?: string | null;
   /** Current mileage (trucks) or hours (equipment). */

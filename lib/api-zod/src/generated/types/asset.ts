@@ -20,6 +20,7 @@ export interface Asset {
   identifier?: string | null;
   status: string;
   departmentId?: number | null;
+  departmentName?: string | null;
   purchasePriceCents?: number | null;
   purchaseDate?: Date | null;
   /** Current mileage (trucks) or hours (equipment). */
