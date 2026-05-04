@@ -1,4 +1,4 @@
-import { useLogout, useGetMe } from "@workspace/api-client-react";
+import { useLogout, useGetMe, useListDepartments } from "@workspace/api-client-react";
 import { useLocation, Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import {
@@ -9,11 +9,20 @@ import {
   TreeDeciduous,
   Activity,
   Package,
+  Building2,
 } from "lucide-react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { getGetMeQueryKey } from "@workspace/api-client-react";
+import { DepartmentProvider, useDepartmentFilter } from "@/context/DepartmentContext";
 
 const NAV_GROUPS: Array<{
   label: string;
@@ -48,7 +57,41 @@ function Brand() {
   );
 }
 
-export function Shell({ children }: { children: React.ReactNode }) {
+function DepartmentSwitcher() {
+  const { isAdmin, activeDeptId, setActiveDeptId } = useDepartmentFilter();
+  const { data: deptsData } = useListDepartments();
+
+  if (!isAdmin) return null;
+
+  const depts = deptsData?.departments ?? [];
+  const value = activeDeptId == null ? "all" : String(activeDeptId);
+
+  return (
+    <div className="flex items-center gap-2 rounded-md border border-border/60 bg-background px-2 py-1.5">
+      <Building2 className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+      <Select
+        value={value}
+        onValueChange={(v) =>
+          setActiveDeptId(v === "all" ? undefined : parseInt(v, 10))
+        }
+      >
+        <SelectTrigger className="h-auto border-0 p-0 text-xs font-medium shadow-none focus:ring-0 w-[140px]">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="all">All Departments</SelectItem>
+          {depts.map((d) => (
+            <SelectItem key={d.id} value={String(d.id)}>
+              {d.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+  );
+}
+
+function ShellInner({ children }: { children: React.ReactNode }) {
   const { data: authData } = useGetMe();
   const [location, setLocation] = useLocation();
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
@@ -105,6 +148,11 @@ export function Shell({ children }: { children: React.ReactNode }) {
         <p className="text-[10px] font-mono uppercase tracking-[0.18em] text-sidebar-foreground/60">
           {authData?.user?.role ?? ""}
         </p>
+        {authData?.user?.department && (
+          <p className="text-[10px] text-sidebar-foreground/50 mt-0.5">
+            {authData.user.department}
+          </p>
+        )}
       </div>
       <Button
         variant="outline"
@@ -131,28 +179,31 @@ export function Shell({ children }: { children: React.ReactNode }) {
       </aside>
 
       <div className="flex flex-1 flex-col overflow-hidden">
-        <header className="flex h-14 items-center justify-between border-b bg-card px-4 md:hidden">
-          <Sheet open={isMobileNavOpen} onOpenChange={setIsMobileNavOpen}>
-            <SheetTrigger asChild>
-              <Button variant="ghost" size="icon">
-                <Menu className="h-5 w-5" />
-              </Button>
-            </SheetTrigger>
-            <SheetContent
-              side="left"
-              className="w-72 bg-sidebar p-0 text-sidebar-foreground"
-            >
-              <div className="flex h-16 items-center border-b border-sidebar-border px-5">
-                <Brand />
-              </div>
-              <div className="flex-1 overflow-y-auto px-3">
-                <NavLinks />
-              </div>
-              <UserCard />
-            </SheetContent>
-          </Sheet>
-          <Brand />
-          <div className="w-9" />
+        <header className="flex h-14 items-center justify-between border-b bg-card px-4">
+          <div className="flex items-center gap-3 md:hidden">
+            <Sheet open={isMobileNavOpen} onOpenChange={setIsMobileNavOpen}>
+              <SheetTrigger asChild>
+                <Button variant="ghost" size="icon">
+                  <Menu className="h-5 w-5" />
+                </Button>
+              </SheetTrigger>
+              <SheetContent
+                side="left"
+                className="w-72 bg-sidebar p-0 text-sidebar-foreground"
+              >
+                <div className="flex h-16 items-center border-b border-sidebar-border px-5">
+                  <Brand />
+                </div>
+                <div className="flex-1 overflow-y-auto px-3">
+                  <NavLinks />
+                </div>
+                <UserCard />
+              </SheetContent>
+            </Sheet>
+            <Brand />
+          </div>
+          <div className="hidden md:block" />
+          <DepartmentSwitcher />
         </header>
 
         <main className="flex-1 overflow-y-auto bg-background p-4 md:p-8">
@@ -160,5 +211,13 @@ export function Shell({ children }: { children: React.ReactNode }) {
         </main>
       </div>
     </div>
+  );
+}
+
+export function Shell({ children }: { children: React.ReactNode }) {
+  return (
+    <DepartmentProvider>
+      <ShellInner>{children}</ShellInner>
+    </DepartmentProvider>
   );
 }

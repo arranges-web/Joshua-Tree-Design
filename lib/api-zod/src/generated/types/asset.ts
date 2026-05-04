@@ -19,6 +19,7 @@ export interface Asset {
   /** VIN for trucks, serial for equipment. */
   identifier?: string | null;
   status: string;
+  departmentId?: number | null;
   purchasePriceCents?: number | null;
   purchaseDate?: Date | null;
   /** Current mileage (trucks) or hours (equipment). */

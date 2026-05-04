@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { Link } from "wouter";
 import { useListAssets } from "@workspace/api-client-react";
+import { useDepartmentFilter } from "@/context/DepartmentContext";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -85,7 +86,8 @@ type SortKey = "NAME" | "STATUS" | "SERVICE_DUE" | "YTD_SPEND" | "LIFETIME_SPEND
 const SERVICE_RANK = { OVERDUE: 0, DUE_SOON: 1, OK: 2 };
 
 export function AssetRegistry() {
-  const { data, isLoading } = useListAssets();
+  const { activeDeptId } = useDepartmentFilter();
+  const { data, isLoading } = useListAssets(activeDeptId != null ? { departmentId: activeDeptId } : {});
   const [query, setQuery] = useState("");
   const [kindFilter, setKindFilter] = useState<"ALL" | "TRUCK" | "EQUIPMENT">("ALL");
   const [statusFilter, setStatusFilter] = useState<

@@ -477,6 +477,11 @@ paths:
     get:
       operationId: listMaintenanceLogs
       tags: [maintenance]
+      parameters:
+        - in: query
+          name: departmentId
+          required: false
+          schema: { type: integer }
       responses:
         "200":
           description: OK
@@ -536,6 +541,11 @@ paths:
     get:
       operationId: listAssets
       tags: [assets]
+      parameters:
+        - in: query
+          name: departmentId
+          required: false
+          schema: { type: integer }
       responses:
         "200":
           description: OK
@@ -603,6 +613,11 @@ paths:
     get:
       operationId: getFleetPulse
       tags: [assets]
+      parameters:
+        - in: query
+          name: departmentId
+          required: false
+          schema: { type: integer }
       responses:
         "200":
           description: OK
@@ -954,13 +969,14 @@ components:
 
     AuthUser:
       type: object
-      required: [id, email, fullName, role, department]
+      required: [id, email, fullName, role, department, departmentId]
       properties:
         id: { type: integer }
         email: { type: string }
         fullName: { type: string }
         role: { type: string }
         department: { type: string }
+        departmentId: { type: integer }
     AuthMeResponse:
       type: object
       required: [user]
@@ -1331,6 +1347,7 @@ components:
         model: { type: string, nullable: true }
         identifier: { type: string, nullable: true, description: "VIN for trucks, serial for equipment." }
         status: { type: string }
+        departmentId: { type: integer, nullable: true }
         purchasePriceCents: { type: integer, nullable: true }
         purchaseDate: { type: string, format: date-time, nullable: true }
         currentUsage: { type: integer, description: "Current mileage (trucks) or hours (equipment)." }

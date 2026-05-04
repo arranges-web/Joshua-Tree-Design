@@ -37,6 +37,7 @@ import type {
   EquipmentWriteBody,
   ErrorResponse,
   FleetPulseResponse,
+  GetFleetPulseParams,
   HealthStatus,
   InvoiceListResponse,
   InvoiceResponse,
@@ -49,7 +50,9 @@ import type {
   LeadResponse,
   LeadUpdateBody,
   LeadWriteBody,
+  ListAssetsParams,
   ListLeadsParams,
+  ListMaintenanceLogsParams,
   LoginRequest,
   MaintenanceLogListResponse,
   MaintenanceLogResponse,
@@ -2429,41 +2432,66 @@ export const useDeleteEquipment = <
   return useMutation(getDeleteEquipmentMutationOptions(options));
 };
 
-export const getListMaintenanceLogsUrl = () => {
-  return `/api/maintenance-logs`;
+export const getListMaintenanceLogsUrl = (
+  params?: ListMaintenanceLogsParams,
+) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/maintenance-logs?${stringifiedParams}`
+    : `/api/maintenance-logs`;
 };
 
 export const listMaintenanceLogs = async (
+  params?: ListMaintenanceLogsParams,
   options?: RequestInit,
 ): Promise<MaintenanceLogListResponse> => {
-  return customFetch<MaintenanceLogListResponse>(getListMaintenanceLogsUrl(), {
-    ...options,
-    method: "GET",
-  });
+  return customFetch<MaintenanceLogListResponse>(
+    getListMaintenanceLogsUrl(params),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
 };
 
-export const getListMaintenanceLogsQueryKey = () => {
-  return [`/api/maintenance-logs`] as const;
+export const getListMaintenanceLogsQueryKey = (
+  params?: ListMaintenanceLogsParams,
+) => {
+  return [`/api/maintenance-logs`, ...(params ? [params] : [])] as const;
 };
 
 export const getListMaintenanceLogsQueryOptions = <
   TData = Awaited<ReturnType<typeof listMaintenanceLogs>>,
   TError = ErrorType<unknown>,
->(options?: {
-  query?: UseQueryOptions<
-    Awaited<ReturnType<typeof listMaintenanceLogs>>,
-    TError,
-    TData
-  >;
-  request?: SecondParameter<typeof customFetch>;
-}) => {
+>(
+  params?: ListMaintenanceLogsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listMaintenanceLogs>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
   const { query: queryOptions, request: requestOptions } = options ?? {};
 
-  const queryKey = queryOptions?.queryKey ?? getListMaintenanceLogsQueryKey();
+  const queryKey =
+    queryOptions?.queryKey ?? getListMaintenanceLogsQueryKey(params);
 
   const queryFn: QueryFunction<
     Awaited<ReturnType<typeof listMaintenanceLogs>>
-  > = ({ signal }) => listMaintenanceLogs({ signal, ...requestOptions });
+  > = ({ signal }) =>
+    listMaintenanceLogs(params, { signal, ...requestOptions });
 
   return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
     Awaited<ReturnType<typeof listMaintenanceLogs>>,
@@ -2480,15 +2508,18 @@ export type ListMaintenanceLogsQueryError = ErrorType<unknown>;
 export function useListMaintenanceLogs<
   TData = Awaited<ReturnType<typeof listMaintenanceLogs>>,
   TError = ErrorType<unknown>,
->(options?: {
-  query?: UseQueryOptions<
-    Awaited<ReturnType<typeof listMaintenanceLogs>>,
-    TError,
-    TData
-  >;
-  request?: SecondParameter<typeof customFetch>;
-}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
-  const queryOptions = getListMaintenanceLogsQueryOptions(options);
+>(
+  params?: ListMaintenanceLogsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listMaintenanceLogs>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListMaintenanceLogsQueryOptions(params, options);
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;
@@ -2738,41 +2769,57 @@ export const useDeleteMaintenanceLog = <
   return useMutation(getDeleteMaintenanceLogMutationOptions(options));
 };
 
-export const getListAssetsUrl = () => {
-  return `/api/assets`;
+export const getListAssetsUrl = (params?: ListAssetsParams) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/assets?${stringifiedParams}`
+    : `/api/assets`;
 };
 
 export const listAssets = async (
+  params?: ListAssetsParams,
   options?: RequestInit,
 ): Promise<AssetListResponse> => {
-  return customFetch<AssetListResponse>(getListAssetsUrl(), {
+  return customFetch<AssetListResponse>(getListAssetsUrl(params), {
     ...options,
     method: "GET",
   });
 };
 
-export const getListAssetsQueryKey = () => {
-  return [`/api/assets`] as const;
+export const getListAssetsQueryKey = (params?: ListAssetsParams) => {
+  return [`/api/assets`, ...(params ? [params] : [])] as const;
 };
 
 export const getListAssetsQueryOptions = <
   TData = Awaited<ReturnType<typeof listAssets>>,
   TError = ErrorType<unknown>,
->(options?: {
-  query?: UseQueryOptions<
-    Awaited<ReturnType<typeof listAssets>>,
-    TError,
-    TData
-  >;
-  request?: SecondParameter<typeof customFetch>;
-}) => {
+>(
+  params?: ListAssetsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listAssets>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
   const { query: queryOptions, request: requestOptions } = options ?? {};
 
-  const queryKey = queryOptions?.queryKey ?? getListAssetsQueryKey();
+  const queryKey = queryOptions?.queryKey ?? getListAssetsQueryKey(params);
 
   const queryFn: QueryFunction<Awaited<ReturnType<typeof listAssets>>> = ({
     signal,
-  }) => listAssets({ signal, ...requestOptions });
+  }) => listAssets(params, { signal, ...requestOptions });
 
   return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
     Awaited<ReturnType<typeof listAssets>>,
@@ -2789,15 +2836,18 @@ export type ListAssetsQueryError = ErrorType<unknown>;
 export function useListAssets<
   TData = Awaited<ReturnType<typeof listAssets>>,
   TError = ErrorType<unknown>,
->(options?: {
-  query?: UseQueryOptions<
-    Awaited<ReturnType<typeof listAssets>>,
-    TError,
-    TData
-  >;
-  request?: SecondParameter<typeof customFetch>;
-}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
-  const queryOptions = getListAssetsQueryOptions(options);
+>(
+  params?: ListAssetsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listAssets>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListAssetsQueryOptions(params, options);
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;
@@ -3052,41 +3102,57 @@ export function useGetAssetStatusHistory<
   return { ...query, queryKey: queryOptions.queryKey };
 }
 
-export const getGetFleetPulseUrl = () => {
-  return `/api/fleet-pulse`;
+export const getGetFleetPulseUrl = (params?: GetFleetPulseParams) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/fleet-pulse?${stringifiedParams}`
+    : `/api/fleet-pulse`;
 };
 
 export const getFleetPulse = async (
+  params?: GetFleetPulseParams,
   options?: RequestInit,
 ): Promise<FleetPulseResponse> => {
-  return customFetch<FleetPulseResponse>(getGetFleetPulseUrl(), {
+  return customFetch<FleetPulseResponse>(getGetFleetPulseUrl(params), {
     ...options,
     method: "GET",
   });
 };
 
-export const getGetFleetPulseQueryKey = () => {
-  return [`/api/fleet-pulse`] as const;
+export const getGetFleetPulseQueryKey = (params?: GetFleetPulseParams) => {
+  return [`/api/fleet-pulse`, ...(params ? [params] : [])] as const;
 };
 
 export const getGetFleetPulseQueryOptions = <
   TData = Awaited<ReturnType<typeof getFleetPulse>>,
   TError = ErrorType<unknown>,
->(options?: {
-  query?: UseQueryOptions<
-    Awaited<ReturnType<typeof getFleetPulse>>,
-    TError,
-    TData
-  >;
-  request?: SecondParameter<typeof customFetch>;
-}) => {
+>(
+  params?: GetFleetPulseParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getFleetPulse>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
   const { query: queryOptions, request: requestOptions } = options ?? {};
 
-  const queryKey = queryOptions?.queryKey ?? getGetFleetPulseQueryKey();
+  const queryKey = queryOptions?.queryKey ?? getGetFleetPulseQueryKey(params);
 
   const queryFn: QueryFunction<Awaited<ReturnType<typeof getFleetPulse>>> = ({
     signal,
-  }) => getFleetPulse({ signal, ...requestOptions });
+  }) => getFleetPulse(params, { signal, ...requestOptions });
 
   return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
     Awaited<ReturnType<typeof getFleetPulse>>,
@@ -3103,15 +3169,18 @@ export type GetFleetPulseQueryError = ErrorType<unknown>;
 export function useGetFleetPulse<
   TData = Awaited<ReturnType<typeof getFleetPulse>>,
   TError = ErrorType<unknown>,
->(options?: {
-  query?: UseQueryOptions<
-    Awaited<ReturnType<typeof getFleetPulse>>,
-    TError,
-    TData
-  >;
-  request?: SecondParameter<typeof customFetch>;
-}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
-  const queryOptions = getGetFleetPulseQueryOptions(options);
+>(
+  params?: GetFleetPulseParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getFleetPulse>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetFleetPulseQueryOptions(params, options);
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;

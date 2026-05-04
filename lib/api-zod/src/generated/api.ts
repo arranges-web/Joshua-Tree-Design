@@ -23,6 +23,7 @@ export const LoginResponse = zod.object({
     fullName: zod.string(),
     role: zod.string(),
     department: zod.string(),
+    departmentId: zod.number(),
   }),
 });
 
@@ -37,6 +38,7 @@ export const GetMeResponse = zod.object({
     fullName: zod.string(),
     role: zod.string(),
     department: zod.string(),
+    departmentId: zod.number(),
   }),
 });
 
@@ -616,6 +618,10 @@ export const DeleteEquipmentResponse = zod.object({
   ok: zod.boolean(),
 });
 
+export const ListMaintenanceLogsQueryParams = zod.object({
+  departmentId: zod.coerce.number().optional(),
+});
+
 export const ListMaintenanceLogsResponse = zod.object({
   logs: zod.array(
     zod.object({
@@ -694,6 +700,10 @@ export const DeleteMaintenanceLogResponse = zod.object({
   ok: zod.boolean(),
 });
 
+export const ListAssetsQueryParams = zod.object({
+  departmentId: zod.coerce.number().optional(),
+});
+
 export const ListAssetsResponse = zod.object({
   assets: zod.array(
     zod.object({
@@ -708,6 +718,7 @@ export const ListAssetsResponse = zod.object({
         .nullish()
         .describe("VIN for trucks, serial for equipment."),
       status: zod.string(),
+      departmentId: zod.number().nullish(),
       purchasePriceCents: zod.number().nullish(),
       purchaseDate: zod.coerce.date().nullish(),
       currentUsage: zod
@@ -759,6 +770,7 @@ export const GetAssetBySlugResponse = zod.object({
       .nullish()
       .describe("VIN for trucks, serial for equipment."),
     status: zod.string(),
+    departmentId: zod.number().nullish(),
     purchasePriceCents: zod.number().nullish(),
     purchaseDate: zod.coerce.date().nullish(),
     currentUsage: zod
@@ -843,6 +855,7 @@ export const SetAssetStatusResponse = zod.object({
       .nullish()
       .describe("VIN for trucks, serial for equipment."),
     status: zod.string(),
+    departmentId: zod.number().nullish(),
     purchasePriceCents: zod.number().nullish(),
     purchaseDate: zod.coerce.date().nullish(),
     currentUsage: zod
@@ -923,6 +936,10 @@ export const GetAssetStatusHistoryResponse = zod.object({
       changedAt: zod.coerce.date(),
     }),
   ),
+});
+
+export const GetFleetPulseQueryParams = zod.object({
+  departmentId: zod.coerce.number().optional(),
 });
 
 export const GetFleetPulseResponse = zod.object({

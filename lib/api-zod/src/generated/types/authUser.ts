@@ -12,4 +12,5 @@ export interface AuthUser {
   fullName: string;
   role: string;
   department: string;
+  departmentId: number;
 }

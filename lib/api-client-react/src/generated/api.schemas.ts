@@ -28,6 +28,7 @@ export interface AuthUser {
   fullName: string;
   role: string;
   department: string;
+  departmentId: number;
 }
 
 export interface AuthMeResponse {
@@ -345,6 +346,7 @@ export interface Asset {
   /** VIN for trucks, serial for equipment. */
   identifier?: string | null;
   status: string;
+  departmentId?: number | null;
   purchasePriceCents?: number | null;
   purchaseDate?: string | null;
   /** Current mileage (trucks) or hours (equipment). */
@@ -841,6 +843,18 @@ export interface CustomerProfileResponse {
  * Error
  */
 export type ErrorResponse = ErrorBody;
+
+export type ListMaintenanceLogsParams = {
+  departmentId?: number;
+};
+
+export type ListAssetsParams = {
+  departmentId?: number;
+};
+
+export type GetFleetPulseParams = {
+  departmentId?: number;
+};
 
 export type ListLeadsParams = {
   status?: string;

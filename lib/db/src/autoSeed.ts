@@ -34,7 +34,8 @@ const ROLE_LABELS: Record<RoleKey, string> = {
 const DEPT_LABELS: Record<DepartmentKey, string> = {
   Admin: "Administration",
   Sales: "Sales",
-  Operations: "Field Operations",
+  Landscaping: "Landscaping",
+  TreeService: "Tree Service",
   Fleet: "Fleet & Mechanics",
 };
 
@@ -152,10 +153,10 @@ export async function populateData(): Promise<void> {
     { email: "admin@joshuatreeinc.test",    fullName: "Alex Admin",     role: "ADMIN"     as RoleKey, dept: "Admin"      as DepartmentKey },
     { email: "sales1@joshuatreeinc.test",   fullName: "Sam Sales",      role: "SALES"     as RoleKey, dept: "Sales"      as DepartmentKey },
     { email: "sales2@joshuatreeinc.test",   fullName: "Sara Estimator", role: "SALES"     as RoleKey, dept: "Sales"      as DepartmentKey },
-    { email: "lead1@joshuatreeinc.test",    fullName: "Carl CrewLead",  role: "CREW_LEAD" as RoleKey, dept: "Operations" as DepartmentKey },
-    { email: "lead2@joshuatreeinc.test",    fullName: "Cathy CrewLead", role: "CREW_LEAD" as RoleKey, dept: "Operations" as DepartmentKey },
-    { email: "lead3@joshuatreeinc.test",    fullName: "Bobby CrewLead", role: "CREW_LEAD" as RoleKey, dept: "Operations" as DepartmentKey },
-    { email: "mechanic@joshuatreeinc.test", fullName: "Mike Mechanic",  role: "MECHANIC"  as RoleKey, dept: "Fleet"      as DepartmentKey },
+    { email: "lead1@joshuatreeinc.test",    fullName: "Carl CrewLead",  role: "CREW_LEAD" as RoleKey, dept: "Landscaping" as DepartmentKey },
+    { email: "lead2@joshuatreeinc.test",    fullName: "Cathy CrewLead", role: "CREW_LEAD" as RoleKey, dept: "Landscaping" as DepartmentKey },
+    { email: "lead3@joshuatreeinc.test",    fullName: "Bobby CrewLead", role: "CREW_LEAD" as RoleKey, dept: "TreeService"  as DepartmentKey },
+    { email: "mechanic@joshuatreeinc.test", fullName: "Mike Mechanic",  role: "MECHANIC"  as RoleKey, dept: "Fleet"        as DepartmentKey },
   ];
   const insertedUsers = await db
     .insert(usersTable)
@@ -343,6 +344,10 @@ export async function populateData(): Promise<void> {
   // ── Fleet ─────────────────────────────────────────────────────────────────
   // Trucks include brand/model/purchase data + odometer state so the Smart
   // Asset Registry, QR-code action pages, and Pulse dashboard have rich data.
+  const dLandscaping = deptByKey.get("Landscaping")!;
+  const dTreeService  = deptByKey.get("TreeService")!;
+  const dFleet        = deptByKey.get("Fleet")!;
+
   const insertedTrucks = await db
     .insert(trucksTable)
     .values([
@@ -353,6 +358,7 @@ export async function populateData(): Promise<void> {
         vin: "1FDXX0000000A1",
         plate: "JTREE-1",
         status: "ACTIVE",
+        departmentId: dLandscaping,
         assignedCrewId: alpha.id,
         purchasePriceCents: 8_500_000,
         purchaseDate: new Date(2021, 2, 14),
@@ -366,6 +372,7 @@ export async function populateData(): Promise<void> {
         vin: "1FDXX0000000A2",
         plate: "JTREE-2",
         status: "IN_SHOP",
+        departmentId: dTreeService,
         assignedCrewId: beta.id,
         purchasePriceCents: 9_200_000,
         purchaseDate: new Date(2019, 7, 9),
@@ -379,6 +386,7 @@ export async function populateData(): Promise<void> {
         vin: "1FDXX0000000A3",
         plate: "JTREE-3",
         status: "ACTIVE",
+        departmentId: dTreeService,
         assignedCrewId: gamma.id,
         purchasePriceCents: 14_750_000,
         purchaseDate: new Date(2022, 5, 1),
@@ -399,6 +407,7 @@ export async function populateData(): Promise<void> {
         model: "MS-462 C-M",
         serial: "ST462-001",
         status: "ACTIVE",
+        departmentId: dLandscaping,
         assignedTruckId: t1.id,
         purchasePriceCents: 119_900,
         purchaseDate: new Date(2023, 1, 4),
@@ -412,6 +421,7 @@ export async function populateData(): Promise<void> {
         model: "BC1500 XL",
         serial: "VR1500-02",
         status: "IN_SHOP",
+        departmentId: dTreeService,
         assignedTruckId: t2.id,
         purchasePriceCents: 7_850_000,
         purchaseDate: new Date(2020, 4, 18),
@@ -425,11 +435,40 @@ export async function populateData(): Promise<void> {
         model: "572 XP",
         serial: "HQ572-003",
         status: "IN_SHOP",
+        departmentId: dTreeService,
         assignedTruckId: t3.id,
         purchasePriceCents: 134_900,
         purchaseDate: new Date(2024, 0, 21),
         currentHours: 168,
         serviceIntervalHours: 50,
+      },
+      {
+        name: "Echo CS-590",
+        type: "Chainsaw",
+        brand: "Echo",
+        model: "CS-590 Timber Wolf",
+        serial: "EC590-004",
+        status: "ACTIVE",
+        departmentId: dFleet,
+        assignedTruckId: t1.id,
+        purchasePriceCents: 44_900,
+        purchaseDate: new Date(2023, 5, 12),
+        currentHours: 290,
+        serviceIntervalHours: 50,
+      },
+      {
+        name: "Dingo TX-1000",
+        type: "Compact Utility Loader",
+        brand: "Toro",
+        model: "Dingo TX-1000",
+        serial: "TX1000-005",
+        status: "ACTIVE",
+        departmentId: dLandscaping,
+        assignedTruckId: t1.id,
+        purchasePriceCents: 3_450_000,
+        purchaseDate: new Date(2022, 8, 20),
+        currentHours: 875,
+        serviceIntervalHours: 200,
       },
     ])
     .returning();

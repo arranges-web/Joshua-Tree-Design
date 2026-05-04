@@ -4,6 +4,7 @@ import {
   useListTrucks, useListEquipment, useListEmployees,
   type MaintenanceLog,
 } from "@workspace/api-client-react";
+import { useDepartmentFilter } from "@/context/DepartmentContext";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -20,7 +21,8 @@ import { Edit, Trash2, Plus, User } from "lucide-react";
 const usd = (cents: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format((cents ?? 0) / 100);
 
 export function Maintenance() {
-  const { data, isLoading } = useListMaintenanceLogs();
+  const { activeDeptId } = useDepartmentFilter();
+  const { data, isLoading } = useListMaintenanceLogs(activeDeptId != null ? { departmentId: activeDeptId } : {});
   const [isCreateOpen, setIsCreateOpen] = useState(false);
 
   return (

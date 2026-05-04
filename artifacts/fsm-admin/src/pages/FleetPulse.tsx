@@ -1,5 +1,6 @@
 import { Link } from "wouter";
 import { useGetFleetPulse } from "@workspace/api-client-react";
+import { useDepartmentFilter } from "@/context/DepartmentContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -42,7 +43,8 @@ function monthLabel(key: string) {
 }
 
 export function FleetPulse() {
-  const { data, isLoading } = useGetFleetPulse();
+  const { activeDeptId } = useDepartmentFilter();
+  const { data, isLoading } = useGetFleetPulse(activeDeptId != null ? { departmentId: activeDeptId } : {});
 
   if (isLoading) {
     return (

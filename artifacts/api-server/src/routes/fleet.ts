@@ -339,12 +339,29 @@ router.get(
   "/maintenance-logs",
   requireAuth,
   requireSection("fleet.maintenance", "view"),
-  async (_req, res) => {
-    const rows = await db
+  async (req, res) => {
+    const deptId = resolveDeptId(req);
+    let truckIdSet: Set<number> | null = null;
+    let equipIdSet: Set<number> | null = null;
+    if (deptId != null) {
+      const [deptTrucks, deptEquip] = await Promise.all([
+        db.select({ id: trucksTable.id }).from(trucksTable).where(eq(trucksTable.departmentId, deptId)),
+        db.select({ id: equipmentTable.id }).from(equipmentTable).where(eq(equipmentTable.departmentId, deptId)),
+      ]);
+      truckIdSet = new Set(deptTrucks.map((t) => t.id));
+      equipIdSet = new Set(deptEquip.map((e) => e.id));
+    }
+    const allRows = await db
       .select()
       .from(maintenanceLogsTable)
       .orderBy(desc(maintenanceLogsTable.performedAt))
       .limit(500);
+    const rows = deptId != null
+      ? allRows.filter((r) =>
+          (r.truckId != null && truckIdSet!.has(r.truckId)) ||
+          (r.equipmentId != null && equipIdSet!.has(r.equipmentId)),
+        )
+      : allRows;
     const loggedByIds = [...new Set(rows.map((r) => r.loggedByUserId).filter((id): id is number => id != null))];
     let userMap: Record<number, string> = {};
     if (loggedByIds.length > 0) {
@@ -504,6 +521,7 @@ type AssetSummary = {
   model: string | null;
   identifier: string | null;
   status: string;
+  departmentId: number | null;
   purchasePriceCents: number | null;
   purchaseDate: string | null;
   currentUsage: number;
@@ -532,10 +550,14 @@ function deriveServiceState(
   return "OK";
 }
 
-async function buildAssetList(): Promise<AssetSummary[]> {
+async function buildAssetList(departmentId?: number): Promise<AssetSummary[]> {
   const [trucks, equipment, logs] = await Promise.all([
-    db.select().from(trucksTable),
-    db.select().from(equipmentTable),
+    departmentId != null
+      ? db.select().from(trucksTable).where(eq(trucksTable.departmentId, departmentId))
+      : db.select().from(trucksTable),
+    departmentId != null
+      ? db.select().from(equipmentTable).where(eq(equipmentTable.departmentId, departmentId))
+      : db.select().from(equipmentTable),
     db.select().from(maintenanceLogsTable),
   ]);
 
@@ -588,6 +610,7 @@ async function buildAssetList(): Promise<AssetSummary[]> {
       model: t.model,
       identifier: t.vin,
       status: t.status,
+      departmentId: t.departmentId ?? null,
       purchasePriceCents: t.purchasePriceCents,
       purchaseDate: t.purchaseDate ? t.purchaseDate.toISOString() : null,
       currentUsage: t.currentMileage,
@@ -638,6 +661,7 @@ async function buildAssetList(): Promise<AssetSummary[]> {
       model: e.model,
       identifier: e.serial,
       status: e.status,
+      departmentId: e.departmentId ?? null,
       purchasePriceCents: e.purchasePriceCents,
       purchaseDate: e.purchaseDate ? e.purchaseDate.toISOString() : null,
       currentUsage: e.currentHours,
@@ -702,9 +726,22 @@ function viewableKinds(
   return kinds;
 }
 
+function resolveDeptId(req: import("express").Request): number | undefined {
+  const user = req.user!;
+  if (user.role === "ADMIN") {
+    const raw = req.query.departmentId;
+    if (raw) {
+      const parsed = parseInt(String(raw), 10);
+      return Number.isFinite(parsed) ? parsed : undefined;
+    }
+    return undefined;
+  }
+  return user.departmentId;
+}
+
 router.get("/assets", requireAuth, requireFleetView(), async (req, res) => {
   const allowed = viewableKinds(req.user!);
-  const assets = (await buildAssetList()).filter((a) => allowed.has(a.kind));
+  const assets = (await buildAssetList(resolveDeptId(req))).filter((a) => allowed.has(a.kind));
   res.json({ assets });
 });
 
@@ -942,7 +979,7 @@ router.post(
 // ---------- Fleet Pulse ----------
 router.get("/fleet-pulse", requireAuth, requireFleetView(), async (req, res) => {
   const allowedKinds = viewableKinds(req.user!);
-  const assets = (await buildAssetList()).filter((a) => allowedKinds.has(a.kind));
+  const assets = (await buildAssetList(resolveDeptId(req))).filter((a) => allowedKinds.has(a.kind));
 
   // Spec semantics:
   //   active        = status ACTIVE

@@ -53,6 +53,7 @@ router.post("/login", loginRateLimiter, async (req, res) => {
       isActive: usersTable.isActive,
       role: rolesTable.key,
       department: departmentsTable.key,
+      departmentId: departmentsTable.id,
     })
     .from(usersTable)
     .innerJoin(rolesTable, eq(usersTable.roleId, rolesTable.id))
@@ -92,6 +93,7 @@ router.post("/login", loginRateLimiter, async (req, res) => {
       fullName: row.fullName,
       role: row.role,
       department: row.department,
+      departmentId: row.departmentId,
     },
   });
 });
@@ -124,6 +126,7 @@ router.get("/me", requireAuth, (req, res) => {
       fullName: user.fullName,
       role: user.role,
       department: user.department,
+      departmentId: user.departmentId,
     },
   });
 });
