@@ -284,6 +284,13 @@ const EXTRA_EQUIP = [
 ];
 
 async function ensureExtraAssets() {
+  // Resolve the Fleet department id so newly inserted demo assets satisfy
+  // the NOT NULL department_id constraint introduced in task #38.
+  const { departmentsTable } = await import("./schema");
+  const allDepts = await db.select().from(departmentsTable);
+  const fleetDeptId = allDepts.find((d) => d.key === "Fleet")?.id ?? allDepts[0]?.id;
+  if (fleetDeptId == null) return; // no departments yet — skip demo seeding
+
   const trucks = await db.select().from(trucksTable);
   const truckNames = new Set(trucks.map((t) => t.name));
   for (const fix of EXTRA_TRUCKS) {
@@ -300,6 +307,7 @@ async function ensureExtraAssets() {
         vin: fix.vin,
         plate: fix.plate,
         status: status as "ACTIVE" | "IN_SHOP" | "RETIRED",
+        departmentId: fleetDeptId,
         purchasePriceCents: fix.purchasePriceCents,
         purchaseDate: fix.purchaseDate,
         currentMileage: fix.currentMileage,
@@ -341,6 +349,7 @@ async function ensureExtraAssets() {
         model: fix.model,
         serial: fix.serial,
         status: fix.status as "ACTIVE" | "IN_SHOP",
+        departmentId: fleetDeptId,
         purchasePriceCents: fix.purchasePriceCents,
         purchaseDate: fix.purchaseDate,
         currentHours: fix.currentHours,

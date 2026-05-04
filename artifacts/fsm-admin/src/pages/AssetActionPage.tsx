@@ -655,6 +655,15 @@ function ChangeDepartmentCard({
   asset: { slug: string; kind: string; id: number; departmentId?: number | null };
 }) {
   const { isAdmin } = useDepartmentFilter();
+  if (!isAdmin) return null;
+  return <ChangeDepartmentCardInner asset={asset} />;
+}
+
+function ChangeDepartmentCardInner({
+  asset,
+}: {
+  asset: { slug: string; kind: string; id: number; departmentId?: number | null };
+}) {
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const { data: deptData } = useListDepartments();
@@ -667,7 +676,7 @@ function ChangeDepartmentCard({
   );
   const [touched, setTouched] = useState(false);
 
-  if (!isAdmin || departments.length === 0) return null;
+  if (departments.length === 0) return null;
 
   const currentVal = asset.departmentId != null ? String(asset.departmentId) : "";
   const dirty = touched && selectedDeptId !== currentVal && selectedDeptId !== "";
