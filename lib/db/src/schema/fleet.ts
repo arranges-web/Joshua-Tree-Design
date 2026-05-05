@@ -253,8 +253,32 @@ export const usageReadingsTable = pgTable(
   ],
 );
 
+// Consumable items / accessories attached to a piece of equipment.
+// Examples: saw chains, guide bars, blades, spark plugs, mixing oil.
+export const equipmentItemsTable = pgTable(
+  "equipment_items",
+  {
+    id: serial("id").primaryKey(),
+    equipmentId: integer("equipment_id")
+      .notNull()
+      .references(() => equipmentTable.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    quantity: integer("quantity").notNull().default(1),
+    unit: text("unit"),
+    notes: text("notes"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [index("equipment_items_equipment_id_idx").on(t.equipmentId)],
+);
+
 export type Truck = typeof trucksTable.$inferSelect;
 export type Equipment = typeof equipmentTable.$inferSelect;
+export type EquipmentItem = typeof equipmentItemsTable.$inferSelect;
 export type MaintenanceLog = typeof maintenanceLogsTable.$inferSelect;
 export type UsageReading = typeof usageReadingsTable.$inferSelect;
 export type AssetStatusLog = typeof assetStatusLogTable.$inferSelect;
@@ -269,3 +293,5 @@ export const insertMaintenanceLogSchema = createInsertSchema(maintenanceLogsTabl
 export const selectMaintenanceLogSchema = createSelectSchema(maintenanceLogsTable);
 export const insertUsageReadingSchema = createInsertSchema(usageReadingsTable);
 export const selectUsageReadingSchema = createSelectSchema(usageReadingsTable);
+export const insertEquipmentItemSchema = createInsertSchema(equipmentItemsTable);
+export const selectEquipmentItemSchema = createSelectSchema(equipmentItemsTable);

@@ -44,6 +44,13 @@ See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and pa
 - Rate limits: per-phone OTP request limit + per-phone verify attempts cap (`too_many_otp_requests`, `too_many_verify_attempts` error codes).
 - Service request creation validates that any supplied `propertyId` belongs to the calling customer (`property_not_owned`).
 
+## Departments (updated)
+
+- **6 canonical departments**: Admin, Lawn (Lawn Care), Landscaping, Pest (Pest Control), TreeService (Tree Service), Irrigation (Irrigation Services). Previously: Admin, Sales, Landscaping, TreeService, Fleet.
+- `DEPARTMENT_KEYS` in `lib/db/src/schema/users.ts` reflects the new set.
+- `lib/db/scripts/backfillDepartments.ts` upserts the 6 canonical depts on demand.
+- Auto-seed (`lib/db/src/autoSeed.ts`) seeds all 6 departments; SALES users land in "Lawn", MECHANIC in "Pest".
+
 ## Fleet & Finance Management (`/admin/fleet`, `/admin/assets`, `/admin/maintenance`)
 
 - **Smart Asset Registry**: trucks + equipment unified into a single `Asset` view (`GET /api/assets` in `artifacts/api-server/src/routes/fleet.ts`). Each asset carries brand/model, VIN/serial, purchase price+date, current usage (miles for trucks, hours for equipment), service interval, derived `serviceState` (OK / DUE_SOON / OVERDUE) and `lifeToDateSpendCents`. Status enum is `ACTIVE | IN_SHOP | RETIRED` (UI labels RETIRED as "Out of Service").
@@ -53,3 +60,7 @@ See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and pa
 - **Permissions**: `requireFleetView` middleware accepts viewers of *either* `fleet.trucks` or `fleet.equipment` for the unified `/assets` and `/fleet-pulse` routes.
 - **Backfill safety**: `lib/db/src/backfillFleet.ts` enriches existing T-01/T-02/T-03 + 3 equipment rows with brand/model/purchase data and adds slugs on every boot. The synthetic extra-asset seed (T-04, T-05, Bandit chipper, Toro grinder + their logs) only runs when `NODE_ENV !== "production"`.
 - **Fonts**: fsm-admin now ships Inter Tight + JetBrains Mono only (no Instrument Serif). `--app-font-serif` aliases to Inter Tight so existing `font-serif` headings remain non-italic.
+- **Equipment Items**: `equipment_items` table tracks consumables/accessories per piece of equipment (saw chains, blades, etc.). API: `GET/POST /equipment/:id/items`, `DELETE /equipment/:equipId/items/:itemId`. Frontend hooks: `useEquipmentItems`, `useCreateEquipmentItem`, `useDeleteEquipmentItem` in `extra-api.ts`.
+- **Crews page** (`/admin/crews`): lists all crews; selecting one shows members (name, role, dept), assigned trucks, and assigned equipment with status badges and asset-page links. Backend: `GET /crews/:id` returns full detail.
+- **Admin sign-in fix**: `artifacts/fsm-admin/vite.config.ts` now proxies `/api` to `http://localhost:8080` so session cookies flow correctly through the Vite dev server.
+- **Accounting page** (`/admin/accounting`): pre-existing, now accessible once login works. Visible to ADMIN and ACCOUNTING_MANAGER roles only.

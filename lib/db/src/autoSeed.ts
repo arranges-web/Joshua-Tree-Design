@@ -34,10 +34,11 @@ const ROLE_LABELS: Record<RoleKey, string> = {
 
 const DEPT_LABELS: Record<DepartmentKey, string> = {
   Admin: "Administration",
-  Sales: "Sales",
+  Lawn: "Lawn Care",
   Landscaping: "Landscaping",
+  Pest: "Pest Control",
   TreeService: "Tree Service",
-  Fleet: "Fleet & Mechanics",
+  Irrigation: "Irrigation Services",
 };
 
 const DEFAULT_MATRIX: Record<
@@ -174,12 +175,12 @@ export async function populateData(): Promise<void> {
   // ── Users ─────────────────────────────────────────────────────────────────
   const userDefs = [
     { email: "admin@joshuatreeinc.test",    fullName: "Alex Admin",     role: "ADMIN"     as RoleKey, dept: "Admin"      as DepartmentKey },
-    { email: "sales1@joshuatreeinc.test",   fullName: "Sam Sales",      role: "SALES"     as RoleKey, dept: "Sales"      as DepartmentKey },
-    { email: "sales2@joshuatreeinc.test",   fullName: "Sara Estimator", role: "SALES"     as RoleKey, dept: "Sales"      as DepartmentKey },
+    { email: "sales1@joshuatreeinc.test",   fullName: "Sam Sales",      role: "SALES"     as RoleKey, dept: "Lawn"       as DepartmentKey },
+    { email: "sales2@joshuatreeinc.test",   fullName: "Sara Estimator", role: "SALES"     as RoleKey, dept: "Lawn"       as DepartmentKey },
     { email: "lead1@joshuatreeinc.test",    fullName: "Carl CrewLead",  role: "CREW_LEAD" as RoleKey, dept: "Landscaping" as DepartmentKey },
     { email: "lead2@joshuatreeinc.test",    fullName: "Cathy CrewLead", role: "CREW_LEAD" as RoleKey, dept: "Landscaping" as DepartmentKey },
     { email: "lead3@joshuatreeinc.test",    fullName: "Bobby CrewLead", role: "CREW_LEAD" as RoleKey, dept: "TreeService"  as DepartmentKey },
-    { email: "mechanic@joshuatreeinc.test", fullName: "Mike Mechanic",  role: "MECHANIC"  as RoleKey, dept: "Fleet"        as DepartmentKey },
+    { email: "mechanic@joshuatreeinc.test", fullName: "Mike Mechanic",  role: "MECHANIC"  as RoleKey, dept: "Pest"         as DepartmentKey },
     { email: "accounting@joshuatreeinc.test", fullName: "Anna Accountant", role: "ACCOUNTING_MANAGER" as RoleKey, dept: "Admin"      as DepartmentKey },
   ];
   const insertedUsers = await db
@@ -370,7 +371,7 @@ export async function populateData(): Promise<void> {
   // Asset Registry, QR-code action pages, and Pulse dashboard have rich data.
   const dLandscaping = deptByKey.get("Landscaping")!;
   const dTreeService  = deptByKey.get("TreeService")!;
-  const dFleet        = deptByKey.get("Fleet")!;
+  const dPest         = deptByKey.get("Pest")!;
 
   const insertedTrucks = await db
     .insert(trucksTable)
@@ -473,7 +474,7 @@ export async function populateData(): Promise<void> {
         model: "CS-590 Timber Wolf",
         serial: "EC590-004",
         status: "ACTIVE",
-        departmentId: dFleet,
+        departmentId: dPest,
         assignedTruckId: t1.id,
         purchasePriceCents: 44_900,
         purchaseDate: new Date(2023, 5, 12),

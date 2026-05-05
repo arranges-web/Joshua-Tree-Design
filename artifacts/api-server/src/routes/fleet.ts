@@ -5,13 +5,16 @@ import {
   db,
   trucksTable,
   equipmentTable,
+  equipmentItemsTable,
   maintenanceLogsTable,
   usageReadingsTable,
   assetStatusLogTable,
   assetAssignmentLogTable,
   crewsTable,
+  crewMembersTable,
   usersTable,
   departmentsTable,
+  rolesTable,
   type MaintenanceLog,
 } from "@workspace/db";
 import {
@@ -409,6 +412,87 @@ router.delete(
       .delete(equipmentTable)
       .where(eq(equipmentTable.id, params.data.id))
       .returning({ id: equipmentTable.id });
+    if (deleted.length === 0) {
+      res.status(404).json({ error: "not_found" });
+      return;
+    }
+    res.json({ ok: true });
+  },
+);
+
+// ---------- Equipment Items ----------
+// Consumables / accessories attached to a piece of equipment.
+// Anyone with fleet.equipment view can read; edit required to mutate.
+
+const equipmentItemBodySchema = z.object({
+  name: z.string().min(1).max(200),
+  quantity: z.number().int().min(1).optional().default(1),
+  unit: z.string().max(40).optional(),
+  notes: z.string().max(500).optional(),
+});
+
+router.get(
+  "/equipment/:id/items",
+  requireAuth,
+  requireSection("fleet.equipment", "view"),
+  async (req, res) => {
+    const equipId = Number(req.params.id);
+    if (!Number.isFinite(equipId)) {
+      res.status(400).json({ error: "invalid_id" });
+      return;
+    }
+    const items = await db
+      .select()
+      .from(equipmentItemsTable)
+      .where(eq(equipmentItemsTable.equipmentId, equipId))
+      .orderBy(equipmentItemsTable.createdAt);
+    res.json({ items });
+  },
+);
+
+router.post(
+  "/equipment/:id/items",
+  requireAuth,
+  requireSection("fleet.equipment", "edit"),
+  async (req, res) => {
+    const equipId = Number(req.params.id);
+    if (!Number.isFinite(equipId)) {
+      res.status(400).json({ error: "invalid_id" });
+      return;
+    }
+    const parsed = equipmentItemBodySchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: "invalid_body", details: parsed.error.flatten() });
+      return;
+    }
+    const [item] = await db
+      .insert(equipmentItemsTable)
+      .values({ equipmentId: equipId, ...parsed.data })
+      .returning();
+    res.status(201).json({ item });
+  },
+);
+
+router.delete(
+  "/equipment/:equipId/items/:itemId",
+  requireAuth,
+  requireSection("fleet.equipment", "edit"),
+  async (req, res) => {
+    const equipId = Number(req.params.equipId);
+    const itemId = Number(req.params.itemId);
+    if (!Number.isFinite(equipId) || !Number.isFinite(itemId)) {
+      res.status(400).json({ error: "invalid_id" });
+      return;
+    }
+    const deleted = await db
+      .delete(equipmentItemsTable)
+      .where(
+        and(
+          eq(equipmentItemsTable.id, itemId),
+          eq(equipmentItemsTable.equipmentId, equipId),
+        ),
+      )
+      .returning({ id: equipmentItemsTable.id });
     if (deleted.length === 0) {
       res.status(404).json({ error: "not_found" });
       return;
@@ -1209,6 +1293,77 @@ router.get(
       .from(crewsTable)
       .orderBy(crewsTable.name);
     res.json({ crews: rows });
+  },
+);
+
+// GET /crews/:id — full crew detail: members + assigned trucks + equipment.
+router.get(
+  "/crews/:id",
+  requireAuth,
+  requireFleetView(),
+  async (req, res) => {
+    const crewId = Number(req.params.id);
+    if (!Number.isFinite(crewId)) {
+      res.status(400).json({ error: "invalid_id" });
+      return;
+    }
+    const [crew] = await db
+      .select({ id: crewsTable.id, name: crewsTable.name })
+      .from(crewsTable)
+      .where(eq(crewsTable.id, crewId));
+    if (!crew) {
+      res.status(404).json({ error: "not_found" });
+      return;
+    }
+
+    const memberRows = await db
+      .select({
+        userId: crewMembersTable.userId,
+        fullName: usersTable.fullName,
+        roleKey: rolesTable.key,
+        roleLabel: rolesTable.label,
+        deptLabel: departmentsTable.label,
+      })
+      .from(crewMembersTable)
+      .innerJoin(usersTable, eq(crewMembersTable.userId, usersTable.id))
+      .innerJoin(rolesTable, eq(usersTable.roleId, rolesTable.id))
+      .innerJoin(departmentsTable, eq(usersTable.departmentId, departmentsTable.id))
+      .where(eq(crewMembersTable.crewId, crewId));
+
+    const trucks = await db
+      .select({
+        id: trucksTable.id,
+        name: trucksTable.name,
+        status: trucksTable.status,
+        slug: trucksTable.slug,
+      })
+      .from(trucksTable)
+      .where(eq(trucksTable.assignedCrewId, crewId));
+
+    const equipment = await db
+      .select({
+        id: equipmentTable.id,
+        name: equipmentTable.name,
+        type: equipmentTable.type,
+        status: equipmentTable.status,
+        slug: equipmentTable.slug,
+      })
+      .from(equipmentTable)
+      .where(eq(equipmentTable.assignedCrewId, crewId));
+
+    res.json({
+      crew: {
+        ...crew,
+        members: memberRows.map((m) => ({
+          userId: m.userId,
+          fullName: m.fullName,
+          role: m.roleLabel,
+          department: m.deptLabel,
+        })),
+        trucks,
+        equipment,
+      },
+    });
   },
 );
 

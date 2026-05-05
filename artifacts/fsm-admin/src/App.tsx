@@ -22,6 +22,7 @@ import { Maintenance } from "@/pages/Maintenance";
 import { Employees } from "@/pages/Employees";
 import { Permissions } from "@/pages/Permissions";
 import { Accounting } from "@/pages/Accounting";
+import { Crews } from "@/pages/Crews";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -90,6 +91,7 @@ function AppRouter() {
               <Route path="/assets" component={AssetRegistry} />
               <Route path="/assets/:slug" component={AssetActionPage} />
               <Route path="/maintenance" component={Maintenance} />
+              <Route path="/crews" component={Crews} />
               <Route path="/team" component={Employees} />
               <Route path="/employees" component={Employees} />
               <Route path="/permissions" component={Permissions} />

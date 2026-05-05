@@ -29,6 +29,19 @@ export type AssetExt = {
 
 // ---------- Crews ----------
 export type Crew = { id: number; name: string };
+export type CrewMember = {
+  userId: number;
+  fullName: string;
+  role: string;
+  department: string;
+};
+export type CrewDetail = {
+  id: number;
+  name: string;
+  members: CrewMember[];
+  trucks: Array<{ id: number; name: string; status: string; slug: string | null }>;
+  equipment: Array<{ id: number; name: string; type: string; status: string; slug: string | null }>;
+};
 
 const CREWS_KEY = ["crews"] as const;
 
@@ -36,6 +49,70 @@ export function useListCrews() {
   return useQuery({
     queryKey: CREWS_KEY,
     queryFn: () => customFetch<{ crews: Crew[] }>("/crews"),
+  });
+}
+
+export function getCrewDetailKey(id: number) {
+  return ["crew", id] as const;
+}
+
+export function useCrewDetail(id: number) {
+  return useQuery({
+    queryKey: getCrewDetailKey(id),
+    queryFn: () => customFetch<{ crew: CrewDetail }>(`/crews/${id}`),
+    enabled: id > 0,
+  });
+}
+
+// ---------- Equipment Items ----------
+export type EquipmentItem = {
+  id: number;
+  equipmentId: number;
+  name: string;
+  quantity: number;
+  unit: string | null;
+  notes: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export function getEquipmentItemsKey(equipmentId: number) {
+  return ["equipment-items", equipmentId] as const;
+}
+
+export function useEquipmentItems(equipmentId: number) {
+  return useQuery({
+    queryKey: getEquipmentItemsKey(equipmentId),
+    queryFn: () =>
+      customFetch<{ items: EquipmentItem[] }>(`/equipment/${equipmentId}/items`),
+    enabled: equipmentId > 0,
+  });
+}
+
+export type CreateEquipmentItemBody = {
+  name: string;
+  quantity?: number;
+  unit?: string;
+  notes?: string;
+};
+
+export function useCreateEquipmentItem(equipmentId: number) {
+  return useMutation({
+    mutationFn: (body: CreateEquipmentItemBody) =>
+      customFetch<{ item: EquipmentItem }>(`/equipment/${equipmentId}/items`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+      }),
+  });
+}
+
+export function useDeleteEquipmentItem(equipmentId: number) {
+  return useMutation({
+    mutationFn: (itemId: number) =>
+      customFetch<{ ok: boolean }>(`/equipment/${equipmentId}/items/${itemId}`, {
+        method: "DELETE",
+      }),
   });
 }
 

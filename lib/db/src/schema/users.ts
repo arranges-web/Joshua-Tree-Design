@@ -21,7 +21,7 @@ export const ROLE_KEYS = [
 ] as const;
 export type RoleKey = (typeof ROLE_KEYS)[number];
 
-export const DEPARTMENT_KEYS = ["Admin", "Sales", "Landscaping", "TreeService", "Fleet"] as const;
+export const DEPARTMENT_KEYS = ["Admin", "Lawn", "Landscaping", "Pest", "TreeService", "Irrigation"] as const;
 export type DepartmentKey = (typeof DEPARTMENT_KEYS)[number];
 
 export const rolesTable = pgTable(

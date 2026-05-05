@@ -1,10 +1,10 @@
 /**
- * Backfill script: ensures exactly the 5 canonical departments exist and
+ * Backfill script: ensures exactly the 6 canonical departments exist and
  * re-homes any assets / users that belong to legacy / unexpected departments.
  * Safe to run multiple times (idempotent).
  *
  * Strategy:
- *  1. Upsert the 5 target departments (by key).
+ *  1. Upsert the 6 target departments (by key).
  *  2. Reassign trucks / equipment / users whose department_id points to any
  *     row NOT in the canonical 5 → default target is "Fleet & Mechanics".
  *  3. Also assign any NULL-department assets to Fleet.
@@ -19,10 +19,11 @@ import { eq, isNull, notInArray, or } from "drizzle-orm";
 
 const TARGET_DEPARTMENTS = [
   { key: "Admin",       label: "Administration" },
-  { key: "Sales",       label: "Sales" },
+  { key: "Lawn",        label: "Lawn Care" },
   { key: "Landscaping", label: "Landscaping" },
+  { key: "Pest",        label: "Pest Control" },
   { key: "TreeService", label: "Tree Service" },
-  { key: "Fleet",       label: "Fleet & Mechanics" },
+  { key: "Irrigation",  label: "Irrigation Services" },
 ] as const;
 
 async function main() {
@@ -43,9 +44,9 @@ async function main() {
   const canonicalIds = allDepts
     .filter((d) => canonicalKeys.has(d.key as typeof TARGET_DEPARTMENTS[number]["key"]))
     .map((d) => d.id);
-  const fleetDeptId = allDepts.find((d) => d.key === "Fleet")!.id;
+  const fleetDeptId = (allDepts.find((d) => d.key === "Pest") ?? allDepts.find((d) => d.key === "Admin"))!.id;
 
-  console.log(`Canonical dept ids: ${canonicalIds.join(", ")}  (Fleet=${fleetDeptId})`);
+  console.log(`Canonical dept ids: ${canonicalIds.join(", ")}  (fallback=${fleetDeptId})`);
 
   // Step 2: Re-home trucks whose departmentId is not in the canonical set.
   console.log("Step 2: Re-homing trucks assigned to legacy departments…");
