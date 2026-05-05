@@ -119,6 +119,15 @@ function extractBearer(header: string | undefined): string | undefined {
 
 router.get("/me", requireAuth, (req, res) => {
   const user = req.user!;
+  // Build effective permissions map: default matrix merged with per-user DB overrides.
+  const { DEFAULT_MATRIX } = require("../lib/rbac/matrix") as typeof import("../lib/rbac/matrix");
+  const { SECTION_KEYS } = require("@workspace/db") as typeof import("@workspace/db");
+  const permissions: Record<string, { canView: boolean; canEdit: boolean }> = {};
+  for (const section of SECTION_KEYS) {
+    const override = user.overrides[section];
+    const def = DEFAULT_MATRIX[user.role]?.[section] ?? { canView: false, canEdit: false };
+    permissions[section] = override ?? def;
+  }
   res.json({
     user: {
       id: user.id,
@@ -127,6 +136,7 @@ router.get("/me", requireAuth, (req, res) => {
       role: user.role,
       department: user.department,
       departmentId: user.departmentId,
+      permissions,
     },
   });
 });

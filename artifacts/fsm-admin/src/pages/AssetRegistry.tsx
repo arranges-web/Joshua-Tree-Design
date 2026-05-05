@@ -387,7 +387,9 @@ export function AssetRegistry() {
   const { data: crewsData } = useListCrews();
   const { data: meData } = useGetMe();
   const queryClient = useQueryClient();
-  const canEditFleet = meData?.user?.role === "ADMIN" || meData?.user?.role === "MECHANIC";
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const perms = (meData?.user as any)?.permissions as Record<string, { canView: boolean; canEdit: boolean }> | undefined;
+  const canEditFleet = perms?.["fleet.trucks"]?.canEdit ?? false;
   const [query, setQuery] = useState("");
   const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>("ALL");
   const [crewFilter, setCrewFilter] = useState<string>("ALL");
