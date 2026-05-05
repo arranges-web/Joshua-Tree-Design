@@ -1,13 +1,15 @@
 import { useState } from "react";
 import { Link } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
-import { useListEmployees, useListDepartments, useGetMe, type Employee } from "@workspace/api-client-react";
+import { useListDepartments, useGetMe } from "@workspace/api-client-react";
 import {
   useListCrews,
   useCrewDetail,
   useCreateCrew,
+  useListCrewLeadCandidates,
   type Crew,
   type CrewMember,
+  type CrewLeadCandidate,
   type CreateCrewBody,
 } from "@/lib/extra-api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -172,9 +174,9 @@ function NewCrewDialog({ onCreated }: { onCreated: () => void }) {
   const [error, setError] = useState<string | null>(null);
 
   const createCrew = useCreateCrew();
-  const { data: employeesData } = useListEmployees();
+  const { data: candidatesData } = useListCrewLeadCandidates();
   const { data: deptsData } = useListDepartments();
-  const employees = (employeesData?.employees ?? []) as Employee[];
+  const candidates: CrewLeadCandidate[] = candidatesData?.users ?? [];
   const depts = deptsData?.departments ?? [];
 
   async function handleSubmit(e: React.FormEvent) {
@@ -240,10 +242,9 @@ function NewCrewDialog({ onCreated }: { onCreated: () => void }) {
                 <SelectValue placeholder="Select a lead" />
               </SelectTrigger>
               <SelectContent>
-                {employees.map((emp) => (
-                  <SelectItem key={emp.id} value={String(emp.id)}>
-                    {emp.fullName}
-                    {emp.role ? ` · ${emp.role}` : ""}
+                {candidates.map((c) => (
+                  <SelectItem key={c.id} value={String(c.id)}>
+                    {c.fullName}
                   </SelectItem>
                 ))}
               </SelectContent>

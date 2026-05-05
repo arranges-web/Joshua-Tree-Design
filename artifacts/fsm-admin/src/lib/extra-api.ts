@@ -212,6 +212,18 @@ export function useCreateEquipment() {
   });
 }
 
+// ---------- Crew Lead Candidates ----------
+// Fleet-view-gated endpoint that returns a minimal user list for the
+// crew-lead selector in the New Crew dialog. Works for MECHANIC role.
+export type CrewLeadCandidate = { id: number; fullName: string };
+
+export function useListCrewLeadCandidates() {
+  return useQuery({
+    queryKey: ["crew-lead-candidates"] as const,
+    queryFn: () => customFetch<{ users: CrewLeadCandidate[] }>("/crews/lead-candidates"),
+  });
+}
+
 // ---------- Create Crew ----------
 export type CreateCrewBody = {
   name: string;

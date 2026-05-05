@@ -1335,6 +1335,22 @@ router.post(
   },
 );
 
+// GET /crews/lead-candidates — returns a minimal user list (id + fullName) that
+// can be assigned as crew leads. Gated by fleet.trucks view so MECHANIC users
+// can populate the crew-creation form without needing admin.users view.
+router.get(
+  "/crews/lead-candidates",
+  requireAuth,
+  requireFleetView(),
+  async (_req, res) => {
+    const rows = await db
+      .select({ id: usersTable.id, fullName: usersTable.fullName })
+      .from(usersTable)
+      .orderBy(usersTable.fullName);
+    res.json({ users: rows });
+  },
+);
+
 // GET /crews — lightweight list for asset-assignment dropdowns.
 // Anyone with fleet view permission can see crew names.
 router.get(

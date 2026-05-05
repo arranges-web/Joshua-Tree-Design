@@ -17,6 +17,8 @@ import {
   sessionCookieOptions,
 } from "../lib/auth/sessions";
 import { requireAuth } from "../middlewares/requireAuth";
+import { DEFAULT_MATRIX } from "../lib/rbac/matrix";
+import { SECTION_KEYS } from "@workspace/db";
 
 const router: IRouter = Router();
 
@@ -120,8 +122,6 @@ function extractBearer(header: string | undefined): string | undefined {
 router.get("/me", requireAuth, (req, res) => {
   const user = req.user!;
   // Build effective permissions map: default matrix merged with per-user DB overrides.
-  const { DEFAULT_MATRIX } = require("../lib/rbac/matrix") as typeof import("../lib/rbac/matrix");
-  const { SECTION_KEYS } = require("@workspace/db") as typeof import("@workspace/db");
   const permissions: Record<string, { canView: boolean; canEdit: boolean }> = {};
   for (const section of SECTION_KEYS) {
     const override = user.overrides[section];
