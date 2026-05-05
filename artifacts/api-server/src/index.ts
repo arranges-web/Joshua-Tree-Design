@@ -37,23 +37,17 @@ async function startup() {
     logger.error({ err }, "Failed to sync default permission matrix on boot");
   }
 
-  // Enrich existing fleet rows with the new asset-registry fields. Idempotent,
-  // but it mutates rows by fixture name so we keep it out of production unless
-  // explicitly opted-in via FSM_RUN_FLEET_BACKFILL=1.
-  const allowBackfill =
-    process.env.NODE_ENV !== "production" ||
-    process.env.FSM_RUN_FLEET_BACKFILL === "1";
-  if (allowBackfill) {
-    try {
-      await backfillFleetData();
-    } catch (err) {
-      logger.error({ err }, "Failed to backfill fleet data on boot");
-    }
-    try {
-      await backfillDemoData();
-    } catch (err) {
-      logger.error({ err }, "Failed to backfill demo data on boot");
-    }
+  // Enrich fleet and demo data. Both functions are fully idempotent (each has
+  // its own row-count guard) so they run on every boot in all environments.
+  try {
+    await backfillFleetData();
+  } catch (err) {
+    logger.error({ err }, "Failed to backfill fleet data on boot");
+  }
+  try {
+    await backfillDemoData();
+  } catch (err) {
+    logger.error({ err }, "Failed to backfill demo data on boot");
   }
 }
 

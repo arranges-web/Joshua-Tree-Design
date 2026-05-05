@@ -1,12 +1,16 @@
 /**
  * Idempotent demo-data backfill.
  *
- * Populates: 12 new customers, properties, 2 crews per service dept, 30+
- * jobs across all 4 service departments, 20 quotes (all statuses, 2-4 line
- * items each), 19+ invoices spread over 6 months, 3 extra trucks, 10+
- * equipment items for Lawn/Pest/Land/Tree, and 20+ maintenance logs.
+ * Populates: 12 new customers with properties, 2 crews per service dept, 30+
+ * jobs across all 4 departments, 20 quotes (6 APPROVED / 6 SENT / 5 DRAFT /
+ * 3 REJECTED, every quote gets 2-4 line items), 19+ invoices spread over 6
+ * months, 8 trucks, 23+ equipment items, 20+ maintenance logs, and 6 open
+ * PORTAL service requests.
  *
- * Guard: skips entirely when customers table already has 22+ rows.
+ * Phase 2 (always runs): backfills 2 generic line items onto any existing
+ * quote that has none, so autoSeed quotes are also covered.
+ *
+ * Guard (Phase 1 only): skips customer/job/fleet seeding when customers >= 22.
  */
 
 import { eq, sql } from "drizzle-orm";
@@ -224,28 +228,34 @@ export async function backfillDemoData(): Promise<void> {
     ])
     .returning();
 
-  // ── Quotes — 20 total with 2-4 line items each ────────────────────────────
+  // ── Quotes — 20 total, all statuses, 2-4 line items each ─────────────────
   const newQuotes = await db
     .insert(quotesTable)
     .values([
-      // APPROVED (4)
-      { customerId: brandon.id, propertyId: bP.id, ownerUserId: sales1, status: "APPROVED", subtotalCents: 580_000, totalCents: 620_600 },
-      { customerId: elaine.id,  propertyId: eP.id, ownerUserId: sales2, status: "APPROVED", subtotalCents: 480_000, totalCents: 513_600 },
-      { customerId: irving.id,  propertyId: iP.id, ownerUserId: sales1, status: "APPROVED", subtotalCents:  92_000, totalCents:  98_440 },
-      { customerId: laura.id,   propertyId: lP.id, ownerUserId: sales2, status: "APPROVED", subtotalCents:  82_000, totalCents:  87_740 },
-      // SENT (4)
-      { customerId: carol.id,   propertyId: cP.id, ownerUserId: sales1, status: "SENT", subtotalCents: 195_000, totalCents: 208_650 },
-      { customerId: frank.id,   propertyId: fP.id, ownerUserId: sales2, status: "SENT", subtotalCents: 340_000, totalCents: 363_800 },
-      { customerId: janet.id,   propertyId: jP.id, ownerUserId: sales1, status: "SENT", subtotalCents: 145_000, totalCents: 155_150 },
-      { customerId: martin.id,  propertyId: mP.id, ownerUserId: sales2, status: "SENT", subtotalCents:  65_000, totalCents:  69_550 },
-      // DRAFT (4)
-      { customerId: douglas.id, propertyId: dP.id, ownerUserId: sales1, status: "DRAFT", subtotalCents: 145_000, totalCents: 155_150 },
-      { customerId: nancy.id,   propertyId: nP.id, ownerUserId: sales2, status: "DRAFT", subtotalCents:  95_000, totalCents: 101_650 },
-      { customerId: grace.id,   propertyId: gP.id, ownerUserId: sales1, status: "DRAFT", subtotalCents: 215_000, totalCents: 230_050 },
-      { customerId: kevin.id,   propertyId: kP.id, ownerUserId: sales2, status: "DRAFT", subtotalCents:  75_000, totalCents:  80_250 },
-      // REJECTED (2) — lost bids
-      { customerId: brandon.id, propertyId: bP.id, ownerUserId: sales2, status: "REJECTED", subtotalCents: 720_000, totalCents: 770_400 },
-      { customerId: elaine.id,  propertyId: eP.id, ownerUserId: sales1, status: "REJECTED", subtotalCents: 950_000, totalCents: 1_016_500 },
+      // APPROVED (6)
+      { customerId: brandon.id, propertyId: bP.id, ownerUserId: sales1, status: "APPROVED", subtotalCents:  580_000, totalCents:  620_600 },
+      { customerId: elaine.id,  propertyId: eP.id, ownerUserId: sales2, status: "APPROVED", subtotalCents:  480_000, totalCents:  513_600 },
+      { customerId: irving.id,  propertyId: iP.id, ownerUserId: sales1, status: "APPROVED", subtotalCents:   92_000, totalCents:   98_440 },
+      { customerId: laura.id,   propertyId: lP.id, ownerUserId: sales2, status: "APPROVED", subtotalCents:   82_000, totalCents:   87_740 },
+      { customerId: kevin.id,   propertyId: kP.id, ownerUserId: sales1, status: "APPROVED", subtotalCents:  195_000, totalCents:  208_650 },
+      { customerId: grace.id,   propertyId: gP.id, ownerUserId: sales2, status: "APPROVED", subtotalCents:  260_000, totalCents:  278_200 },
+      // SENT (6)
+      { customerId: carol.id,   propertyId: cP.id, ownerUserId: sales1, status: "SENT", subtotalCents:  195_000, totalCents:  208_650 },
+      { customerId: frank.id,   propertyId: fP.id, ownerUserId: sales2, status: "SENT", subtotalCents:  340_000, totalCents:  363_800 },
+      { customerId: janet.id,   propertyId: jP.id, ownerUserId: sales1, status: "SENT", subtotalCents:  145_000, totalCents:  155_150 },
+      { customerId: martin.id,  propertyId: mP.id, ownerUserId: sales2, status: "SENT", subtotalCents:   65_000, totalCents:   69_550 },
+      { customerId: douglas.id, propertyId: dP.id, ownerUserId: sales1, status: "SENT", subtotalCents:  215_000, totalCents:  230_050 },
+      { customerId: nancy.id,   propertyId: nP.id, ownerUserId: sales2, status: "SENT", subtotalCents:   48_000, totalCents:   51_360 },
+      // DRAFT (5)
+      { customerId: brandon.id, propertyId: bP.id, ownerUserId: sales2, status: "DRAFT", subtotalCents:  145_000, totalCents:  155_150 },
+      { customerId: carol.id,   propertyId: cP.id, ownerUserId: sales1, status: "DRAFT", subtotalCents:   95_000, totalCents:  101_650 },
+      { customerId: elaine.id,  propertyId: eP.id, ownerUserId: sales2, status: "DRAFT", subtotalCents:  890_000, totalCents:  952_300 },
+      { customerId: frank.id,   propertyId: fP.id, ownerUserId: sales1, status: "DRAFT", subtotalCents:  115_000, totalCents:  123_050 },
+      { customerId: irving.id,  propertyId: iP.id, ownerUserId: sales2, status: "DRAFT", subtotalCents:   75_000, totalCents:   80_250 },
+      // REJECTED (3) — lost bids
+      { customerId: janet.id,   propertyId: jP.id, ownerUserId: sales2, status: "REJECTED", subtotalCents:  720_000, totalCents:  770_400 },
+      { customerId: grace.id,   propertyId: gP.id, ownerUserId: sales1, status: "REJECTED", subtotalCents:  950_000, totalCents: 1_016_500 },
+      { customerId: martin.id,  propertyId: mP.id, ownerUserId: sales2, status: "REJECTED", subtotalCents:  130_000, totalCents:  139_100 },
     ])
     .returning();
 
@@ -258,71 +268,134 @@ export async function backfillDemoData(): Promise<void> {
     items.forEach((item) => allLineItems.push({ quoteId: q.id, ...item }));
   };
 
-  // APPROVED quotes — 2-4 line items each
-  addLines(0, [
+  // APPROVED (6) — 2-4 line items each
+  addLines(0, [  // brandon — tree removal
     { description: "Live oak removal — hurricane-damaged (ea)", unitPriceCents: 160_000, qty: 3 },
     { description: "Stump grinding (ea)",                       unitPriceCents:  35_000, qty: 2 },
     { description: "Debris haul-off & disposal",                unitPriceCents:  40_000, qty: 1 },
   ]);
-  addLines(1, [
+  addLines(1, [  // elaine — sod install
     { description: "Sod installation — Bahia (sq ft)",          unitPriceCents:      75, qty: 6_400 },
+    { description: "Soil amendment & prep",                     unitPriceCents:  36_000, qty: 1 },
+    { description: "Irrigation adjustment",                     unitPriceCents:  12_000, qty: 1 },
   ]);
-  addLines(2, [
-    { description: "Fertilization treatment (4-step)",          unitPriceCents:  65_000, qty: 1 },
-    { description: "Bi-weekly maintenance",                     unitPriceCents:  27_000, qty: 1 },
+  addLines(2, [  // irving — lawn care
+    { description: "Fertilization treatment — 4-step program",  unitPriceCents:  65_000, qty: 1 },
+    { description: "Bi-weekly maintenance service",             unitPriceCents:  27_000, qty: 1 },
   ]);
-  addLines(3, [
-    { description: "Rodent exclusion + bait install",           unitPriceCents:  82_000, qty: 1 },
+  addLines(3, [  // laura — pest
+    { description: "Rodent exclusion — seal entry points",      unitPriceCents:  52_000, qty: 1 },
+    { description: "Bait station installation (ea)",            unitPriceCents:   5_000, qty: 6 },
   ]);
-  // SENT quotes — 2-3 line items each
-  addLines(4, [
+  addLines(4, [  // kevin — lawn renovation
+    { description: "Full lawn renovation — dead turf removal",  unitPriceCents:  85_000, qty: 1 },
+    { description: "St. Augustine sod install (sq ft)",         unitPriceCents:      90, qty: 1_200 },
+  ]);
+  addLines(5, [  // grace — land retaining wall
+    { description: "Retaining wall — keystone block (linear ft)", unitPriceCents: 2_200, qty: 80 },
+    { description: "Drainage swale behind wall",                unitPriceCents:  36_000, qty: 1 },
+    { description: "Soil backfill & compaction",                unitPriceCents:  48_000, qty: 1 },
+  ]);
+
+  // SENT (6) — 2-4 line items each
+  addLines(6, [  // carol — banyan trimming
     { description: "Banyan trimming — pool cage overhang",      unitPriceCents: 145_000, qty: 1 },
     { description: "Debris removal & haul-off",                 unitPriceCents:  50_000, qty: 1 },
   ]);
-  addLines(5, [
+  addLines(7, [  // frank — retention pond
     { description: "Retention pond excavation",                 unitPriceCents: 280_000, qty: 1 },
     { description: "County spec survey & staking",              unitPriceCents:  35_000, qty: 1 },
     { description: "Erosion control matting",                   unitPriceCents:  25_000, qty: 1 },
   ]);
-  addLines(6, [
+  addLines(8, [  // janet — sod replacement
     { description: "St. Augustine sod replacement (sq ft)",     unitPriceCents:      90, qty: 3_500 },
-    { description: "Soil prep & grade",                         unitPriceCents:  30_000, qty: 1 },
+    { description: "Soil prep & fine grade",                    unitPriceCents:  30_000, qty: 1 },
   ]);
-  addLines(7, [
+  addLines(9, [  // martin — termite
     { description: "Termite inspection — full structure",       unitPriceCents:  35_000, qty: 1 },
-    { description: "Spot treatment — 3 affected areas",         unitPriceCents:  10_000, qty: 3 },
+    { description: "Spot treatment — active areas (ea)",        unitPriceCents:  10_000, qty: 3 },
   ]);
-  // DRAFT quotes — 2-3 line items each
-  addLines(8, [
+  addLines(10, [ // douglas — palm trimming + French drain
     { description: "Sabal palm trimming (ea)",                  unitPriceCents:  20_000, qty: 6 },
-    { description: "Fertilization boot treatment (ea)",         unitPriceCents:   4_166, qty: 6 },
+    { description: "Fertilization boot treatment (ea)",         unitPriceCents:   4_000, qty: 6 },
+    { description: "Mulch refresh — 4 yards",                   unitPriceCents:  31_000, qty: 1 },
   ]);
-  addLines(9, [
+  addLines(11, [ // nancy — quarterly pest
+    { description: "Quarterly pest control — interior",         unitPriceCents:  28_000, qty: 1 },
+    { description: "Exterior perimeter treatment",              unitPriceCents:  20_000, qty: 1 },
+  ]);
+
+  // DRAFT (5) — 2-3 line items each
+  addLines(12, [ // brandon — stump grinding
+    { description: "Stump grinding — 4 stumps",                 unitPriceCents:  35_000, qty: 4 },
+    { description: "Surface root grinding",                     unitPriceCents:   5_000, qty: 1 },
+  ]);
+  addLines(13, [ // carol — drywood termite tenting
     { description: "Drywood termite tenting — full structure",  unitPriceCents:  75_000, qty: 1 },
     { description: "Contents protection wrap",                  unitPriceCents:  20_000, qty: 1 },
   ]);
-  addLines(10, [
-    { description: "Property line grading",                     unitPriceCents: 145_000, qty: 1 },
-    { description: "French drain installation (linear ft)",     unitPriceCents:     700, qty: 100 },
+  addLines(14, [ // elaine — commercial lot grading
+    { description: "Commercial site grading — 1.2 acres",       unitPriceCents: 650_000, qty: 1 },
+    { description: "Drainage swale installation",               unitPriceCents: 180_000, qty: 1 },
+    { description: "Compaction testing & report",               unitPriceCents:  60_000, qty: 1 },
   ]);
-  addLines(11, [
+  addLines(15, [ // frank — French drain
+    { description: "French drain installation (linear ft)",     unitPriceCents:     700, qty: 120 },
+    { description: "Catch basin — precast (ea)",                unitPriceCents:  15_000, qty: 3 },
+    { description: "Outfall pipe to retention",                 unitPriceCents:  27_000, qty: 1 },
+  ]);
+  addLines(16, [ // irving — lawn aeration
     { description: "Lawn aeration — 8,000 sq ft",               unitPriceCents:  35_000, qty: 1 },
     { description: "Overseeding — Bermuda blend",               unitPriceCents:  40_000, qty: 1 },
   ]);
-  // REJECTED quotes — 2-3 line items each
-  addLines(12, [
-    { description: "Full property tree removal — 8 trees",      unitPriceCents:  85_000, qty: 8 },
+
+  // REJECTED (3) — 2-3 line items each
+  addLines(17, [ // janet — full property tree removal (lost bid)
+    { description: "Full property tree removal — 8 trees",      unitPriceCents:  80_000, qty: 8 },
     { description: "Stump grinding (ea)",                       unitPriceCents:  35_000, qty: 8 },
-    { description: "Lot clearing & debris haul",                unitPriceCents:  40_000, qty: 1 },
+    { description: "Lot clearing & debris haul",                unitPriceCents:  80_000, qty: 1 },
   ]);
-  addLines(13, [
+  addLines(18, [ // grace — large commercial grading (lost bid)
     { description: "Commercial lot grading — 2 acres",          unitPriceCents: 650_000, qty: 1 },
-    { description: "Drainage swale installation",               unitPriceCents: 180_000, qty: 1 },
-    { description: "Compaction testing & report",               unitPriceCents: 120_000, qty: 1 },
+    { description: "Retention pond excavation",                 unitPriceCents: 180_000, qty: 1 },
+    { description: "Compaction testing & certification",        unitPriceCents: 120_000, qty: 1 },
+  ]);
+  addLines(19, [ // martin — premium pest plan (lost bid)
+    { description: "Annual pest protection plan",               unitPriceCents:  85_000, qty: 1 },
+    { description: "Termite bait system — 12 stations",         unitPriceCents:  45_000, qty: 1 },
   ]);
 
   if (allLineItems.length > 0) {
     await db.insert(quoteLineItemsTable).values(allLineItems);
+  }
+
+  // ── Phase 2: Backfill line items for any pre-existing quotes missing them ─
+  // Runs after main insert — handles quotes seeded by autoSeed.ts that have
+  // no line items. Guard: only inserts if at least one quote has 0 line items.
+  const orphanQuotes = await db.execute<{ id: number; total_cents: number }>(
+    sql`SELECT q.id, q.total_cents
+        FROM quotes q
+        WHERE NOT EXISTS (
+          SELECT 1 FROM quote_line_items li WHERE li.quote_id = q.id
+        )
+        ORDER BY q.id`,
+  );
+  if (orphanQuotes.rows.length > 0) {
+    const autoSeedLineItems: LineItem[] = [];
+    // Generic 2-line-item fallback for any quote not already covered above.
+    // Uses total_cents to back-calculate a realistic split.
+    for (const row of orphanQuotes.rows) {
+      const total = Number(row.total_cents);
+      const labor  = Math.round(total * 0.65);
+      const materials = total - labor;
+      autoSeedLineItems.push(
+        { quoteId: row.id, description: "Labor & equipment",    unitPriceCents: labor,     qty: 1 },
+        { quoteId: row.id, description: "Materials & disposal", unitPriceCents: materials, qty: 1 },
+      );
+    }
+    if (autoSeedLineItems.length > 0) {
+      await db.insert(quoteLineItemsTable).values(autoSeedLineItems);
+    }
   }
 
   // ── Invoices — spread over 6 months ──────────────────────────────────────
