@@ -1288,11 +1288,20 @@ const createCrewSchema = z.object({
   departmentId: z.number().int().positive().optional(),
 });
 
-// POST /crews — create a new crew. Requires fleet.trucks edit access (or admin).
+// POST /crews — create a new crew. Requires fleet.trucks OR admin.users edit access.
 router.post(
   "/crews",
   requireAuth,
-  requireSection("fleet.trucks", "edit"),
+  (req, res, next) => {
+    if (!req.user) { res.status(401).json({ error: "unauthenticated" }); return; }
+    const canFleet = hasSectionAccess(req.user, "fleet.trucks", "edit");
+    const canAdmin = hasSectionAccess(req.user, "admin.users", "edit");
+    if (!canFleet && !canAdmin) {
+      res.status(403).json({ error: "forbidden", section: "fleet.trucks|admin.users", action: "edit" });
+      return;
+    }
+    next();
+  },
   async (req, res) => {
     const parsed = createCrewSchema.safeParse(req.body);
     if (!parsed.success) {

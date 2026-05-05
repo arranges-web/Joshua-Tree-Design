@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { Link } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
-import { useListAssets, useListDepartments, type Asset } from "@workspace/api-client-react";
+import { useListAssets, useListDepartments, useGetMe, type Asset } from "@workspace/api-client-react";
 import {
   useListCrews,
   useCreateTruck,
@@ -385,7 +385,9 @@ export function AssetRegistry() {
   const { activeDeptId } = useDepartmentFilter();
   const { data, isLoading, refetch } = useListAssets(activeDeptId != null ? { departmentId: activeDeptId } : {});
   const { data: crewsData } = useListCrews();
+  const { data: meData } = useGetMe();
   const queryClient = useQueryClient();
+  const canEditFleet = meData?.user?.role === "ADMIN" || meData?.user?.role === "MECHANIC";
   const [query, setQuery] = useState("");
   const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>("ALL");
   const [crewFilter, setCrewFilter] = useState<string>("ALL");
@@ -465,7 +467,7 @@ export function AssetRegistry() {
             Every truck and piece of equipment in one place. Scan a QR code or click in to log work.
           </p>
         </div>
-        <AddAssetDialog onCreated={handleAssetCreated} />
+        {canEditFleet && <AddAssetDialog onCreated={handleAssetCreated} />}
       </div>
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">

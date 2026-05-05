@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
-import { useListEmployees, useListDepartments, type Employee } from "@workspace/api-client-react";
+import { useListEmployees, useListDepartments, useGetMe, type Employee } from "@workspace/api-client-react";
 import {
   useListCrews,
   useCrewDetail,
@@ -267,6 +267,8 @@ export function Crews() {
   const queryClient = useQueryClient();
   const [selectedCrewId, setSelectedCrewId] = useState<number | null>(null);
 
+  const { data: meData } = useGetMe();
+  const canEditFleet = meData?.user?.role === "ADMIN" || meData?.user?.role === "MECHANIC";
   const crews = data?.crews ?? [];
 
   function handleCrewCreated() {
@@ -301,7 +303,7 @@ export function Crews() {
             Field crews with their assigned members, trucks, and equipment.
           </p>
         </div>
-        <NewCrewDialog onCreated={handleCrewCreated} />
+        {canEditFleet && <NewCrewDialog onCreated={handleCrewCreated} />}
       </div>
 
       <div className="grid gap-6 md:grid-cols-[280px_1fr]">
