@@ -1,10 +1,36 @@
 import { useState } from "react";
 import { Link } from "wouter";
-import { useListCrews, useCrewDetail } from "@/lib/extra-api";
+import { useQueryClient } from "@tanstack/react-query";
+import { useListEmployees, type Employee } from "@workspace/api-client-react";
+import {
+  useListCrews,
+  useCrewDetail,
+  useCreateCrew,
+  type Crew,
+  type CrewMember,
+  type CreateCrewBody,
+} from "@/lib/extra-api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
-import { HardHat, Truck, Wrench, Users, ChevronRight } from "lucide-react";
+import { HardHat, Truck, Wrench, Users, ChevronRight, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const STATUS_COLORS: Record<string, string> = {
@@ -50,7 +76,6 @@ function CrewDetailPanel({ crewId }: { crewId: number }) {
 
   return (
     <div className="space-y-5 p-1">
-      {/* Members */}
       <section>
         <div className="mb-2 flex items-center gap-2 text-xs font-mono uppercase tracking-widest text-muted-foreground">
           <Users className="h-3.5 w-3.5" />
@@ -60,7 +85,7 @@ function CrewDetailPanel({ crewId }: { crewId: number }) {
           <p className="text-sm text-muted-foreground">No members assigned.</p>
         ) : (
           <div className="divide-y rounded-md border">
-            {crew.members.map((m) => (
+            {crew.members.map((m: CrewMember) => (
               <div key={m.userId} className="flex items-center justify-between px-3 py-2.5">
                 <div>
                   <p className="text-sm font-medium">{m.fullName}</p>
@@ -75,7 +100,6 @@ function CrewDetailPanel({ crewId }: { crewId: number }) {
         )}
       </section>
 
-      {/* Trucks */}
       <section>
         <div className="mb-2 flex items-center gap-2 text-xs font-mono uppercase tracking-widest text-muted-foreground">
           <Truck className="h-3.5 w-3.5" />
@@ -85,7 +109,7 @@ function CrewDetailPanel({ crewId }: { crewId: number }) {
           <p className="text-sm text-muted-foreground">No trucks assigned.</p>
         ) : (
           <div className="divide-y rounded-md border">
-            {crew.trucks.map((t) => (
+            {crew.trucks.map((t: { id: number; name: string; status: string; slug: string | null }) => (
               <div key={t.id} className="flex items-center justify-between px-3 py-2.5">
                 <span className="text-sm font-medium">{t.name}</span>
                 <div className="flex items-center gap-2">
@@ -105,7 +129,6 @@ function CrewDetailPanel({ crewId }: { crewId: number }) {
         )}
       </section>
 
-      {/* Equipment */}
       <section>
         <div className="mb-2 flex items-center gap-2 text-xs font-mono uppercase tracking-widest text-muted-foreground">
           <Wrench className="h-3.5 w-3.5" />
@@ -115,7 +138,7 @@ function CrewDetailPanel({ crewId }: { crewId: number }) {
           <p className="text-sm text-muted-foreground">No equipment assigned.</p>
         ) : (
           <div className="divide-y rounded-md border">
-            {crew.equipment.map((e) => (
+            {crew.equipment.map((e: { id: number; name: string; type: string; status: string; slug: string | null }) => (
               <div key={e.id} className="flex items-center justify-between px-3 py-2.5">
                 <div>
                   <p className="text-sm font-medium">{e.name}</p>
@@ -141,11 +164,97 @@ function CrewDetailPanel({ crewId }: { crewId: number }) {
   );
 }
 
+function NewCrewDialog({ onCreated }: { onCreated: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [name, setName] = useState("");
+  const [leadUserId, setLeadUserId] = useState("");
+  const [error, setError] = useState<string | null>(null);
+
+  const createCrew = useCreateCrew();
+  const { data: employeesData } = useListEmployees();
+  const employees = (employeesData?.employees ?? []) as Employee[];
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    if (!name.trim()) { setError("Crew name is required."); return; }
+    const leadId = Number(leadUserId);
+    if (!leadId) { setError("Please select a crew lead."); return; }
+    try {
+      const body: CreateCrewBody = { name: name.trim(), leadUserId: leadId };
+      await createCrew.mutateAsync(body);
+      onCreated();
+      setOpen(false);
+      setName("");
+      setLeadUserId("");
+    } catch {
+      setError("Failed to create crew. Please try again.");
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button size="sm" className="gap-1.5">
+          <Plus className="h-4 w-4" />
+          New Crew
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle>Create New Crew</DialogTitle>
+        </DialogHeader>
+        <form onSubmit={handleSubmit} className="space-y-4 pt-2">
+          <div>
+            <Label htmlFor="crew-name">Crew Name *</Label>
+            <Input
+              id="crew-name"
+              value={name}
+              onChange={e => setName(e.target.value)}
+              placeholder="Crew Delta"
+              className="mt-1"
+            />
+          </div>
+          <div>
+            <Label htmlFor="crew-lead">Crew Lead *</Label>
+            <Select value={leadUserId} onValueChange={setLeadUserId}>
+              <SelectTrigger id="crew-lead" className="mt-1">
+                <SelectValue placeholder="Select a lead" />
+              </SelectTrigger>
+              <SelectContent>
+                {employees.map((emp) => (
+                  <SelectItem key={emp.id} value={String(emp.id)}>
+                    {emp.fullName}
+                    {emp.role ? ` · ${emp.role}` : ""}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          {error && <p className="text-sm text-destructive">{error}</p>}
+          <div className="flex justify-end gap-2 pt-1">
+            <Button type="button" variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
+            <Button type="submit" disabled={createCrew.isPending}>
+              {createCrew.isPending ? "Creating…" : "Create Crew"}
+            </Button>
+          </div>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export function Crews() {
-  const { data, isLoading, error } = useListCrews();
+  const { data, isLoading, error, refetch } = useListCrews();
+  const queryClient = useQueryClient();
   const [selectedCrewId, setSelectedCrewId] = useState<number | null>(null);
 
   const crews = data?.crews ?? [];
+
+  function handleCrewCreated() {
+    queryClient.invalidateQueries({ queryKey: ["crews"] });
+    refetch();
+  }
 
   if (isLoading) {
     return (
@@ -163,28 +272,30 @@ export function Crews() {
     );
   }
 
-  const selectedCrew = crews.find((c) => c.id === selectedCrewId);
+  const selectedCrew = crews.find((c: Crew) => c.id === selectedCrewId);
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Crews</h1>
-        <p className="text-muted-foreground text-sm mt-1">
-          Field crews with their assigned members, trucks, and equipment.
-        </p>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Crews</h1>
+          <p className="text-muted-foreground text-sm mt-1">
+            Field crews with their assigned members, trucks, and equipment.
+          </p>
+        </div>
+        <NewCrewDialog onCreated={handleCrewCreated} />
       </div>
 
       <div className="grid gap-6 md:grid-cols-[280px_1fr]">
-        {/* Crew list */}
         <div className="space-y-2">
           {crews.length === 0 ? (
             <Card>
               <CardContent className="py-8 text-center text-sm text-muted-foreground">
-                No crews found.
+                No crews yet. Create your first crew with the button above.
               </CardContent>
             </Card>
           ) : (
-            crews.map((crew) => (
+            crews.map((crew: Crew) => (
               <button
                 key={crew.id}
                 onClick={() => setSelectedCrewId(crew.id)}
@@ -209,7 +320,6 @@ export function Crews() {
           )}
         </div>
 
-        {/* Detail panel */}
         <div>
           {selectedCrewId && selectedCrew ? (
             <Card>

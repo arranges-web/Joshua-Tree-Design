@@ -92,11 +92,31 @@ router.get(
     const keyForDept = (id: number | null) =>
       id == null ? UNATTRIBUTED_KEY : `dept-${id}`;
 
+    // Build the trailing-12-month key list first so every bucket (including
+    // dynamically-created ones for unattributed transactions) is immediately
+    // seeded with zeroed monthly rows. This prevents `monthly.get(m)` from
+    // returning undefined later in the reduce/map steps.
+    const monthKeys: string[] = [];
+    const now = new Date();
+    for (let i = 11; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      monthKeys.push(
+        `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`,
+      );
+    }
+
     function bucketFor(deptId: number | null): Bucket {
       const key = keyForDept(deptId);
       let bucket = buckets.get(key);
       if (!bucket) {
         const dept = deptId != null ? depts.find((d) => d.id === deptId) : null;
+        const monthly = new Map<
+          string,
+          { collectedRevenueCents: number; maintenanceSpendCents: number }
+        >();
+        for (const m of monthKeys) {
+          monthly.set(m, { collectedRevenueCents: 0, maintenanceSpendCents: 0 });
+        }
         bucket = {
           departmentId: deptId,
           departmentLabel: dept?.label ?? "Unattributed",
@@ -104,7 +124,7 @@ router.get(
           collectedRevenueCents: 0,
           quotePipelineCents: 0,
           maintenanceSpendCents: 0,
-          monthly: new Map(),
+          monthly,
         };
         buckets.set(key, bucket);
       }
@@ -114,25 +134,6 @@ router.get(
     // Pre-seed every department so even branches with no activity show up
     // as a row in the page (keeps the UI predictable).
     for (const d of depts) bucketFor(d.id);
-
-    // Trailing 12 months — buckets get their month map seeded so the
-    // chart never has gaps.
-    const monthKeys: string[] = [];
-    const now = new Date();
-    for (let i = 11; i >= 0; i--) {
-      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-      monthKeys.push(
-        `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`,
-      );
-    }
-    for (const bucket of buckets.values()) {
-      for (const m of monthKeys) {
-        bucket.monthly.set(m, {
-          collectedRevenueCents: 0,
-          maintenanceSpendCents: 0,
-        });
-      }
-    }
 
     // Invoices: split open vs paid, attribute to job's crew's department.
     for (const inv of invoices) {

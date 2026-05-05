@@ -156,6 +156,79 @@ export function useAssignmentHistory(slug: string) {
   });
 }
 
+// ---------- Create Truck ----------
+export type CreateTruckBody = {
+  name: string;
+  vehicleType?: "TRUCK" | "TRAILER";
+  brand?: string;
+  model?: string;
+  vin?: string;
+  plate?: string;
+  status?: string;
+  departmentId: number;
+  purchasePriceCents?: number;
+  purchaseDate?: string;
+  currentMileage?: number;
+  serviceIntervalMiles?: number;
+};
+
+export function useCreateTruck() {
+  return useMutation({
+    mutationFn: (body: CreateTruckBody) =>
+      customFetch<{ truck: unknown }>("/trucks", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ ...body, status: body.status ?? "ACTIVE" }),
+      }),
+  });
+}
+
+// ---------- Create Equipment ----------
+export type CreateEquipmentBody = {
+  name: string;
+  type: string;
+  category?: "HANDHELD" | "CUSTOM";
+  customCategoryLabel?: string;
+  quantity?: number;
+  brand?: string;
+  model?: string;
+  serial?: string;
+  status?: string;
+  departmentId: number;
+  purchasePriceCents?: number;
+  purchaseDate?: string;
+  currentHours?: number;
+  serviceIntervalHours?: number;
+};
+
+export function useCreateEquipment() {
+  return useMutation({
+    mutationFn: (body: CreateEquipmentBody) =>
+      customFetch<{ equipment: unknown }>("/equipment", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ ...body, status: body.status ?? "ACTIVE" }),
+      }),
+  });
+}
+
+// ---------- Create Crew ----------
+export type CreateCrewBody = {
+  name: string;
+  leadUserId: number;
+};
+
+export function useCreateCrew() {
+  return useMutation({
+    mutationFn: (body: CreateCrewBody) =>
+      customFetch<{ crew: { id: number; name: string } }>("/crews", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+      }),
+  });
+}
+
 // ---------- Accounting ----------
 export type AccountingMonthRow = {
   month: string;

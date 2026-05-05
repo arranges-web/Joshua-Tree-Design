@@ -1,12 +1,22 @@
 import { useMemo, useState } from "react";
 import { Link } from "wouter";
-import { useListAssets, type Asset } from "@workspace/api-client-react";
-import { useListCrews, type AssetExt } from "@/lib/extra-api";
+import { useQueryClient } from "@tanstack/react-query";
+import { useListAssets, useListDepartments, type Asset } from "@workspace/api-client-react";
+import {
+  useListCrews,
+  useCreateTruck,
+  useCreateEquipment,
+  type AssetExt,
+  type Crew,
+  type CreateTruckBody,
+  type CreateEquipmentBody,
+} from "@/lib/extra-api";
 import { useDepartmentFilter } from "@/context/DepartmentContext";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Select,
@@ -15,6 +25,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import {
   Table,
   TableBody,
@@ -37,6 +54,7 @@ import {
   Caravan,
   Hammer,
   Boxes,
+  Plus,
 } from "lucide-react";
 
 const usd = (cents: number | null | undefined) =>
@@ -57,8 +75,6 @@ function statusLabel(status: string) {
 function statusBadgeClass(status: string) {
   if (status === "ACTIVE") return "bg-emerald-100 text-emerald-900 border-emerald-200";
   if (status === "IN_SHOP") return "bg-amber-100 text-amber-900 border-amber-200";
-  // RETIRED / "Out of Service" — flag clearly red so a glance at the registry
-  // makes it obvious which trucks are off the road for safety reasons.
   return "bg-rose-100 text-rose-900 border-rose-300";
 }
 
@@ -92,10 +108,6 @@ type CategoryFilter = "ALL" | "TRUCK" | "TRAILER" | "HANDHELD" | "CUSTOM";
 
 const SERVICE_RANK = { OVERDUE: 0, DUE_SOON: 1, OK: 2 };
 
-// The orval-generated `Asset` type doesn't yet know about the new
-// server fields, and its `usageUnit` is narrower than what we now
-// return (NONE for trailers / quantity items). We omit the conflicting
-// field so the AssetExt override actually widens it.
 type RegistryAsset = Omit<Asset, "usageUnit"> & AssetExt;
 
 function categoryIcon(c: AssetExt["category"]) {
@@ -112,10 +124,268 @@ function categoryLabel(a: RegistryAsset) {
   return "Truck";
 }
 
+type AssetKind = "truck" | "equipment";
+
+function AddAssetDialog({ onCreated }: { onCreated: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [kind, setKind] = useState<AssetKind>("truck");
+  const [error, setError] = useState<string | null>(null);
+
+  const { data: deptsData } = useListDepartments();
+  const depts = deptsData?.departments ?? [];
+
+  const createTruck = useCreateTruck();
+  const createEquipment = useCreateEquipment();
+  const isPending = createTruck.isPending || createEquipment.isPending;
+
+  const [form, setForm] = useState({
+    name: "",
+    departmentId: "",
+    vehicleType: "TRUCK" as "TRUCK" | "TRAILER",
+    brand: "",
+    model: "",
+    vin: "",
+    plate: "",
+    serial: "",
+    type: "CHAINSAW",
+    category: "HANDHELD" as "HANDHELD" | "CUSTOM",
+    customCategoryLabel: "",
+    purchasePrice: "",
+    purchaseDate: "",
+    mileage: "",
+    serviceIntervalMiles: "",
+    hours: "",
+    serviceIntervalHours: "",
+  });
+
+  function field(key: keyof typeof form, value: string) {
+    setForm((f) => ({ ...f, [key]: value }));
+  }
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    const deptId = Number(form.departmentId);
+    if (!form.name.trim()) { setError("Name is required."); return; }
+    if (!deptId) { setError("Department is required."); return; }
+
+    try {
+      if (kind === "truck") {
+        const body: CreateTruckBody = {
+          name: form.name.trim(),
+          vehicleType: form.vehicleType,
+          departmentId: deptId,
+          brand: form.brand.trim() || undefined,
+          model: form.model.trim() || undefined,
+          vin: form.vin.trim() || undefined,
+          plate: form.plate.trim() || undefined,
+          purchasePriceCents: form.purchasePrice ? Math.round(parseFloat(form.purchasePrice) * 100) : undefined,
+          purchaseDate: form.purchaseDate || undefined,
+          currentMileage: form.mileage ? Number(form.mileage) : undefined,
+          serviceIntervalMiles: form.serviceIntervalMiles ? Number(form.serviceIntervalMiles) : undefined,
+        };
+        await createTruck.mutateAsync(body);
+      } else {
+        if (!form.type.trim()) { setError("Equipment type is required."); return; }
+        const body: CreateEquipmentBody = {
+          name: form.name.trim(),
+          type: form.type.trim(),
+          category: form.category,
+          customCategoryLabel: form.category === "CUSTOM" ? form.customCategoryLabel.trim() : undefined,
+          departmentId: deptId,
+          brand: form.brand.trim() || undefined,
+          model: form.model.trim() || undefined,
+          serial: form.serial.trim() || undefined,
+          purchasePriceCents: form.purchasePrice ? Math.round(parseFloat(form.purchasePrice) * 100) : undefined,
+          purchaseDate: form.purchaseDate || undefined,
+          currentHours: form.hours ? Number(form.hours) : undefined,
+          serviceIntervalHours: form.serviceIntervalHours ? Number(form.serviceIntervalHours) : undefined,
+        };
+        await createEquipment.mutateAsync(body);
+      }
+      onCreated();
+      setOpen(false);
+      setForm({ name: "", departmentId: "", vehicleType: "TRUCK", brand: "", model: "", vin: "", plate: "", serial: "", type: "CHAINSAW", category: "HANDHELD", customCategoryLabel: "", purchasePrice: "", purchaseDate: "", mileage: "", serviceIntervalMiles: "", hours: "", serviceIntervalHours: "" });
+    } catch {
+      setError("Failed to create asset. Please try again.");
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button size="sm" className="gap-1.5">
+          <Plus className="h-4 w-4" />
+          Add Asset
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Add New Asset</DialogTitle>
+        </DialogHeader>
+        <form onSubmit={handleSubmit} className="space-y-4 pt-2">
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={() => setKind("truck")}
+              className={`flex items-center justify-center gap-2 rounded-md border px-3 py-2.5 text-sm font-medium transition-colors ${kind === "truck" ? "border-primary bg-primary/10 text-primary" : "border-border bg-card hover:bg-accent"}`}
+            >
+              <Truck className="h-4 w-4" /> Truck / Trailer
+            </button>
+            <button
+              type="button"
+              onClick={() => setKind("equipment")}
+              className={`flex items-center justify-center gap-2 rounded-md border px-3 py-2.5 text-sm font-medium transition-colors ${kind === "equipment" ? "border-primary bg-primary/10 text-primary" : "border-border bg-card hover:bg-accent"}`}
+            >
+              <Hammer className="h-4 w-4" /> Equipment
+            </button>
+          </div>
+
+          <div className="space-y-3">
+            <div>
+              <Label htmlFor="asset-name">Name *</Label>
+              <Input id="asset-name" value={form.name} onChange={e => field("name", e.target.value)} placeholder={kind === "truck" ? "T-06 Service Truck" : "Husqvarna Chainsaw"} className="mt-1" />
+            </div>
+
+            <div>
+              <Label htmlFor="asset-dept">Department *</Label>
+              <Select value={form.departmentId} onValueChange={v => field("departmentId", v)}>
+                <SelectTrigger id="asset-dept" className="mt-1">
+                  <SelectValue placeholder="Select department" />
+                </SelectTrigger>
+                <SelectContent>
+                  {depts.map((d: { id: number; key: string; label: string }) => (
+                    <SelectItem key={d.id} value={String(d.id)}>{d.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {kind === "truck" ? (
+              <>
+                <div>
+                  <Label>Type</Label>
+                  <div className="mt-1 grid grid-cols-2 gap-2">
+                    {(["TRUCK", "TRAILER"] as const).map(vt => (
+                      <button key={vt} type="button" onClick={() => field("vehicleType", vt)}
+                        className={`rounded-md border px-3 py-1.5 text-sm font-medium transition-colors ${form.vehicleType === vt ? "border-primary bg-primary/10 text-primary" : "border-border bg-card hover:bg-accent"}`}>
+                        {vt === "TRUCK" ? "Truck" : "Trailer"}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label htmlFor="asset-brand">Brand</Label>
+                    <Input id="asset-brand" value={form.brand} onChange={e => field("brand", e.target.value)} placeholder="Ford" className="mt-1" />
+                  </div>
+                  <div>
+                    <Label htmlFor="asset-model">Model</Label>
+                    <Input id="asset-model" value={form.model} onChange={e => field("model", e.target.value)} placeholder="F-550" className="mt-1" />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label htmlFor="asset-vin">VIN</Label>
+                    <Input id="asset-vin" value={form.vin} onChange={e => field("vin", e.target.value)} placeholder="1FDXX000..." className="mt-1" />
+                  </div>
+                  <div>
+                    <Label htmlFor="asset-plate">Plate</Label>
+                    <Input id="asset-plate" value={form.plate} onChange={e => field("plate", e.target.value)} placeholder="ABC-1234" className="mt-1" />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label htmlFor="asset-mileage">Current Mileage</Label>
+                    <Input id="asset-mileage" type="number" min="0" value={form.mileage} onChange={e => field("mileage", e.target.value)} placeholder="0" className="mt-1" />
+                  </div>
+                  <div>
+                    <Label htmlFor="asset-interval-mi">Service Interval (mi)</Label>
+                    <Input id="asset-interval-mi" type="number" min="0" value={form.serviceIntervalMiles} onChange={e => field("serviceIntervalMiles", e.target.value)} placeholder="5000" className="mt-1" />
+                  </div>
+                </div>
+              </>
+            ) : (
+              <>
+                <div>
+                  <Label htmlFor="asset-type">Equipment Type *</Label>
+                  <Input id="asset-type" value={form.type} onChange={e => field("type", e.target.value)} placeholder="CHAINSAW" className="mt-1" />
+                </div>
+                <div>
+                  <Label>Category</Label>
+                  <div className="mt-1 grid grid-cols-2 gap-2">
+                    {(["HANDHELD", "CUSTOM"] as const).map(cat => (
+                      <button key={cat} type="button" onClick={() => field("category", cat)}
+                        className={`rounded-md border px-3 py-1.5 text-sm font-medium transition-colors ${form.category === cat ? "border-primary bg-primary/10 text-primary" : "border-border bg-card hover:bg-accent"}`}>
+                        {cat === "HANDHELD" ? "Handheld" : "Custom"}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                {form.category === "CUSTOM" && (
+                  <div>
+                    <Label htmlFor="asset-custom-label">Custom Category Label *</Label>
+                    <Input id="asset-custom-label" value={form.customCategoryLabel} onChange={e => field("customCategoryLabel", e.target.value)} placeholder="e.g. Sprayer" className="mt-1" />
+                  </div>
+                )}
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label htmlFor="asset-brand-eq">Brand</Label>
+                    <Input id="asset-brand-eq" value={form.brand} onChange={e => field("brand", e.target.value)} placeholder="Husqvarna" className="mt-1" />
+                  </div>
+                  <div>
+                    <Label htmlFor="asset-model-eq">Model</Label>
+                    <Input id="asset-model-eq" value={form.model} onChange={e => field("model", e.target.value)} placeholder="455 Rancher" className="mt-1" />
+                  </div>
+                </div>
+                <div>
+                  <Label htmlFor="asset-serial">Serial Number</Label>
+                  <Input id="asset-serial" value={form.serial} onChange={e => field("serial", e.target.value)} placeholder="SN-123456" className="mt-1" />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label htmlFor="asset-hours">Current Hours</Label>
+                    <Input id="asset-hours" type="number" min="0" value={form.hours} onChange={e => field("hours", e.target.value)} placeholder="0" className="mt-1" />
+                  </div>
+                  <div>
+                    <Label htmlFor="asset-interval-hr">Service Interval (hrs)</Label>
+                    <Input id="asset-interval-hr" type="number" min="0" value={form.serviceIntervalHours} onChange={e => field("serviceIntervalHours", e.target.value)} placeholder="50" className="mt-1" />
+                  </div>
+                </div>
+              </>
+            )}
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label htmlFor="asset-price">Purchase Price ($)</Label>
+                <Input id="asset-price" type="number" min="0" step="0.01" value={form.purchasePrice} onChange={e => field("purchasePrice", e.target.value)} placeholder="0.00" className="mt-1" />
+              </div>
+              <div>
+                <Label htmlFor="asset-date">Purchase Date</Label>
+                <Input id="asset-date" type="date" value={form.purchaseDate} onChange={e => field("purchaseDate", e.target.value)} className="mt-1" />
+              </div>
+            </div>
+          </div>
+
+          {error && <p className="text-sm text-destructive">{error}</p>}
+
+          <div className="flex justify-end gap-2 pt-2">
+            <Button type="button" variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
+            <Button type="submit" disabled={isPending}>
+              {isPending ? "Adding…" : `Add ${kind === "truck" ? "Vehicle" : "Equipment"}`}
+            </Button>
+          </div>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export function AssetRegistry() {
   const { activeDeptId } = useDepartmentFilter();
-  const { data, isLoading } = useListAssets(activeDeptId != null ? { departmentId: activeDeptId } : {});
+  const { data, isLoading, refetch } = useListAssets(activeDeptId != null ? { departmentId: activeDeptId } : {});
   const { data: crewsData } = useListCrews();
+  const queryClient = useQueryClient();
   const [query, setQuery] = useState("");
   const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>("ALL");
   const [crewFilter, setCrewFilter] = useState<string>("ALL");
@@ -129,6 +399,11 @@ export function AssetRegistry() {
 
   const assets = (data?.assets ?? []) as RegistryAsset[];
   const crews = crewsData?.crews ?? [];
+
+  function handleAssetCreated() {
+    queryClient.invalidateQueries();
+    refetch();
+  }
 
   const filtered = useMemo(() => {
     const list = assets.filter((a) => {
@@ -174,9 +449,6 @@ export function AssetRegistry() {
   }, [assets, query, categoryFilter, crewFilter, statusFilter, dueFilter, sortKey]);
 
   const totals = useMemo(() => {
-    // "Service" rollups only count usage-tracked assets (trucks +
-    // hour-metered equipment) — quantity-tracked items don't have a
-    // due-date concept and shouldn't inflate "OK" counts either.
     const trackedAssets = assets.filter((a) => a.usageUnit !== "NONE");
     const overdue = trackedAssets.filter((a) => a.serviceState === "OVERDUE").length;
     const dueSoon = trackedAssets.filter((a) => a.serviceState === "DUE_SOON").length;
@@ -193,6 +465,7 @@ export function AssetRegistry() {
             Every truck and piece of equipment in one place. Scan a QR code or click in to log work.
           </p>
         </div>
+        <AddAssetDialog onCreated={handleAssetCreated} />
       </div>
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
@@ -246,7 +519,7 @@ export function AssetRegistry() {
             <SelectContent>
               <SelectItem value="ALL">All crews</SelectItem>
               <SelectItem value="UNASSIGNED">Unassigned</SelectItem>
-              {crews.map((c) => (
+              {crews.map((c: Crew) => (
                 <SelectItem key={c.id} value={String(c.id)}>
                   {c.name}
                 </SelectItem>

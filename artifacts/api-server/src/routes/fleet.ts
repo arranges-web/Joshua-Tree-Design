@@ -1280,8 +1280,52 @@ router.get(
   },
 );
 
-// ---------- Crews (for assignment dropdowns) ----------
-// Lightweight list — name + id only — used by the asset-assignment UI.
+// ---------- Crews ----------
+
+const createCrewSchema = z.object({
+  name: z.string().min(1).max(120),
+  leadUserId: z.number().int().positive(),
+});
+
+// POST /crews — create a new crew. Requires fleet.trucks edit access (or admin).
+router.post(
+  "/crews",
+  requireAuth,
+  requireSection("fleet.trucks", "edit"),
+  async (req, res) => {
+    const parsed = createCrewSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: "invalid_body", details: parsed.error.flatten() });
+      return;
+    }
+    const { name, leadUserId } = parsed.data;
+    // Verify the lead user exists.
+    const [leadUser] = await db
+      .select({ id: usersTable.id })
+      .from(usersTable)
+      .where(eq(usersTable.id, leadUserId));
+    if (!leadUser) {
+      res.status(400).json({ error: "lead_user_not_found" });
+      return;
+    }
+    const [crew] = await db
+      .insert(crewsTable)
+      .values({ name, leadUserId })
+      .returning();
+    if (!crew) {
+      res.status(500).json({ error: "insert_failed" });
+      return;
+    }
+    // Auto-add the lead as a crew member.
+    await db
+      .insert(crewMembersTable)
+      .values({ crewId: crew.id, userId: leadUserId })
+      .onConflictDoNothing();
+    res.status(201).json({ crew: { id: crew.id, name: crew.name } });
+  },
+);
+
+// GET /crews — lightweight list for asset-assignment dropdowns.
 // Anyone with fleet view permission can see crew names.
 router.get(
   "/crews",
