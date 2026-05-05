@@ -1,13 +1,12 @@
 /**
  * Idempotent demo-data backfill.
  *
- * Adds realistic SW-Florida customers, Lawn/Land/Pest/Tree jobs, quotes,
- * invoices spread over 6 months, crews per department, extra trucks, and
- * maintenance logs so every page of the admin console looks fully populated
- * during a live demo walkthrough.
+ * Populates: 12 new customers, properties, 2 crews per service dept, 30+
+ * jobs across all 4 service departments, 20 quotes (all statuses, 2-4 line
+ * items each), 19+ invoices spread over 6 months, 3 extra trucks, 10+
+ * equipment items for Lawn/Pest/Land/Tree, and 20+ maintenance logs.
  *
- * Guard: skips entirely when the customers table already has 22+ rows,
- * meaning a prior run succeeded. Safe to call on every server boot.
+ * Guard: skips entirely when customers table already has 22+ rows.
  */
 
 import { eq, sql } from "drizzle-orm";
@@ -34,9 +33,12 @@ function daysAgo(d: number) {
 function daysFromNow(d: number) {
   return new Date(Date.now() + d * 86_400_000);
 }
-
 function slugify(name: string): string {
-  return name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)+/g, "").slice(0, 60);
+  return name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-|-$)+/g, "")
+    .slice(0, 60);
 }
 
 export async function backfillDemoData(): Promise<void> {
@@ -44,9 +46,9 @@ export async function backfillDemoData(): Promise<void> {
   const [{ n }] = await db
     .select({ n: sql<number>`count(*)::int` })
     .from(customersTable);
-  if (n >= 22) return; // already seeded
+  if (n >= 22) return;
 
-  // ── Resolve IDs from the live DB ──────────────────────────────────────────
+  // ── Resolve department & user IDs from live DB ────────────────────────────
   const depts = await db.select().from(departmentsTable);
   const deptId = (key: string) => depts.find((d) => d.key === key)?.id ?? null;
   const dLawn = deptId("Lawn")!;
@@ -60,359 +62,431 @@ export async function backfillDemoData(): Promise<void> {
   const admin  = uid("admin@joshuatreeinc.test")!;
   const sales1 = uid("sales1@joshuatreeinc.test")!;
   const sales2 = uid("sales2@joshuatreeinc.test")!;
-  const lead1  = uid("lead1@joshuatreeinc.test")!;   // Land dept
-  const lead2  = uid("lead2@joshuatreeinc.test")!;   // Land dept
-  const lead3  = uid("lead3@joshuatreeinc.test")!;   // Tree dept
-  const mech   = uid("mechanic@joshuatreeinc.test")!;// Pest dept
+  const lead1  = uid("lead1@joshuatreeinc.test")!;
+  const lead2  = uid("lead2@joshuatreeinc.test")!;
+  const lead3  = uid("lead3@joshuatreeinc.test")!;
+  const mech   = uid("mechanic@joshuatreeinc.test")!;
 
-  // ── Fix existing crew department assignments ───────────────────────────────
-  // Crews seeded by autoSeed have null department_id; backfill them so the
-  // accounting department attribution chain works.
+  // ── Fix existing crew dept assignments ────────────────────────────────────
   const existingCrews = await db.select().from(crewsTable);
   for (const c of existingCrews) {
     if (c.departmentId != null) continue;
     const lead = users.find((u) => u.id === c.leadUserId);
     if (lead?.departmentId) {
-      await db.update(crewsTable).set({ departmentId: lead.departmentId }).where(eq(crewsTable.id, c.id));
+      await db
+        .update(crewsTable)
+        .set({ departmentId: lead.departmentId })
+        .where(eq(crewsTable.id, c.id));
     }
   }
 
   // ── Ensure 2 crews per service department ─────────────────────────────────
   const afterFix = await db.select().from(crewsTable);
-  const crewsByDept = (dId: number) => afterFix.filter((c) => c.departmentId === dId);
+  const crewsByDept = (dId: number) =>
+    afterFix.filter((c) => c.departmentId === dId);
 
-  // Tree dept: need 2 crews
-  let treeCrew1Id: number, treeCrew2Id: number;
-  const treeCrews = crewsByDept(dTree);
-  if (treeCrews[0]) {
-    treeCrew1Id = treeCrews[0].id;
-  } else {
-    const [c] = await db.insert(crewsTable).values({ name: "Tree Crew 1", leadUserId: lead3, departmentId: dTree }).returning();
-    treeCrew1Id = c.id;
-    await db.insert(crewMembersTable).values([{ crewId: c.id, userId: lead3 }, { crewId: c.id, userId: admin }]).onConflictDoNothing();
-  }
-  if (treeCrews[1]) {
-    treeCrew2Id = treeCrews[1].id;
-  } else {
-    const [c] = await db.insert(crewsTable).values({ name: "Tree Crew 2", leadUserId: admin, departmentId: dTree }).returning();
-    treeCrew2Id = c.id;
-    await db.insert(crewMembersTable).values([{ crewId: c.id, userId: admin }, { crewId: c.id, userId: lead1 }]).onConflictDoNothing();
-  }
-
-  // Land dept: need 2 crews
-  let landCrew1Id: number, landCrew2Id: number;
-  const landCrews = crewsByDept(dLand);
-  if (landCrews[0]) {
-    landCrew1Id = landCrews[0].id;
-  } else {
-    const [c] = await db.insert(crewsTable).values({ name: "Land Crew 1", leadUserId: lead1, departmentId: dLand }).returning();
-    landCrew1Id = c.id;
-    await db.insert(crewMembersTable).values([{ crewId: c.id, userId: lead1 }, { crewId: c.id, userId: mech }]).onConflictDoNothing();
-  }
-  if (landCrews[1]) {
-    landCrew2Id = landCrews[1].id;
-  } else {
-    const [c] = await db.insert(crewsTable).values({ name: "Land Crew 2", leadUserId: lead2, departmentId: dLand }).returning();
-    landCrew2Id = c.id;
-    await db.insert(crewMembersTable).values([{ crewId: c.id, userId: lead2 }, { crewId: c.id, userId: sales2 }]).onConflictDoNothing();
+  async function ensureCrew(
+    name: string,
+    leadUserId: number,
+    departmentId: number,
+    memberIds: number[],
+  ): Promise<number> {
+    const existing = crewsByDept(departmentId);
+    if (existing.length >= 2) {
+      return existing[existing.length - 1]!.id;
+    }
+    const [c] = await db
+      .insert(crewsTable)
+      .values({ name, leadUserId, departmentId })
+      .returning();
+    await db
+      .insert(crewMembersTable)
+      .values(memberIds.map((u) => ({ crewId: c!.id, userId: u })))
+      .onConflictDoNothing();
+    return c!.id;
   }
 
-  // Lawn dept: need 2 crews
-  let lawnCrew1Id: number, lawnCrew2Id: number;
-  const lawnCrews = crewsByDept(dLawn);
-  if (lawnCrews[0]) {
-    lawnCrew1Id = lawnCrews[0].id;
-  } else {
-    const [c] = await db.insert(crewsTable).values({ name: "Lawn Crew 1", leadUserId: sales1, departmentId: dLawn }).returning();
-    lawnCrew1Id = c.id;
-    await db.insert(crewMembersTable).values([{ crewId: c.id, userId: sales1 }, { crewId: c.id, userId: lead2 }]).onConflictDoNothing();
-  }
-  if (lawnCrews[1]) {
-    lawnCrew2Id = lawnCrews[1].id;
-  } else {
-    const [c] = await db.insert(crewsTable).values({ name: "Lawn Crew 2", leadUserId: sales2, departmentId: dLawn }).returning();
-    lawnCrew2Id = c.id;
-    await db.insert(crewMembersTable).values([{ crewId: c.id, userId: sales2 }, { crewId: c.id, userId: lead3 }]).onConflictDoNothing();
-  }
+  const treeCrew1Id =
+    crewsByDept(dTree)[0]?.id ??
+    (await ensureCrew("Tree Crew 1", lead3, dTree, [lead3, admin]));
+  const treeCrew2Id = await ensureCrew("Tree Crew 2", admin, dTree, [admin, lead1]);
 
-  // Pest dept: need 2 crews
-  let pestCrew1Id: number, pestCrew2Id: number;
-  const pestCrews = crewsByDept(dPest);
-  if (pestCrews[0]) {
-    pestCrew1Id = pestCrews[0].id;
-  } else {
-    const [c] = await db.insert(crewsTable).values({ name: "Pest Crew 1", leadUserId: mech, departmentId: dPest }).returning();
-    pestCrew1Id = c.id;
-    await db.insert(crewMembersTable).values([{ crewId: c.id, userId: mech }, { crewId: c.id, userId: admin }]).onConflictDoNothing();
-  }
-  if (pestCrews[1]) {
-    pestCrew2Id = pestCrews[1].id;
-  } else {
-    const [c] = await db.insert(crewsTable).values({ name: "Pest Crew 2", leadUserId: admin, departmentId: dPest }).returning();
-    pestCrew2Id = c.id;
-    await db.insert(crewMembersTable).values([{ crewId: c.id, userId: admin }, { crewId: c.id, userId: sales1 }]).onConflictDoNothing();
-  }
+  const landCrew1Id =
+    crewsByDept(dLand)[0]?.id ??
+    (await ensureCrew("Land Crew 1", lead1, dLand, [lead1, mech]));
+  const landCrew2Id = await ensureCrew("Land Crew 2", lead2, dLand, [lead2, sales2]);
+
+  const lawnCrew1Id =
+    crewsByDept(dLawn)[0]?.id ??
+    (await ensureCrew("Lawn Crew 1", sales1, dLawn, [sales1, lead2]));
+  const lawnCrew2Id = await ensureCrew("Lawn Crew 2", sales2, dLawn, [sales2, lead3]);
+
+  const pestCrew1Id =
+    crewsByDept(dPest)[0]?.id ??
+    (await ensureCrew("Pest Crew 1", mech, dPest, [mech, admin]));
+  const pestCrew2Id = await ensureCrew("Pest Crew 2", admin, dPest, [admin, sales1]);
 
   // ── 12 new customers ──────────────────────────────────────────────────────
   const newCustomers = await db
     .insert(customersTable)
     .values([
-      // Tree dept customers
-      { fullName: "Brandon Bayside",    email: "brandon@example.com",  phone: "(239) 555-0201", phoneE164: "+12395550201", billingAddress: "88 Bayside Dr, Naples, FL 34112",            ownerUserId: sales1 },
-      { fullName: "Carol Coastline",    email: "carol@example.com",    phone: "(239) 555-0202", phoneE164: "+12395550202", billingAddress: "320 Gulf Shore Blvd, Naples, FL 34102",       ownerUserId: sales2 },
-      { fullName: "Douglas Dunes",      email: "douglas@example.com",  phone: "(239) 555-0203", phoneE164: "+12395550203", billingAddress: "15 Dune Dr, Sanibel, FL 33957",               ownerUserId: sales1 },
-      // Land dept customers
-      { fullName: "Elaine Estates",     email: "elaine@example.com",   phone: "(239) 555-0204", phoneE164: "+12395550204", billingAddress: "740 Estate Blvd, Fort Myers, FL 33913",       ownerUserId: sales2 },
-      { fullName: "Frank Farmland",     email: "frank@example.com",    phone: "(239) 555-0205", phoneE164: "+12395550205", billingAddress: "1100 County Rd 78, LaBelle, FL 33935",         ownerUserId: sales1 },
-      { fullName: "Grace Greenway",     email: "grace@example.com",    phone: "(239) 555-0206", phoneE164: "+12395550206", billingAddress: "230 Greenway Ct, Estero, FL 33928",            ownerUserId: sales2 },
-      // Lawn dept customers
-      { fullName: "Irving Inlet",       email: "irving@example.com",   phone: "(239) 555-0207", phoneE164: "+12395550207", billingAddress: "50 Inlet Shore Ln, Cape Coral, FL 33914",     ownerUserId: sales1 },
-      { fullName: "Janet Junction",     email: "janet@example.com",    phone: "(239) 555-0208", phoneE164: "+12395550208", billingAddress: "901 Junction Ave, Fort Myers, FL 33901",       ownerUserId: sales2 },
-      { fullName: "Kevin Keystone",     email: "kevin@example.com",    phone: "(239) 555-0209", phoneE164: "+12395550209", billingAddress: "4 Keystone Ct, Bonita Springs, FL 34135",      ownerUserId: sales1 },
-      // Pest dept customers
-      { fullName: "Laura Lakeside",     email: "laura@example.com",    phone: "(239) 555-0210", phoneE164: "+12395550210", billingAddress: "88 Lakeside Dr, Cape Coral, FL 33904",         ownerUserId: sales2 },
-      { fullName: "Martin Marina",      email: "martin@example.com",   phone: "(239) 555-0211", phoneE164: "+12395550211", billingAddress: "175 Marina Blvd, Fort Myers Beach, FL 33931",  ownerUserId: sales1 },
-      { fullName: "Nancy Northgate",    email: "nancy@example.com",    phone: "(239) 555-0212", phoneE164: "+12395550212", billingAddress: "610 Northgate Dr, Naples, FL 34104",           ownerUserId: sales2 },
+      { fullName: "Brandon Bayside",  email: "brandon@example.com", phone: "(239) 555-0201", phoneE164: "+12395550201", billingAddress: "88 Bayside Dr, Naples, FL 34112",           ownerUserId: sales1 },
+      { fullName: "Carol Coastline",  email: "carol@example.com",   phone: "(239) 555-0202", phoneE164: "+12395550202", billingAddress: "320 Gulf Shore Blvd, Naples, FL 34102",      ownerUserId: sales2 },
+      { fullName: "Douglas Dunes",    email: "douglas@example.com", phone: "(239) 555-0203", phoneE164: "+12395550203", billingAddress: "15 Dune Dr, Sanibel, FL 33957",              ownerUserId: sales1 },
+      { fullName: "Elaine Estates",   email: "elaine@example.com",  phone: "(239) 555-0204", phoneE164: "+12395550204", billingAddress: "740 Estate Blvd, Fort Myers, FL 33913",      ownerUserId: sales2 },
+      { fullName: "Frank Farmland",   email: "frank@example.com",   phone: "(239) 555-0205", phoneE164: "+12395550205", billingAddress: "1100 County Rd 78, LaBelle, FL 33935",        ownerUserId: sales1 },
+      { fullName: "Grace Greenway",   email: "grace@example.com",   phone: "(239) 555-0206", phoneE164: "+12395550206", billingAddress: "230 Greenway Ct, Estero, FL 33928",           ownerUserId: sales2 },
+      { fullName: "Irving Inlet",     email: "irving@example.com",  phone: "(239) 555-0207", phoneE164: "+12395550207", billingAddress: "50 Inlet Shore Ln, Cape Coral, FL 33914",    ownerUserId: sales1 },
+      { fullName: "Janet Junction",   email: "janet@example.com",   phone: "(239) 555-0208", phoneE164: "+12395550208", billingAddress: "901 Junction Ave, Fort Myers, FL 33901",      ownerUserId: sales2 },
+      { fullName: "Kevin Keystone",   email: "kevin@example.com",   phone: "(239) 555-0209", phoneE164: "+12395550209", billingAddress: "4 Keystone Ct, Bonita Springs, FL 34135",     ownerUserId: sales1 },
+      { fullName: "Laura Lakeside",   email: "laura@example.com",   phone: "(239) 555-0210", phoneE164: "+12395550210", billingAddress: "88 Lakeside Dr, Cape Coral, FL 33904",        ownerUserId: sales2 },
+      { fullName: "Martin Marina",    email: "martin@example.com",  phone: "(239) 555-0211", phoneE164: "+12395550211", billingAddress: "175 Marina Blvd, Fort Myers Beach, FL 33931", ownerUserId: sales1 },
+      { fullName: "Nancy Northgate",  email: "nancy@example.com",   phone: "(239) 555-0212", phoneE164: "+12395550212", billingAddress: "610 Northgate Dr, Naples, FL 34104",          ownerUserId: sales2 },
     ])
     .returning();
 
-  // ── Properties for new customers ──────────────────────────────────────────
   const [brandon, carol, douglas, elaine, frank, grace, irving, janet, kevin, laura, martin, nancy] = newCustomers;
 
+  // ── Properties for new customers ──────────────────────────────────────────
   const newProps = await db
     .insert(propertiesTable)
     .values([
-      { customerId: brandon.id, address: "88 Bayside Dr",        city: "Naples",             zip: "34112" },
-      { customerId: carol.id,   address: "320 Gulf Shore Blvd",  city: "Naples",             zip: "34102" },
-      { customerId: douglas.id, address: "15 Dune Dr",           city: "Sanibel",            zip: "33957" },
-      { customerId: elaine.id,  address: "740 Estate Blvd",      city: "Fort Myers",         zip: "33913" },
-      { customerId: frank.id,   address: "1100 County Rd 78",    city: "LaBelle",            zip: "33935" },
-      { customerId: grace.id,   address: "230 Greenway Ct",      city: "Estero",             zip: "33928" },
-      { customerId: irving.id,  address: "50 Inlet Shore Ln",    city: "Cape Coral",         zip: "33914" },
-      { customerId: janet.id,   address: "901 Junction Ave",     city: "Fort Myers",         zip: "33901" },
-      { customerId: kevin.id,   address: "4 Keystone Ct",        city: "Bonita Springs",     zip: "34135" },
-      { customerId: laura.id,   address: "88 Lakeside Dr",       city: "Cape Coral",         zip: "33904" },
-      { customerId: martin.id,  address: "175 Marina Blvd",      city: "Fort Myers Beach",   zip: "33931" },
-      { customerId: nancy.id,   address: "610 Northgate Dr",     city: "Naples",             zip: "34104" },
+      { customerId: brandon.id, address: "88 Bayside Dr",       city: "Naples",           zip: "34112" },
+      { customerId: carol.id,   address: "320 Gulf Shore Blvd", city: "Naples",           zip: "34102" },
+      { customerId: douglas.id, address: "15 Dune Dr",          city: "Sanibel",          zip: "33957" },
+      { customerId: elaine.id,  address: "740 Estate Blvd",     city: "Fort Myers",       zip: "33913" },
+      { customerId: frank.id,   address: "1100 County Rd 78",   city: "LaBelle",          zip: "33935" },
+      { customerId: grace.id,   address: "230 Greenway Ct",     city: "Estero",           zip: "33928" },
+      { customerId: irving.id,  address: "50 Inlet Shore Ln",   city: "Cape Coral",       zip: "33914" },
+      { customerId: janet.id,   address: "901 Junction Ave",    city: "Fort Myers",       zip: "33901" },
+      { customerId: kevin.id,   address: "4 Keystone Ct",       city: "Bonita Springs",   zip: "34135" },
+      { customerId: laura.id,   address: "88 Lakeside Dr",      city: "Cape Coral",       zip: "33904" },
+      { customerId: martin.id,  address: "175 Marina Blvd",     city: "Fort Myers Beach", zip: "33931" },
+      { customerId: nancy.id,   address: "610 Northgate Dr",    city: "Naples",           zip: "34104" },
     ])
     .returning();
   const [bP, cP, dP, eP, fP, gP, iP, jP, kP, lP, mP, nP] = newProps;
 
-  // ── Jobs across all 4 departments ────────────────────────────────────────
+  // ── Jobs (30+ across all 4 departments) ───────────────────────────────────
   const newJobs = await db
     .insert(jobsTable)
     .values([
-      // TREE dept — SCHEDULED
+      // TREE — scheduled
       { propertyId: bP.id, crewId: treeCrew1Id, status: "SCHEDULED",   scheduledFor: daysFromNow(4),  totalCents: 580_000, notes: "Large live oak removal — hurricane damage, 3 trees" },
       { propertyId: cP.id, crewId: treeCrew2Id, status: "SCHEDULED",   scheduledFor: daysFromNow(9),  totalCents: 195_000, notes: "Banyan trimming — overhangs pool cage" },
       { propertyId: dP.id, crewId: treeCrew1Id, status: "SCHEDULED",   scheduledFor: daysFromNow(16), totalCents: 145_000, notes: "Sabal palm trimming & fertilizing — 6 palms" },
-      // TREE dept — COMPLETE
-      { propertyId: bP.id, crewId: treeCrew2Id, status: "COMPLETE", scheduledFor: daysAgo(12), completedAt: daysAgo(11), totalCents: 420_000, notes: "Laurel oak removal — root damage to pool deck" },
-      { propertyId: cP.id, crewId: treeCrew1Id, status: "COMPLETE", scheduledFor: daysAgo(45), completedAt: daysAgo(44), totalCents: 275_000, notes: "3 Australian pines removed — county ordinance" },
-      { propertyId: dP.id, crewId: treeCrew2Id, status: "COMPLETE", scheduledFor: daysAgo(90), completedAt: daysAgo(89), totalCents: 165_000, notes: "Storm cleanup — 5 large limbs over fence" },
-      // LAND dept — SCHEDULED
+      // TREE — complete (older dates for 6-month spread)
+      { propertyId: bP.id, crewId: treeCrew2Id, status: "COMPLETE", scheduledFor: daysAgo(12),  completedAt: daysAgo(11),  totalCents: 420_000, notes: "Laurel oak removal — root damage to pool deck" },
+      { propertyId: cP.id, crewId: treeCrew1Id, status: "COMPLETE", scheduledFor: daysAgo(45),  completedAt: daysAgo(44),  totalCents: 275_000, notes: "3 Australian pines removed — county ordinance" },
+      { propertyId: dP.id, crewId: treeCrew2Id, status: "COMPLETE", scheduledFor: daysAgo(90),  completedAt: daysAgo(89),  totalCents: 165_000, notes: "Storm cleanup — 5 large limbs over fence" },
+      { propertyId: bP.id, crewId: treeCrew1Id, status: "COMPLETE", scheduledFor: daysAgo(140), completedAt: daysAgo(139), totalCents: 310_000, notes: "Live oak canopy reduction — 2 trees" },
+      { propertyId: cP.id, crewId: treeCrew2Id, status: "COMPLETE", scheduledFor: daysAgo(175), completedAt: daysAgo(174), totalCents: 195_000, notes: "Royal palm trimming — 4 palms" },
+      // LAND — scheduled
       { propertyId: eP.id, crewId: landCrew1Id, status: "SCHEDULED",   scheduledFor: daysFromNow(6),  totalCents: 890_000, notes: "Site grading — 1.2 acre commercial lot prep" },
       { propertyId: fP.id, crewId: landCrew2Id, status: "SCHEDULED",   scheduledFor: daysFromNow(11), totalCents: 340_000, notes: "Retention pond excavation — county spec" },
       { propertyId: gP.id, crewId: landCrew1Id, status: "SCHEDULED",   scheduledFor: daysFromNow(20), totalCents: 215_000, notes: "Property line grading + French drain" },
-      // LAND dept — IN_PROGRESS
-      { propertyId: eP.id, crewId: landCrew2Id, status: "IN_PROGRESS", scheduledFor: daysAgo(1),      totalCents: 480_000, notes: "Sod installation — 12,000 sq ft Bahia grass" },
-      // LAND dept — COMPLETE
-      { propertyId: fP.id, crewId: landCrew1Id, status: "COMPLETE", scheduledFor: daysAgo(18), completedAt: daysAgo(17), totalCents: 620_000, notes: "Land clearing — 2 acres for new construction" },
-      { propertyId: gP.id, crewId: landCrew2Id, status: "COMPLETE", scheduledFor: daysAgo(55), completedAt: daysAgo(54), totalCents: 295_000, notes: "Retaining wall construction — 80 linear ft" },
-      { propertyId: eP.id, crewId: landCrew1Id, status: "COMPLETE", scheduledFor: daysAgo(95), completedAt: daysAgo(94), totalCents: 185_000, notes: "Driveway base prep — grading + compaction" },
-      // LAWN dept — SCHEDULED
+      // LAND — in progress
+      { propertyId: eP.id, crewId: landCrew2Id, status: "IN_PROGRESS", scheduledFor: daysAgo(1), totalCents: 480_000, notes: "Sod installation — 12,000 sq ft Bahia grass" },
+      // LAND — complete
+      { propertyId: fP.id, crewId: landCrew1Id, status: "COMPLETE", scheduledFor: daysAgo(18),  completedAt: daysAgo(17),  totalCents: 620_000, notes: "Land clearing — 2 acres for new construction" },
+      { propertyId: gP.id, crewId: landCrew2Id, status: "COMPLETE", scheduledFor: daysAgo(55),  completedAt: daysAgo(54),  totalCents: 295_000, notes: "Retaining wall construction — 80 linear ft" },
+      { propertyId: eP.id, crewId: landCrew1Id, status: "COMPLETE", scheduledFor: daysAgo(95),  completedAt: daysAgo(94),  totalCents: 185_000, notes: "Driveway base prep — grading + compaction" },
+      { propertyId: fP.id, crewId: landCrew2Id, status: "COMPLETE", scheduledFor: daysAgo(148), completedAt: daysAgo(147), totalCents: 540_000, notes: "Full property re-grading — drainage correction" },
+      { propertyId: gP.id, crewId: landCrew1Id, status: "COMPLETE", scheduledFor: daysAgo(172), completedAt: daysAgo(171), totalCents: 260_000, notes: "Erosion control & seed blanket" },
+      // LAWN — scheduled
       { propertyId: iP.id, crewId: lawnCrew1Id, status: "SCHEDULED",   scheduledFor: daysFromNow(2),  totalCents:  58_000, notes: "Bi-weekly lawn maintenance — mow, edge, blow" },
       { propertyId: jP.id, crewId: lawnCrew2Id, status: "SCHEDULED",   scheduledFor: daysFromNow(7),  totalCents: 145_000, notes: "Sod replacement — 3,500 sq ft St. Augustine" },
       { propertyId: kP.id, crewId: lawnCrew1Id, status: "SCHEDULED",   scheduledFor: daysFromNow(13), totalCents:  75_000, notes: "Lawn aeration + overseeding" },
-      // LAWN dept — IN_PROGRESS
-      { propertyId: iP.id, crewId: lawnCrew2Id, status: "IN_PROGRESS", scheduledFor: daysAgo(0),      totalCents:  92_000, notes: "Fertilization treatment — 4-step program first application" },
-      // LAWN dept — COMPLETE
-      { propertyId: jP.id, crewId: lawnCrew1Id, status: "COMPLETE", scheduledFor: daysAgo(8),  completedAt: daysAgo(7),  totalCents:  58_000, notes: "Bi-weekly lawn maintenance" },
-      { propertyId: kP.id, crewId: lawnCrew2Id, status: "COMPLETE", scheduledFor: daysAgo(22), completedAt: daysAgo(21), totalCents: 115_000, notes: "Mulch refresh — 8 yards cypress mulch, beds edged" },
-      { propertyId: iP.id, crewId: lawnCrew1Id, status: "COMPLETE", scheduledFor: daysAgo(38), completedAt: daysAgo(37), totalCents:  68_000, notes: "Weed control + pre-emergent application" },
-      { propertyId: jP.id, crewId: lawnCrew2Id, status: "COMPLETE", scheduledFor: daysAgo(65), completedAt: daysAgo(64), totalCents:  58_000, notes: "Bi-weekly lawn maintenance" },
-      { propertyId: kP.id, crewId: lawnCrew1Id, status: "COMPLETE", scheduledFor: daysAgo(85), completedAt: daysAgo(84), totalCents: 195_000, notes: "Full lawn renovation — dead turf removed, resodded" },
-      // PEST dept — SCHEDULED
+      // LAWN — in progress
+      { propertyId: iP.id, crewId: lawnCrew2Id, status: "IN_PROGRESS", scheduledFor: daysAgo(0), totalCents:  92_000, notes: "Fertilization treatment — 4-step program first application" },
+      // LAWN — complete
+      { propertyId: jP.id, crewId: lawnCrew1Id, status: "COMPLETE", scheduledFor: daysAgo(8),   completedAt: daysAgo(7),   totalCents:  58_000, notes: "Bi-weekly lawn maintenance" },
+      { propertyId: kP.id, crewId: lawnCrew2Id, status: "COMPLETE", scheduledFor: daysAgo(22),  completedAt: daysAgo(21),  totalCents: 115_000, notes: "Mulch refresh — 8 yards cypress mulch, beds edged" },
+      { propertyId: iP.id, crewId: lawnCrew1Id, status: "COMPLETE", scheduledFor: daysAgo(38),  completedAt: daysAgo(37),  totalCents:  68_000, notes: "Weed control + pre-emergent application" },
+      { propertyId: jP.id, crewId: lawnCrew2Id, status: "COMPLETE", scheduledFor: daysAgo(65),  completedAt: daysAgo(64),  totalCents:  58_000, notes: "Bi-weekly lawn maintenance" },
+      { propertyId: kP.id, crewId: lawnCrew1Id, status: "COMPLETE", scheduledFor: daysAgo(95),  completedAt: daysAgo(94),  totalCents: 195_000, notes: "Full lawn renovation — dead turf removed, resodded" },
+      { propertyId: iP.id, crewId: lawnCrew2Id, status: "COMPLETE", scheduledFor: daysAgo(140), completedAt: daysAgo(139), totalCents:  58_000, notes: "Bi-weekly lawn maintenance" },
+      { propertyId: jP.id, crewId: lawnCrew1Id, status: "COMPLETE", scheduledFor: daysAgo(168), completedAt: daysAgo(167), totalCents:  58_000, notes: "Bi-weekly lawn maintenance" },
+      // PEST — scheduled
       { propertyId: lP.id, crewId: pestCrew1Id, status: "SCHEDULED",   scheduledFor: daysFromNow(3),  totalCents:  48_000, notes: "Quarterly pest control — interior + exterior perimeter" },
       { propertyId: mP.id, crewId: pestCrew2Id, status: "SCHEDULED",   scheduledFor: daysFromNow(8),  totalCents:  65_000, notes: "Termite inspection + spot treatment" },
       { propertyId: nP.id, crewId: pestCrew1Id, status: "SCHEDULED",   scheduledFor: daysFromNow(15), totalCents:  38_000, notes: "Fire ant treatment — 1/2 acre property" },
-      // PEST dept — IN_PROGRESS
+      // PEST — in progress
       { propertyId: lP.id, crewId: pestCrew2Id, status: "IN_PROGRESS", scheduledFor: daysAgo(0), totalCents:  82_000, notes: "Rodent exclusion + bait station install" },
-      // PEST dept — COMPLETE
-      { propertyId: mP.id, crewId: pestCrew1Id, status: "COMPLETE", scheduledFor: daysAgo(6),  completedAt: daysAgo(5),  totalCents:  48_000, notes: "Quarterly pest control" },
-      { propertyId: nP.id, crewId: pestCrew2Id, status: "COMPLETE", scheduledFor: daysAgo(28), completedAt: daysAgo(27), totalCents:  95_000, notes: "Drywood termite tenting — whole structure" },
-      { propertyId: lP.id, crewId: pestCrew1Id, status: "COMPLETE", scheduledFor: daysAgo(50), completedAt: daysAgo(49), totalCents:  48_000, notes: "Quarterly pest control" },
-      { propertyId: mP.id, crewId: pestCrew2Id, status: "COMPLETE", scheduledFor: daysAgo(78), completedAt: daysAgo(77), totalCents:  48_000, notes: "Quarterly pest control" },
-      { propertyId: nP.id, crewId: pestCrew1Id, status: "COMPLETE", scheduledFor: daysAgo(100), completedAt: daysAgo(99), totalCents: 48_000, notes: "Quarterly pest control" },
+      // PEST — complete
+      { propertyId: mP.id, crewId: pestCrew1Id, status: "COMPLETE", scheduledFor: daysAgo(6),   completedAt: daysAgo(5),   totalCents:  48_000, notes: "Quarterly pest control" },
+      { propertyId: nP.id, crewId: pestCrew2Id, status: "COMPLETE", scheduledFor: daysAgo(28),  completedAt: daysAgo(27),  totalCents:  95_000, notes: "Drywood termite tenting — whole structure" },
+      { propertyId: lP.id, crewId: pestCrew1Id, status: "COMPLETE", scheduledFor: daysAgo(50),  completedAt: daysAgo(49),  totalCents:  48_000, notes: "Quarterly pest control" },
+      { propertyId: mP.id, crewId: pestCrew2Id, status: "COMPLETE", scheduledFor: daysAgo(78),  completedAt: daysAgo(77),  totalCents:  48_000, notes: "Quarterly pest control" },
+      { propertyId: nP.id, crewId: pestCrew1Id, status: "COMPLETE", scheduledFor: daysAgo(138), completedAt: daysAgo(137), totalCents:  48_000, notes: "Quarterly pest control" },
+      { propertyId: lP.id, crewId: pestCrew2Id, status: "COMPLETE", scheduledFor: daysAgo(168), completedAt: daysAgo(167), totalCents:  48_000, notes: "Quarterly pest control" },
     ])
     .returning();
 
-  // ── Quotes — 10 more across all departments ───────────────────────────────
+  // ── Quotes — 20 total with 2-4 line items each ────────────────────────────
   const newQuotes = await db
     .insert(quotesTable)
     .values([
-      // APPROVED
+      // APPROVED (4)
       { customerId: brandon.id, propertyId: bP.id, ownerUserId: sales1, status: "APPROVED", subtotalCents: 580_000, totalCents: 620_600 },
       { customerId: elaine.id,  propertyId: eP.id, ownerUserId: sales2, status: "APPROVED", subtotalCents: 480_000, totalCents: 513_600 },
       { customerId: irving.id,  propertyId: iP.id, ownerUserId: sales1, status: "APPROVED", subtotalCents:  92_000, totalCents:  98_440 },
       { customerId: laura.id,   propertyId: lP.id, ownerUserId: sales2, status: "APPROVED", subtotalCents:  82_000, totalCents:  87_740 },
-      // SENT
+      // SENT (4)
       { customerId: carol.id,   propertyId: cP.id, ownerUserId: sales1, status: "SENT", subtotalCents: 195_000, totalCents: 208_650 },
       { customerId: frank.id,   propertyId: fP.id, ownerUserId: sales2, status: "SENT", subtotalCents: 340_000, totalCents: 363_800 },
       { customerId: janet.id,   propertyId: jP.id, ownerUserId: sales1, status: "SENT", subtotalCents: 145_000, totalCents: 155_150 },
       { customerId: martin.id,  propertyId: mP.id, ownerUserId: sales2, status: "SENT", subtotalCents:  65_000, totalCents:  69_550 },
-      // DRAFT
+      // DRAFT (4)
       { customerId: douglas.id, propertyId: dP.id, ownerUserId: sales1, status: "DRAFT", subtotalCents: 145_000, totalCents: 155_150 },
       { customerId: nancy.id,   propertyId: nP.id, ownerUserId: sales2, status: "DRAFT", subtotalCents:  95_000, totalCents: 101_650 },
+      { customerId: grace.id,   propertyId: gP.id, ownerUserId: sales1, status: "DRAFT", subtotalCents: 215_000, totalCents: 230_050 },
+      { customerId: kevin.id,   propertyId: kP.id, ownerUserId: sales2, status: "DRAFT", subtotalCents:  75_000, totalCents:  80_250 },
+      // REJECTED (2) — lost bids
+      { customerId: brandon.id, propertyId: bP.id, ownerUserId: sales2, status: "REJECTED", subtotalCents: 720_000, totalCents: 770_400 },
+      { customerId: elaine.id,  propertyId: eP.id, ownerUserId: sales1, status: "REJECTED", subtotalCents: 950_000, totalCents: 1_016_500 },
     ])
     .returning();
 
-  // Line items on approved quotes
-  if (newQuotes[0]) {
-    await db.insert(quoteLineItemsTable).values([
-      { quoteId: newQuotes[0].id, description: "Live oak removal (3 trees)", unitPriceCents: 160_000, qty: 3 },
-      { quoteId: newQuotes[0].id, description: "Debris haul-off & disposal",  unitPriceCents:  40_000, qty: 1 },
-    ]);
-  }
-  if (newQuotes[1]) {
-    await db.insert(quoteLineItemsTable).values([
-      { quoteId: newQuotes[1].id, description: "Sod installation (sq ft)",  unitPriceCents:     75, qty: 6400 },
-    ]);
-  }
-  if (newQuotes[2]) {
-    await db.insert(quoteLineItemsTable).values([
-      { quoteId: newQuotes[2].id, description: "Fertilization treatment",   unitPriceCents:  65_000, qty: 1 },
-      { quoteId: newQuotes[2].id, description: "Bi-weekly maintenance (mo)",unitPriceCents:  27_000, qty: 1 },
-    ]);
-  }
-  if (newQuotes[3]) {
-    await db.insert(quoteLineItemsTable).values([
-      { quoteId: newQuotes[3].id, description: "Rodent exclusion program",  unitPriceCents:  82_000, qty: 1 },
-    ]);
+  type LineItem = { quoteId: number; description: string; unitPriceCents: number; qty: number };
+  const allLineItems: LineItem[] = [];
+
+  const addLines = (qIdx: number, items: Omit<LineItem, "quoteId">[]) => {
+    const q = newQuotes[qIdx];
+    if (!q) return;
+    items.forEach((item) => allLineItems.push({ quoteId: q.id, ...item }));
+  };
+
+  // APPROVED quotes — 2-4 line items each
+  addLines(0, [
+    { description: "Live oak removal — hurricane-damaged (ea)", unitPriceCents: 160_000, qty: 3 },
+    { description: "Stump grinding (ea)",                       unitPriceCents:  35_000, qty: 2 },
+    { description: "Debris haul-off & disposal",                unitPriceCents:  40_000, qty: 1 },
+  ]);
+  addLines(1, [
+    { description: "Sod installation — Bahia (sq ft)",          unitPriceCents:      75, qty: 6_400 },
+  ]);
+  addLines(2, [
+    { description: "Fertilization treatment (4-step)",          unitPriceCents:  65_000, qty: 1 },
+    { description: "Bi-weekly maintenance",                     unitPriceCents:  27_000, qty: 1 },
+  ]);
+  addLines(3, [
+    { description: "Rodent exclusion + bait install",           unitPriceCents:  82_000, qty: 1 },
+  ]);
+  // SENT quotes — 2-3 line items each
+  addLines(4, [
+    { description: "Banyan trimming — pool cage overhang",      unitPriceCents: 145_000, qty: 1 },
+    { description: "Debris removal & haul-off",                 unitPriceCents:  50_000, qty: 1 },
+  ]);
+  addLines(5, [
+    { description: "Retention pond excavation",                 unitPriceCents: 280_000, qty: 1 },
+    { description: "County spec survey & staking",              unitPriceCents:  35_000, qty: 1 },
+    { description: "Erosion control matting",                   unitPriceCents:  25_000, qty: 1 },
+  ]);
+  addLines(6, [
+    { description: "St. Augustine sod replacement (sq ft)",     unitPriceCents:      90, qty: 3_500 },
+    { description: "Soil prep & grade",                         unitPriceCents:  30_000, qty: 1 },
+  ]);
+  addLines(7, [
+    { description: "Termite inspection — full structure",       unitPriceCents:  35_000, qty: 1 },
+    { description: "Spot treatment — 3 affected areas",         unitPriceCents:  10_000, qty: 3 },
+  ]);
+  // DRAFT quotes — 2-3 line items each
+  addLines(8, [
+    { description: "Sabal palm trimming (ea)",                  unitPriceCents:  20_000, qty: 6 },
+    { description: "Fertilization boot treatment (ea)",         unitPriceCents:   4_166, qty: 6 },
+  ]);
+  addLines(9, [
+    { description: "Drywood termite tenting — full structure",  unitPriceCents:  75_000, qty: 1 },
+    { description: "Contents protection wrap",                  unitPriceCents:  20_000, qty: 1 },
+  ]);
+  addLines(10, [
+    { description: "Property line grading",                     unitPriceCents: 145_000, qty: 1 },
+    { description: "French drain installation (linear ft)",     unitPriceCents:     700, qty: 100 },
+  ]);
+  addLines(11, [
+    { description: "Lawn aeration — 8,000 sq ft",               unitPriceCents:  35_000, qty: 1 },
+    { description: "Overseeding — Bermuda blend",               unitPriceCents:  40_000, qty: 1 },
+  ]);
+  // REJECTED quotes — 2-3 line items each
+  addLines(12, [
+    { description: "Full property tree removal — 8 trees",      unitPriceCents:  85_000, qty: 8 },
+    { description: "Stump grinding (ea)",                       unitPriceCents:  35_000, qty: 8 },
+    { description: "Lot clearing & debris haul",                unitPriceCents:  40_000, qty: 1 },
+  ]);
+  addLines(13, [
+    { description: "Commercial lot grading — 2 acres",          unitPriceCents: 650_000, qty: 1 },
+    { description: "Drainage swale installation",               unitPriceCents: 180_000, qty: 1 },
+    { description: "Compaction testing & report",               unitPriceCents: 120_000, qty: 1 },
+  ]);
+
+  if (allLineItems.length > 0) {
+    await db.insert(quoteLineItemsTable).values(allLineItems);
   }
 
-  // ── Invoices — spread over past 6 months with job attribution ─────────────
-  // Jobs completed in the past; we pick completed ones per dept to link invoices.
-  // This ensures accounting department breakdown shows real per-dept revenue.
-  const completedTree = newJobs.filter((j) => j.status === "COMPLETE" && j.crewId === treeCrew1Id || j.status === "COMPLETE" && j.crewId === treeCrew2Id);
-  const completedLand = newJobs.filter((j) => j.status === "COMPLETE" && (j.crewId === landCrew1Id || j.crewId === landCrew2Id));
-  const completedLawn = newJobs.filter((j) => j.status === "COMPLETE" && (j.crewId === lawnCrew1Id || j.crewId === lawnCrew2Id));
-  const completedPest = newJobs.filter((j) => j.status === "COMPLETE" && (j.crewId === pestCrew1Id || j.crewId === pestCrew2Id));
+  // ── Invoices — spread over 6 months ──────────────────────────────────────
+  const completedTree = newJobs.filter(
+    (j) => j.status === "COMPLETE" && (j.crewId === treeCrew1Id || j.crewId === treeCrew2Id),
+  );
+  const completedLand = newJobs.filter(
+    (j) => j.status === "COMPLETE" && (j.crewId === landCrew1Id || j.crewId === landCrew2Id),
+  );
+  const completedLawn = newJobs.filter(
+    (j) => j.status === "COMPLETE" && (j.crewId === lawnCrew1Id || j.crewId === lawnCrew2Id),
+  );
+  const completedPest = newJobs.filter(
+    (j) => j.status === "COMPLETE" && (j.crewId === pestCrew1Id || j.crewId === pestCrew2Id),
+  );
 
-  type InvRow = { jobId?: number; customerId: number; status: "PAID" | "SENT" | "OVERDUE" | "DRAFT"; totalCents: number; issuedAt: Date; paidAt?: Date };
+  type InvRow = {
+    jobId?: number; customerId: number;
+    status: "PAID" | "SENT" | "OVERDUE" | "DRAFT";
+    totalCents: number; issuedAt: Date; paidAt?: Date;
+  };
   const invoiceRows: InvRow[] = [];
 
-  // Tree — 3 invoices (2 paid going back 3-4 months, 1 sent)
-  if (completedTree[0])
-    invoiceRows.push({ jobId: completedTree[0].id, customerId: brandon.id, status: "PAID",    totalCents: 420_000, issuedAt: daysAgo(10), paidAt: daysAgo(5)  });
-  if (completedTree[1])
-    invoiceRows.push({ jobId: completedTree[1].id, customerId: carol.id,   status: "PAID",    totalCents: 275_000, issuedAt: daysAgo(43), paidAt: daysAgo(35) });
-  if (completedTree[2])
-    invoiceRows.push({ jobId: completedTree[2].id, customerId: douglas.id, status: "PAID",    totalCents: 165_000, issuedAt: daysAgo(88), paidAt: daysAgo(78) });
+  // Tree — 5 invoices spanning 6 months
+  if (completedTree[0]) invoiceRows.push({ jobId: completedTree[0].id, customerId: brandon.id, status: "PAID",    totalCents: 420_000, issuedAt: daysAgo(10),  paidAt: daysAgo(5)   });
+  if (completedTree[1]) invoiceRows.push({ jobId: completedTree[1].id, customerId: carol.id,   status: "PAID",    totalCents: 275_000, issuedAt: daysAgo(43),  paidAt: daysAgo(35)  });
+  if (completedTree[2]) invoiceRows.push({ jobId: completedTree[2].id, customerId: douglas.id, status: "PAID",    totalCents: 165_000, issuedAt: daysAgo(88),  paidAt: daysAgo(78)  });
+  if (completedTree[3]) invoiceRows.push({ jobId: completedTree[3].id, customerId: brandon.id, status: "PAID",    totalCents: 310_000, issuedAt: daysAgo(138), paidAt: daysAgo(128) });
+  if (completedTree[4]) invoiceRows.push({ jobId: completedTree[4].id, customerId: carol.id,   status: "PAID",    totalCents: 195_000, issuedAt: daysAgo(173), paidAt: daysAgo(162) });
 
-  // Land — 3 invoices (2 paid, 1 overdue)
-  if (completedLand[0])
-    invoiceRows.push({ jobId: completedLand[0].id, customerId: elaine.id,  status: "PAID",    totalCents: 480_000, issuedAt: daysAgo(16), paidAt: daysAgo(8)  });
-  if (completedLand[1])
-    invoiceRows.push({ jobId: completedLand[1].id, customerId: frank.id,   status: "PAID",    totalCents: 620_000, issuedAt: daysAgo(53), paidAt: daysAgo(42) });
-  if (completedLand[2])
-    invoiceRows.push({ jobId: completedLand[2].id, customerId: grace.id,   status: "OVERDUE", totalCents: 295_000, issuedAt: daysAgo(93) });
+  // Land — 5 invoices
+  if (completedLand[0]) invoiceRows.push({ jobId: completedLand[0].id, customerId: elaine.id,  status: "PAID",    totalCents: 480_000, issuedAt: daysAgo(16),  paidAt: daysAgo(8)   });
+  if (completedLand[1]) invoiceRows.push({ jobId: completedLand[1].id, customerId: frank.id,   status: "PAID",    totalCents: 620_000, issuedAt: daysAgo(53),  paidAt: daysAgo(42)  });
+  if (completedLand[2]) invoiceRows.push({ jobId: completedLand[2].id, customerId: grace.id,   status: "OVERDUE", totalCents: 295_000, issuedAt: daysAgo(93)                        });
+  if (completedLand[3]) invoiceRows.push({ jobId: completedLand[3].id, customerId: elaine.id,  status: "PAID",    totalCents: 540_000, issuedAt: daysAgo(145), paidAt: daysAgo(134) });
+  if (completedLand[4]) invoiceRows.push({ jobId: completedLand[4].id, customerId: frank.id,   status: "PAID",    totalCents: 260_000, issuedAt: daysAgo(170), paidAt: daysAgo(158) });
 
-  // Lawn — 4 invoices (3 paid at different months, 1 sent)
-  if (completedLawn[0])
-    invoiceRows.push({ jobId: completedLawn[0].id, customerId: janet.id,   status: "PAID",    totalCents:  58_000, issuedAt: daysAgo(6),  paidAt: daysAgo(3)  });
-  if (completedLawn[1])
-    invoiceRows.push({ jobId: completedLawn[1].id, customerId: kevin.id,   status: "PAID",    totalCents: 115_000, issuedAt: daysAgo(20), paidAt: daysAgo(14) });
-  if (completedLawn[2])
-    invoiceRows.push({ jobId: completedLawn[2].id, customerId: irving.id,  status: "PAID",    totalCents:  68_000, issuedAt: daysAgo(36), paidAt: daysAgo(28) });
-  if (completedLawn[3])
-    invoiceRows.push({ jobId: completedLawn[3].id, customerId: janet.id,   status: "SENT",    totalCents:  58_000, issuedAt: daysAgo(63) });
+  // Lawn — 6 invoices
+  if (completedLawn[0]) invoiceRows.push({ jobId: completedLawn[0].id, customerId: janet.id,   status: "PAID",    totalCents:  58_000, issuedAt: daysAgo(6),   paidAt: daysAgo(3)   });
+  if (completedLawn[1]) invoiceRows.push({ jobId: completedLawn[1].id, customerId: kevin.id,   status: "PAID",    totalCents: 115_000, issuedAt: daysAgo(20),  paidAt: daysAgo(14)  });
+  if (completedLawn[2]) invoiceRows.push({ jobId: completedLawn[2].id, customerId: irving.id,  status: "PAID",    totalCents:  68_000, issuedAt: daysAgo(36),  paidAt: daysAgo(28)  });
+  if (completedLawn[3]) invoiceRows.push({ jobId: completedLawn[3].id, customerId: janet.id,   status: "SENT",    totalCents:  58_000, issuedAt: daysAgo(63)                        });
+  if (completedLawn[4]) invoiceRows.push({ jobId: completedLawn[4].id, customerId: kevin.id,   status: "PAID",    totalCents: 195_000, issuedAt: daysAgo(140), paidAt: daysAgo(130) });
+  if (completedLawn[5]) invoiceRows.push({ jobId: completedLawn[5].id, customerId: irving.id,  status: "PAID",    totalCents:  58_000, issuedAt: daysAgo(167), paidAt: daysAgo(157) });
 
-  // Pest — 4 invoices (3 paid recurring, 1 overdue)
-  if (completedPest[0])
-    invoiceRows.push({ jobId: completedPest[0].id, customerId: martin.id,  status: "PAID",    totalCents:  48_000, issuedAt: daysAgo(4),  paidAt: daysAgo(2)  });
-  if (completedPest[1])
-    invoiceRows.push({ jobId: completedPest[1].id, customerId: nancy.id,   status: "PAID",    totalCents:  95_000, issuedAt: daysAgo(26), paidAt: daysAgo(20) });
-  if (completedPest[2])
-    invoiceRows.push({ jobId: completedPest[2].id, customerId: laura.id,   status: "PAID",    totalCents:  48_000, issuedAt: daysAgo(48), paidAt: daysAgo(41) });
-  if (completedPest[3])
-    invoiceRows.push({ jobId: completedPest[3].id, customerId: martin.id,  status: "OVERDUE", totalCents:  48_000, issuedAt: daysAgo(76) });
+  // Pest — 6 invoices (recurring quarterly pattern)
+  if (completedPest[0]) invoiceRows.push({ jobId: completedPest[0].id, customerId: martin.id,  status: "PAID",    totalCents:  48_000, issuedAt: daysAgo(4),   paidAt: daysAgo(2)   });
+  if (completedPest[1]) invoiceRows.push({ jobId: completedPest[1].id, customerId: nancy.id,   status: "PAID",    totalCents:  95_000, issuedAt: daysAgo(26),  paidAt: daysAgo(20)  });
+  if (completedPest[2]) invoiceRows.push({ jobId: completedPest[2].id, customerId: laura.id,   status: "PAID",    totalCents:  48_000, issuedAt: daysAgo(48),  paidAt: daysAgo(41)  });
+  if (completedPest[3]) invoiceRows.push({ jobId: completedPest[3].id, customerId: martin.id,  status: "OVERDUE", totalCents:  48_000, issuedAt: daysAgo(76)                        });
+  if (completedPest[4]) invoiceRows.push({ jobId: completedPest[4].id, customerId: nancy.id,   status: "PAID",    totalCents:  48_000, issuedAt: daysAgo(136), paidAt: daysAgo(128) });
+  if (completedPest[5]) invoiceRows.push({ jobId: completedPest[5].id, customerId: laura.id,   status: "PAID",    totalCents:  48_000, issuedAt: daysAgo(166), paidAt: daysAgo(158) });
 
   if (invoiceRows.length > 0) {
     await db.insert(invoicesTable).values(invoiceRows);
   }
 
-  // ── 2 more trucks ────────────────────────────────────────────────────────
-  const existingTrucks = await db.select({ name: trucksTable.name }).from(trucksTable);
+  // ── Equipment — explicit per department ──────────────────────────────────
+  const existingEquip = await db
+    .select({ name: equipmentTable.name })
+    .from(equipmentTable);
+  const equippedNames = new Set(existingEquip.map((e) => e.name));
+
+  const equipToAdd = [
+    // Lawn dept
+    { name: "Exmark Lazer Z Mower",       type: "Zero-Turn Mower",   category: "CUSTOM"   as const, departmentId: dLawn, quantity: 2, brand: "Exmark",      model: "Lazer Z X-Series", status: "ACTIVE"  as const, purchasePriceCents: 1_200_000, purchaseDate: new Date(2023, 2, 10), currentHours: 620, serviceIntervalHours: 200 },
+    { name: "String Trimmers",             type: "Trimmer",           category: "HANDHELD" as const, departmentId: dLawn, quantity: 6, brand: "STIHL",       model: "FS 131",           status: "ACTIVE"  as const, purchasePriceCents:   65_000,    purchaseDate: new Date(2023, 6, 1),  currentHours: 280, serviceIntervalHours: 100 },
+    { name: "Backpack Blowers",            type: "Blower",            category: "HANDHELD" as const, departmentId: dLawn, quantity: 4, brand: "RedMax",      model: "EBZ8550",          status: "ACTIVE"  as const, purchasePriceCents:   58_000,    purchaseDate: new Date(2023, 6, 1),  currentHours: 240, serviceIntervalHours: 100 },
+    { name: "Lawn Spreader",               type: "Fertilizer Spreader", category: "HANDHELD" as const, departmentId: dLawn, quantity: 3, brand: "LESCO",    model: "HD 80 lb",         status: "ACTIVE"  as const, purchasePriceCents:   35_000,    purchaseDate: new Date(2022, 9, 15), currentHours: 0,   serviceIntervalHours: 500 },
+    // Pest dept
+    { name: "Ride-On Sprayer",             type: "Spray Equipment",   category: "CUSTOM"   as const, departmentId: dPest, quantity: 1, brand: "Perma-Green", model: "Triumph",         status: "ACTIVE"  as const, purchasePriceCents:  980_000,    purchaseDate: new Date(2022, 4, 20), currentHours: 890, serviceIntervalHours: 200 },
+    { name: "Backpack Sprayers",           type: "Spray Equipment",   category: "HANDHELD" as const, departmentId: dPest, quantity: 6, brand: "Solo",        model: "425-D",            status: "ACTIVE"  as const, purchasePriceCents:   45_000,    purchaseDate: new Date(2022, 9, 1),  currentHours: 320, serviceIntervalHours: 200 },
+    { name: "Termite Monitoring Stations", type: "Monitoring Equipment", category: "CUSTOM" as const, departmentId: dPest, quantity: 50, brand: "Sentricon", model: "AG Stations",     status: "ACTIVE"  as const, purchasePriceCents:   12_000,    purchaseDate: new Date(2022, 1, 1),  currentHours: 0,   serviceIntervalHours: 999 },
+    { name: "Safety Respirators",          type: "PPE",               category: "CUSTOM"   as const, departmentId: dPest, quantity: 8, brand: "3M",          model: "6500 Series",      status: "ACTIVE"  as const, purchasePriceCents:    9_500,    purchaseDate: new Date(2023, 0, 1),  currentHours: 0,   serviceIntervalHours: 999 },
+    // Land dept additions
+    { name: "Plate Compactor",             type: "Compaction Equipment", category: "CUSTOM" as const, departmentId: dLand, quantity: 1, brand: "Wacker",    model: "DPU6555Heh",       status: "ACTIVE"  as const, purchasePriceCents:  380_000,    purchaseDate: new Date(2021, 7, 14), currentHours: 1_240, serviceIntervalHours: 250 },
+    { name: "Laser Level",                 type: "Survey Equipment",  category: "CUSTOM"   as const, departmentId: dLand, quantity: 2, brand: "Spectra",    model: "LL500",            status: "ACTIVE"  as const, purchasePriceCents:  125_000,    purchaseDate: new Date(2022, 3, 1),  currentHours: 0,   serviceIntervalHours: 999 },
+  ];
+
+  for (const eqRow of equipToAdd) {
+    if (equippedNames.has(eqRow.name)) continue;
+    const [row] = await db.insert(equipmentTable).values(eqRow).returning();
+    if (row) {
+      const slug = `equip-${row.id}-${slugify(row.name)}`;
+      await db.update(equipmentTable).set({ slug }).where(eq(equipmentTable.id, row.id));
+    }
+  }
+
+  // ── 3 trucks ──────────────────────────────────────────────────────────────
+  const existingTrucks = await db
+    .select({ name: trucksTable.name })
+    .from(trucksTable);
   const truckNames = new Set(existingTrucks.map((t) => t.name));
 
   const trucksToAdd = [
-    { name: "T-06 Lawn Service Truck",    brand: "Ford",   model: "F-250 Super Duty",   vin: "1FT7W2BT0PED00001", plate: "JTREE-6", status: "ACTIVE" as const, departmentId: dLawn, purchasePriceCents: 5_800_000, purchaseDate: new Date(2023, 4, 20), currentMileage: 28_450, serviceIntervalMiles: 5_000 },
-    { name: "T-07 Pest Control Van",      brand: "Ford",   model: "Transit 250 Cargo",  vin: "1FTBR1Y83PkB00002", plate: "JTREE-7", status: "ACTIVE" as const, departmentId: dPest, purchasePriceCents: 4_200_000, purchaseDate: new Date(2022, 8, 14), currentMileage: 61_230, serviceIntervalMiles: 5_000 },
-    { name: "T-08 Land Loader",           brand: "Isuzu",  model: "NPR-HD Flatbed",     vin: "JALC4W16XP7000003", plate: "JTREE-8", status: "ACTIVE" as const, departmentId: dLand, purchasePriceCents: 6_650_000, purchaseDate: new Date(2021, 11, 3),  currentMileage: 88_620, serviceIntervalMiles: 7_500 },
+    { name: "T-06 Lawn Service Truck", brand: "Ford",  model: "F-250 Super Duty",  vin: "1FT7W2BT0PED00001", plate: "JTREE-6", status: "ACTIVE" as const, departmentId: dLawn, purchasePriceCents: 5_800_000, purchaseDate: new Date(2023, 4, 20), currentMileage: 28_450, serviceIntervalMiles: 5_000 },
+    { name: "T-07 Pest Control Van",   brand: "Ford",  model: "Transit 250 Cargo", vin: "1FTBR1Y83PkB00002", plate: "JTREE-7", status: "ACTIVE" as const, departmentId: dPest, purchasePriceCents: 4_200_000, purchaseDate: new Date(2022, 8, 14), currentMileage: 61_230, serviceIntervalMiles: 5_000 },
+    { name: "T-08 Land Loader",        brand: "Isuzu", model: "NPR-HD Flatbed",    vin: "JALC4W16XP7000003", plate: "JTREE-8", status: "ACTIVE" as const, departmentId: dLand, purchasePriceCents: 6_650_000, purchaseDate: new Date(2021, 11, 3),  currentMileage: 88_620, serviceIntervalMiles: 7_500 },
   ];
 
-  const insertedNewTrucks: Array<{ id: number; name: string; currentMileage: number }> = [];
   for (const t of trucksToAdd) {
     if (truckNames.has(t.name)) continue;
     const [row] = await db.insert(trucksTable).values(t).returning();
     if (row) {
       const slug = `truck-${row.id}-${slugify(row.name)}`;
       await db.update(trucksTable).set({ slug }).where(eq(trucksTable.id, row.id));
-      insertedNewTrucks.push({ id: row.id, name: row.name, currentMileage: t.currentMileage });
     }
   }
 
-  // ── Maintenance logs — rich spread across existing + new trucks ───────────
-  // Fetch all trucks to add realistic logs to each dept's vehicles
-  const allTrucks = await db.select({ id: trucksTable.id, name: trucksTable.name, currentMileage: trucksTable.currentMileage, departmentId: trucksTable.departmentId }).from(trucksTable);
-
+  // ── Maintenance logs ──────────────────────────────────────────────────────
+  const allTrucks = await db
+    .select({ id: trucksTable.id, name: trucksTable.name, currentMileage: trucksTable.currentMileage })
+    .from(trucksTable);
   const truckByName = new Map(allTrucks.map((t) => [t.name, t]));
-  const newMaintLogs: Array<{
-    truckId?: number; equipmentId?: number; kind: "SCHEDULED" | "REPAIR" | "INSPECTION";
-    description: string; performedAt: Date; performedByUserId?: number;
+
+  type LogRow = {
+    truckId?: number; equipmentId?: number;
+    kind: "SCHEDULED" | "REPAIR" | "INSPECTION";
+    description: string; performedAt: Date;
+    performedByUserId?: number;
     laborCostCents: number; partsCostCents: number; costCents: number;
     mileageAtService?: number;
-  }> = [];
+  };
+  const newMaintLogs: LogRow[] = [];
 
-  const addTruckLogs = (truckName: string, logs: Array<{ kind: "SCHEDULED"|"REPAIR"|"INSPECTION"; desc: string; daysBack: number; labor: number; parts: number; milesBack: number; performedBy: number }>) => {
+  const addTruckLogs = (
+    truckName: string,
+    logs: Array<{ kind: "SCHEDULED" | "REPAIR" | "INSPECTION"; desc: string; daysBack: number; labor: number; parts: number; milesBack: number }>,
+  ) => {
     const t = truckByName.get(truckName);
     if (!t) return;
     for (const l of logs) {
-      const cost = l.labor + l.parts;
-      newMaintLogs.push({ truckId: t.id, kind: l.kind, description: l.desc, performedAt: daysAgo(l.daysBack), performedByUserId: l.performedBy, laborCostCents: l.labor, partsCostCents: l.parts, costCents: cost, mileageAtService: Math.max(0, t.currentMileage - l.milesBack) });
+      newMaintLogs.push({ truckId: t.id, kind: l.kind, description: l.desc, performedAt: daysAgo(l.daysBack), performedByUserId: mech, laborCostCents: l.labor, partsCostCents: l.parts, costCents: l.labor + l.parts, mileageAtService: Math.max(0, t.currentMileage - l.milesBack) });
     }
   };
 
   addTruckLogs("T-01 Bucket Truck", [
-    { kind: "SCHEDULED",  desc: "Oil change, air filter, tire rotation",       daysBack: 14, labor: 12_000, parts: 6_500,  milesBack: 800,   performedBy: mech },
-    { kind: "INSPECTION", desc: "Pre-season inspection — boom, hydraulics",    daysBack: 45, labor: 18_000, parts: 0,      milesBack: 3_200, performedBy: mech },
-    { kind: "REPAIR",     desc: "Hydraulic hose replacement — cab boom",       daysBack: 72, labor: 28_000, parts: 14_500, milesBack: 5_100, performedBy: mech },
+    { kind: "SCHEDULED",  desc: "Oil change, air filter, tire rotation",    daysBack: 14, labor: 12_000, parts: 6_500,  milesBack: 800   },
+    { kind: "INSPECTION", desc: "Pre-season inspection — boom, hydraulics", daysBack: 45, labor: 18_000, parts: 0,      milesBack: 3_200 },
+    { kind: "REPAIR",     desc: "Hydraulic hose replacement — cab boom",    daysBack: 72, labor: 28_000, parts: 14_500, milesBack: 5_100 },
   ]);
   addTruckLogs("T-02 Chip Truck", [
-    { kind: "REPAIR",     desc: "Engine oil leak — rear main seal",            daysBack: 8,  labor: 42_000, parts: 18_000, milesBack: 200,   performedBy: mech },
-    { kind: "SCHEDULED",  desc: "Full fluid service + belts",                  daysBack: 62, labor: 22_000, parts: 12_000, milesBack: 4_800, performedBy: mech },
+    { kind: "REPAIR",     desc: "Engine oil leak — rear main seal",         daysBack: 8,  labor: 42_000, parts: 18_000, milesBack: 200   },
+    { kind: "SCHEDULED",  desc: "Full fluid service + belts",               daysBack: 62, labor: 22_000, parts: 12_000, milesBack: 4_800 },
   ]);
   addTruckLogs("T-03 Crane Truck", [
-    { kind: "SCHEDULED",  desc: "Oil, coolant flush, brake inspection",        daysBack: 22, labor: 16_000, parts: 8_200,  milesBack: 1_400, performedBy: mech },
-    { kind: "INSPECTION", desc: "Annual crane certification inspection",       daysBack: 55, labor: 35_000, parts: 0,      milesBack: 3_800, performedBy: mech },
-    { kind: "REPAIR",     desc: "Outrigger pad replacement",                   daysBack: 80, labor: 20_000, parts: 11_000, milesBack: 5_600, performedBy: mech },
+    { kind: "SCHEDULED",  desc: "Oil, coolant flush, brake inspection",     daysBack: 22, labor: 16_000, parts: 8_200,  milesBack: 1_400 },
+    { kind: "INSPECTION", desc: "Annual crane certification inspection",    daysBack: 55, labor: 35_000, parts: 0,      milesBack: 3_800 },
+    { kind: "REPAIR",     desc: "Outrigger pad replacement",                daysBack: 80, labor: 20_000, parts: 11_000, milesBack: 5_600 },
   ]);
   addTruckLogs("T-04 Stump Truck", [
-    { kind: "SCHEDULED",  desc: "Oil change, tire check",                      daysBack: 30, labor: 10_000, parts: 5_500,  milesBack: 2_000, performedBy: mech },
-    { kind: "INSPECTION", desc: "PTO and stump cutter mounting check",         daysBack: 68, labor: 12_000, parts: 0,      milesBack: 4_000, performedBy: mech },
+    { kind: "SCHEDULED",  desc: "Oil change, tire check",                   daysBack: 30, labor: 10_000, parts: 5_500,  milesBack: 2_000 },
+    { kind: "INSPECTION", desc: "PTO and stump cutter mounting check",      daysBack: 68, labor: 12_000, parts: 0,      milesBack: 4_000 },
   ]);
   addTruckLogs("T-06 Lawn Service Truck", [
-    { kind: "SCHEDULED",  desc: "First-year service — oil, filter, fluids",   daysBack: 18, labor: 9_500,  parts: 4_800,  milesBack: 900,   performedBy: mech },
+    { kind: "SCHEDULED",  desc: "First-year service — oil, filter, fluids", daysBack: 18, labor: 9_500,  parts: 4_800,  milesBack: 900   },
   ]);
   addTruckLogs("T-07 Pest Control Van", [
-    { kind: "SCHEDULED",  desc: "Oil change, AC service, tire rotation",       daysBack: 25, labor: 11_000, parts: 5_200,  milesBack: 1_600, performedBy: mech },
-    { kind: "REPAIR",     desc: "Spray pump pressure regulator replaced",      daysBack: 50, labor: 14_000, parts: 8_500,  milesBack: 3_200, performedBy: mech },
+    { kind: "SCHEDULED",  desc: "Oil change, AC service, tire rotation",    daysBack: 25, labor: 11_000, parts: 5_200,  milesBack: 1_600 },
+    { kind: "REPAIR",     desc: "Spray pump pressure regulator replaced",   daysBack: 50, labor: 14_000, parts: 8_500,  milesBack: 3_200 },
   ]);
   addTruckLogs("T-08 Land Loader", [
-    { kind: "SCHEDULED",  desc: "Transmission service + differential fluid",  daysBack: 35, labor: 24_000, parts: 13_000, milesBack: 3_500, performedBy: mech },
-    { kind: "INSPECTION", desc: "Annual DOT inspection",                       daysBack: 60, labor: 15_000, parts: 0,      milesBack: 5_200, performedBy: mech },
-    { kind: "REPAIR",     desc: "Brake drums + pads — front axle",            daysBack: 85, labor: 32_000, parts: 19_500, milesBack: 7_000, performedBy: mech },
+    { kind: "SCHEDULED",  desc: "Transmission service + differential",      daysBack: 35, labor: 24_000, parts: 13_000, milesBack: 3_500 },
+    { kind: "INSPECTION", desc: "Annual DOT inspection",                    daysBack: 60, labor: 15_000, parts: 0,      milesBack: 5_200 },
+    { kind: "REPAIR",     desc: "Brake drums + pads — front axle",          daysBack: 85, labor: 32_000, parts: 19_500, milesBack: 7_000 },
   ]);
 
   if (newMaintLogs.length > 0) {
