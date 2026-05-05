@@ -46,8 +46,39 @@ function slugify(name: string): string {
     .slice(0, 60);
 }
 
+type LineItem = { quoteId: number; description: string; unitPriceCents: number; qty: number };
+
 export async function backfillDemoData(): Promise<void> {
-  // ── Guard ─────────────────────────────────────────────────────────────────
+  // ── Phase 2 (always runs on every boot) ───────────────────────────────────
+  // Backfill 2 generic line items onto any quote that currently has none.
+  // Handles autoSeed.ts quotes on fresh installs without a manual patch script.
+  // Runs before the Phase 1 guard so it executes even when customers >= 22.
+  const orphanQuotes = await db.execute<{ id: number; total_cents: number }>(
+    sql`SELECT q.id, q.total_cents
+        FROM quotes q
+        WHERE NOT EXISTS (
+          SELECT 1 FROM quote_line_items li WHERE li.quote_id = q.id
+        )
+        ORDER BY q.id`,
+  );
+  if (orphanQuotes.rows.length > 0) {
+    const orphanItems: LineItem[] = [];
+    for (const row of orphanQuotes.rows) {
+      const total = Number(row.total_cents);
+      const labor = Math.round(total * 0.65);
+      const materials = total - labor;
+      orphanItems.push(
+        { quoteId: row.id, description: "Labor & equipment",    unitPriceCents: labor,     qty: 1 },
+        { quoteId: row.id, description: "Materials & disposal", unitPriceCents: materials, qty: 1 },
+      );
+    }
+    await db.insert(quoteLineItemsTable).values(orphanItems);
+  }
+
+  // ── Phase 1 guard ─────────────────────────────────────────────────────────
+  // Skip customer/job/fleet seeding when the DB already has 22+ customers.
+  // In this demo application production seeding is intentional — the guard
+  // itself protects any DB that already has real customer data (>= 22 rows).
   const [{ n }] = await db
     .select({ n: sql<number>`count(*)::int` })
     .from(customersTable);
@@ -259,7 +290,6 @@ export async function backfillDemoData(): Promise<void> {
     ])
     .returning();
 
-  type LineItem = { quoteId: number; description: string; unitPriceCents: number; qty: number };
   const allLineItems: LineItem[] = [];
 
   const addLines = (qIdx: number, items: Omit<LineItem, "quoteId">[]) => {
@@ -367,35 +397,6 @@ export async function backfillDemoData(): Promise<void> {
 
   if (allLineItems.length > 0) {
     await db.insert(quoteLineItemsTable).values(allLineItems);
-  }
-
-  // ── Phase 2: Backfill line items for any pre-existing quotes missing them ─
-  // Runs after main insert — handles quotes seeded by autoSeed.ts that have
-  // no line items. Guard: only inserts if at least one quote has 0 line items.
-  const orphanQuotes = await db.execute<{ id: number; total_cents: number }>(
-    sql`SELECT q.id, q.total_cents
-        FROM quotes q
-        WHERE NOT EXISTS (
-          SELECT 1 FROM quote_line_items li WHERE li.quote_id = q.id
-        )
-        ORDER BY q.id`,
-  );
-  if (orphanQuotes.rows.length > 0) {
-    const autoSeedLineItems: LineItem[] = [];
-    // Generic 2-line-item fallback for any quote not already covered above.
-    // Uses total_cents to back-calculate a realistic split.
-    for (const row of orphanQuotes.rows) {
-      const total = Number(row.total_cents);
-      const labor  = Math.round(total * 0.65);
-      const materials = total - labor;
-      autoSeedLineItems.push(
-        { quoteId: row.id, description: "Labor & equipment",    unitPriceCents: labor,     qty: 1 },
-        { quoteId: row.id, description: "Materials & disposal", unitPriceCents: materials, qty: 1 },
-      );
-    }
-    if (autoSeedLineItems.length > 0) {
-      await db.insert(quoteLineItemsTable).values(autoSeedLineItems);
-    }
   }
 
   // ── Invoices — spread over 6 months ──────────────────────────────────────
