@@ -268,9 +268,9 @@ export function Crews() {
   const [selectedCrewId, setSelectedCrewId] = useState<number | null>(null);
 
   const { data: meData } = useGetMe();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const perms = (meData?.user as any)?.permissions as Record<string, { canView: boolean; canEdit: boolean }> | undefined;
-  const canEditFleet = perms?.["fleet.trucks"]?.canEdit ?? false;
+  const canCreateCrew =
+    (meData?.user?.permissions?.["fleet.trucks"]?.canEdit ?? false) ||
+    (meData?.user?.permissions?.["admin.users"]?.canEdit ?? false);
   const crews = data?.crews ?? [];
 
   function handleCrewCreated() {
@@ -305,7 +305,7 @@ export function Crews() {
             Field crews with their assigned members, trucks, and equipment.
           </p>
         </div>
-        {canEditFleet && <NewCrewDialog onCreated={handleCrewCreated} />}
+        {canCreateCrew && <NewCrewDialog onCreated={handleCrewCreated} />}
       </div>
 
       <div className="grid gap-6 md:grid-cols-[280px_1fr]">

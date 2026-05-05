@@ -22,6 +22,11 @@ export interface LoginRequest {
   password: string;
 }
 
+export interface SectionPermission {
+  canView: boolean;
+  canEdit: boolean;
+}
+
 export interface AuthUser {
   id: number;
   email: string;
@@ -29,6 +34,7 @@ export interface AuthUser {
   role: string;
   department: string;
   departmentId: number;
+  permissions?: Record<string, SectionPermission>;
 }
 
 export interface AuthMeResponse {
