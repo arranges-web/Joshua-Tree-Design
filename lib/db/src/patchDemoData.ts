@@ -1,12 +1,20 @@
 /**
- * One-time patch to upgrade existing demo data to v2:
- *  1. Add 2–4 line items to every quote that has none
- *  2. Insert 2 REJECTED quotes with line items
- *  3. Insert additional completed jobs + invoices spanning Nov–Dec 2025
- *     so the accounting monthly chart has 6 months of coverage
- *  4. Add equipment for Lawn and Pest departments
+ * @dev-utility ONE-TIME PATCH — do NOT call from server startup.
  *
- * Idempotent guard: if quote_line_items count >= 35, already patched.
+ * Applied manually on 2026-05-05 to upgrade an existing development DB
+ * that was seeded before backfillDemoData.ts was fully written. A fresh
+ * install via backfillDemoData.ts already includes everything below.
+ *
+ * Applied changes:
+ *  1. Added 2–4 line items to every quote that had none (quotes 3–20)
+ *  2. Inserted 2 REJECTED quotes with line items
+ *  3. Inserted additional completed jobs + invoices spanning Nov–Dec 2025
+ *     so the accounting monthly chart has full 6-month coverage
+ *  4. Added equipment for Lawn and Pest departments
+ *
+ * Idempotent guard: skips if quote_line_items count >= 35 (already patched).
+ * Not exported from lib/db/src/index.ts — run manually via:
+ *   node --import tsx/esm lib/db/src/patchDemoData.ts
  */
 
 import { eq, sql } from "drizzle-orm";

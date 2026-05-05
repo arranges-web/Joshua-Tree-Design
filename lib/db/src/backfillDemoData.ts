@@ -23,6 +23,7 @@ import {
   trucksTable,
   equipmentTable,
   maintenanceLogsTable,
+  serviceRequestsTable,
   departmentsTable,
   usersTable,
 } from "./schema";
@@ -492,4 +493,46 @@ export async function backfillDemoData(): Promise<void> {
   if (newMaintLogs.length > 0) {
     await db.insert(maintenanceLogsTable).values(newMaintLogs);
   }
+
+  // ── Service requests — 6 open PORTAL requests from new customers ──────────
+  // service_type enum is tree-focused; other depts use the same types.
+  // All set to NEW (open) so the Leads page has a healthy queue.
+  await db.insert(serviceRequestsTable).values([
+    {
+      customerId: brandon.id, propertyId: bP.id,
+      service: "TREE_REMOVAL", status: "NEW", source: "PORTAL",
+      notes: "3 large live oaks after Hurricane Ian — need removal + stump grinding",
+      preferredWindowStart: daysFromNow(5), preferredWindowEnd: daysFromNow(12),
+    },
+    {
+      customerId: carol.id, propertyId: cP.id,
+      service: "TRIMMING_PRUNING", status: "NEW", source: "PORTAL",
+      notes: "Banyan overhanging pool cage, needs heavy pruning",
+      preferredWindowStart: daysFromNow(7), preferredWindowEnd: daysFromNow(14),
+    },
+    {
+      customerId: douglas.id, propertyId: dP.id,
+      service: "TRIMMING_PRUNING", status: "NEW", source: "PORTAL",
+      notes: "6 sabal palms need annual trimming and boot cleaning",
+      preferredWindowStart: daysFromNow(10), preferredWindowEnd: daysFromNow(20),
+    },
+    {
+      customerId: irving.id, propertyId: iP.id,
+      service: "STUMP_GRINDING", status: "NEW", source: "PORTAL",
+      notes: "4 stumps left from prior removal, need grinding before sod install",
+      preferredWindowStart: daysFromNow(3), preferredWindowEnd: daysFromNow(8),
+    },
+    {
+      customerId: martin.id, propertyId: mP.id,
+      service: "EMERGENCY_STORM", status: "NEW", source: "PORTAL",
+      notes: "Large laurel oak limb over garage roof — needs emergency removal",
+      preferredWindowStart: daysFromNow(1), preferredWindowEnd: daysFromNow(3),
+    },
+    {
+      customerId: nancy.id, propertyId: nP.id,
+      service: "CRANE_ASSISTED", status: "NEW", source: "PORTAL",
+      notes: "Cluster of tall royal palms near power lines — crane required",
+      preferredWindowStart: daysFromNow(14), preferredWindowEnd: daysFromNow(21),
+    },
+  ]);
 }
