@@ -34,10 +34,10 @@ const ROLE_LABELS: Record<RoleKey, string> = {
 
 const DEPT_LABELS: Record<DepartmentKey, string> = {
   Admin: "Administration",
-  Lawn: "Lawn Department",
-  Landscaping: "Land Department",
+  Lawn: "Lawn",
+  Landscaping: "Land",
   Pest: "Pest",
-  TreeService: "Tree Department",
+  TreeService: "Tree",
   Irrigation: "Irrigation Services",
 };
 

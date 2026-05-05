@@ -43,6 +43,13 @@
       "when": 1777986114726,
       "tag": "0005_update_department_labels",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1778200000000,
+      "tag": "0006_shorten_dept_labels",
+      "breakpoints": true
     }
   ]
 }
