@@ -1,7 +1,7 @@
 import app from "./app";
 import { logger } from "./lib/logger";
 import { syncDefaultPermissionMatrix } from "./lib/rbac/syncMatrix";
-import { seedIfEmpty, backfillFleetData } from "@workspace/db";
+import { seedIfEmpty, backfillFleetData, backfillDemoData } from "@workspace/db";
 
 const rawPort = process.env["PORT"];
 
@@ -48,6 +48,11 @@ async function startup() {
       await backfillFleetData();
     } catch (err) {
       logger.error({ err }, "Failed to backfill fleet data on boot");
+    }
+    try {
+      await backfillDemoData();
+    } catch (err) {
+      logger.error({ err }, "Failed to backfill demo data on boot");
     }
   }
 }
