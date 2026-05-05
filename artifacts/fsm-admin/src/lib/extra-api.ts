@@ -216,6 +216,7 @@ export function useCreateEquipment() {
 export type CreateCrewBody = {
   name: string;
   leadUserId: number;
+  departmentId?: number;
 };
 
 export function useCreateCrew() {

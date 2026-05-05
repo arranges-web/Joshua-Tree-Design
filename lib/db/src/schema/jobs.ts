@@ -12,7 +12,7 @@ import {
   index,
   check,
 } from "drizzle-orm/pg-core";
-import { usersTable } from "./users";
+import { usersTable, departmentsTable } from "./users";
 import { propertiesTable } from "./customers";
 
 export const jobStatusEnum = pgEnum("job_status", [
@@ -35,6 +35,10 @@ export const crewsTable = pgTable("crews", {
   leadUserId: integer("lead_user_id")
     .notNull()
     .references(() => usersTable.id, { onDelete: "restrict" }),
+  departmentId: integer("department_id").references(
+    () => departmentsTable.id,
+    { onDelete: "set null" },
+  ),
 });
 
 export const crewMembersTable = pgTable(

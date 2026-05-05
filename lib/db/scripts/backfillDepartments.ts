@@ -19,10 +19,10 @@ import { eq, isNull, notInArray, or } from "drizzle-orm";
 
 const TARGET_DEPARTMENTS = [
   { key: "Admin",       label: "Administration" },
-  { key: "Lawn",        label: "Lawn Care" },
-  { key: "Landscaping", label: "Landscaping" },
-  { key: "Pest",        label: "Pest Control" },
-  { key: "TreeService", label: "Tree Service" },
+  { key: "Lawn",        label: "Lawn Department" },
+  { key: "Landscaping", label: "Land Department" },
+  { key: "Pest",        label: "Pest" },
+  { key: "TreeService", label: "Tree Department" },
   { key: "Irrigation",  label: "Irrigation Services" },
 ] as const;
 

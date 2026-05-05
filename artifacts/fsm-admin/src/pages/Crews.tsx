@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
-import { useListEmployees, type Employee } from "@workspace/api-client-react";
+import { useListEmployees, useListDepartments, type Employee } from "@workspace/api-client-react";
 import {
   useListCrews,
   useCrewDetail,
@@ -168,11 +168,14 @@ function NewCrewDialog({ onCreated }: { onCreated: () => void }) {
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
   const [leadUserId, setLeadUserId] = useState("");
+  const [departmentId, setDepartmentId] = useState("");
   const [error, setError] = useState<string | null>(null);
 
   const createCrew = useCreateCrew();
   const { data: employeesData } = useListEmployees();
+  const { data: deptsData } = useListDepartments();
   const employees = (employeesData?.employees ?? []) as Employee[];
+  const depts = deptsData?.departments ?? [];
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -180,13 +183,15 @@ function NewCrewDialog({ onCreated }: { onCreated: () => void }) {
     if (!name.trim()) { setError("Crew name is required."); return; }
     const leadId = Number(leadUserId);
     if (!leadId) { setError("Please select a crew lead."); return; }
+    const deptId = Number(departmentId) || undefined;
     try {
-      const body: CreateCrewBody = { name: name.trim(), leadUserId: leadId };
+      const body: CreateCrewBody = { name: name.trim(), leadUserId: leadId, departmentId: deptId };
       await createCrew.mutateAsync(body);
       onCreated();
       setOpen(false);
       setName("");
       setLeadUserId("");
+      setDepartmentId("");
     } catch {
       setError("Failed to create crew. Please try again.");
     }
@@ -214,6 +219,19 @@ function NewCrewDialog({ onCreated }: { onCreated: () => void }) {
               placeholder="Crew Delta"
               className="mt-1"
             />
+          </div>
+          <div>
+            <Label htmlFor="crew-dept">Department</Label>
+            <Select value={departmentId} onValueChange={setDepartmentId}>
+              <SelectTrigger id="crew-dept" className="mt-1">
+                <SelectValue placeholder="Select department (optional)" />
+              </SelectTrigger>
+              <SelectContent>
+                {depts.map((d: { id: number; key: string; label: string }) => (
+                  <SelectItem key={d.id} value={String(d.id)}>{d.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
           <div>
             <Label htmlFor="crew-lead">Crew Lead *</Label>

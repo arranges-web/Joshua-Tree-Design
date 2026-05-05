@@ -1285,6 +1285,7 @@ router.get(
 const createCrewSchema = z.object({
   name: z.string().min(1).max(120),
   leadUserId: z.number().int().positive(),
+  departmentId: z.number().int().positive().optional(),
 });
 
 // POST /crews — create a new crew. Requires fleet.trucks edit access (or admin).
@@ -1298,7 +1299,7 @@ router.post(
       res.status(400).json({ error: "invalid_body", details: parsed.error.flatten() });
       return;
     }
-    const { name, leadUserId } = parsed.data;
+    const { name, leadUserId, departmentId } = parsed.data;
     // Verify the lead user exists.
     const [leadUser] = await db
       .select({ id: usersTable.id })
@@ -1310,7 +1311,7 @@ router.post(
     }
     const [crew] = await db
       .insert(crewsTable)
-      .values({ name, leadUserId })
+      .values({ name, leadUserId, departmentId: departmentId ?? null })
       .returning();
     if (!crew) {
       res.status(500).json({ error: "insert_failed" });
