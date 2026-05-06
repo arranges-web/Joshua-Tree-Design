@@ -1,7 +1,12 @@
 import app from "./app";
 import { logger } from "./lib/logger";
 import { syncDefaultPermissionMatrix } from "./lib/rbac/syncMatrix";
-import { seedIfEmpty, backfillFleetData, backfillDemoData } from "@workspace/db";
+import {
+  seedIfEmpty,
+  backfillFleetData,
+  backfillDemoData,
+  backfillDepartments,
+} from "@workspace/db";
 
 const rawPort = process.env["PORT"];
 
@@ -35,6 +40,17 @@ async function startup() {
     await syncDefaultPermissionMatrix();
   } catch (err) {
     logger.error({ err }, "Failed to sync default permission matrix on boot");
+  }
+
+  // Migrate any DB seeded against an older department layout to the
+  // current 7-key canonical set, re-home orphaned assets, and (in
+  // non-production) make sure every visible department has at least one
+  // truck + equipment so the fleet dept-filter dropdown is meaningful.
+  // Runs before the fleet/demo backfills since both consume dept keys.
+  try {
+    await backfillDepartments();
+  } catch (err) {
+    logger.error({ err }, "Failed to backfill departments on boot");
   }
 
   // Enrich fleet and demo data. Both functions are fully idempotent (each has

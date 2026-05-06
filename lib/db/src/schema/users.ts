@@ -21,7 +21,19 @@ export const ROLE_KEYS = [
 ] as const;
 export type RoleKey = (typeof ROLE_KEYS)[number];
 
-export const DEPARTMENT_KEYS = ["Admin", "Lawn", "Landscaping", "Pest", "TreeService", "Irrigation"] as const;
+// Canonical departments. `Admin` is hidden from the department-filter
+// dropdown in the UI (admin users can see every dept's data) but still
+// exists as a real row so admin / accounting users have a home.
+// The remaining six are the visible operating departments.
+export const DEPARTMENT_KEYS = [
+  "Admin",
+  "Sales",
+  "Lawn",
+  "Landscaping",
+  "Pest",
+  "TreeService",
+  "Fertilization",
+] as const;
 export type DepartmentKey = (typeof DEPARTMENT_KEYS)[number];
 
 export const rolesTable = pgTable(
