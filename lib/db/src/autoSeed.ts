@@ -269,24 +269,38 @@ export async function populateData(): Promise<void> {
   ] = insertedProperties as Array<typeof insertedProperties[number]>;
 
   // ── Crews ─────────────────────────────────────────────────────────────────
+  // One crew per visible operating department so the demo can show a
+  // realistic crew assignment per dept. Each crew is led by an existing
+  // CREW_LEAD or MECHANIC user — leadUserId is just a FK with no role
+  // constraint, so reusing leads across multiple crews is fine.
   const insertedCrews = await db
     .insert(crewsTable)
     .values([
-      { name: "Crew Alpha", leadUserId: lead1.id },
-      { name: "Crew Beta",  leadUserId: lead2.id },
-      { name: "Crew Gamma", leadUserId: lead3.id },
+      { name: "Crew Alpha",   leadUserId: lead1.id, departmentId: deptByKey.get("Landscaping")! },
+      { name: "Crew Beta",    leadUserId: lead2.id, departmentId: deptByKey.get("Lawn")! },
+      { name: "Crew Gamma",   leadUserId: lead3.id, departmentId: deptByKey.get("TreeService")! },
+      { name: "Crew Delta",   leadUserId: lead2.id, departmentId: deptByKey.get("Lawn")! },
+      { name: "Crew Echo",    leadUserId: mech.id,  departmentId: deptByKey.get("Pest")! },
+      { name: "Crew Foxtrot", leadUserId: mech.id,  departmentId: deptByKey.get("Fertilization")! },
     ])
     .returning();
-  const [alpha, beta, gamma] = insertedCrews as Array<typeof insertedCrews[number]>;
+  const [alpha, beta, gamma, delta, echo, foxtrot] =
+    insertedCrews as Array<typeof insertedCrews[number]>;
   await db.insert(crewMembersTable).values([
-    { crewId: alpha.id, userId: lead1.id },
-    { crewId: alpha.id, userId: mech.id },
-    { crewId: alpha.id, userId: sales1.id },
-    { crewId: beta.id,  userId: lead2.id },
-    { crewId: beta.id,  userId: sales2.id },
-    { crewId: gamma.id, userId: lead3.id },
-    { crewId: gamma.id, userId: lead2.id },
+    { crewId: alpha.id,   userId: lead1.id },
+    { crewId: alpha.id,   userId: mech.id },
+    { crewId: alpha.id,   userId: sales1.id },
+    { crewId: beta.id,    userId: lead2.id },
+    { crewId: beta.id,    userId: sales2.id },
+    { crewId: gamma.id,   userId: lead3.id },
+    { crewId: gamma.id,   userId: lead2.id },
+    { crewId: delta.id,   userId: lead2.id },
+    { crewId: echo.id,    userId: mech.id },
+    { crewId: foxtrot.id, userId: mech.id },
   ]);
+  void delta;
+  void echo;
+  void foxtrot;
 
   // ── Jobs ──────────────────────────────────────────────────────────────────
   // Hank's jobs: 1 SCHEDULED (upcoming) + 2 COMPLETE (recent history)

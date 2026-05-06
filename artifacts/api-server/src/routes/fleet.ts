@@ -586,7 +586,25 @@ router.get(
         .where(sql`${usersTable.id} = ANY(ARRAY[${sql.raw(loggedByIds.join(","))}]::int[])`);
       userMap = Object.fromEntries(users.map((u) => [u.id, u.fullName]));
     }
-    res.json({ logs: rows.map((r) => ({ ...r, loggedByName: r.loggedByUserId != null ? (userMap[r.loggedByUserId] ?? null) : null })) });
+    // Include vendor / category / notes / hasReceipt so the table and CSV
+    // export can show them. The full receipt data URL is excluded to keep
+    // the list payload small — the dedicated GET /receipt endpoint
+    // returns it on demand for the receipt preview modal.
+    res.json({
+      logs: rows.map((r) => {
+        const { receiptDataUrl, ...rest } = r as MaintenanceLog & {
+          receiptDataUrl: string | null;
+        };
+        return {
+          ...rest,
+          loggedByName:
+            r.loggedByUserId != null
+              ? (userMap[r.loggedByUserId] ?? null)
+              : null,
+          hasReceipt: receiptDataUrl != null && receiptDataUrl.length > 0,
+        };
+      }),
+    });
   },
 );
 
@@ -730,6 +748,110 @@ router.delete(
       return;
     }
     res.json({ ok: true });
+  },
+);
+
+// ---------- Maintenance log receipt + accountant fields ----------
+// Stored as a base64 data URL so the demo doesn't need an object store.
+// Capped at ~3MB to keep the row size sane; clients should compress
+// before sending. Vendor / category / notes are siblings of the
+// receipt because the accountant typically fills them in at the same
+// time as attaching the receipt photo.
+const MAX_RECEIPT_DATA_URL_BYTES = 3 * 1024 * 1024;
+const RECEIPT_CATEGORY_KEYS = [
+  "LABOR",
+  "PARTS",
+  "FUEL",
+  "OUTSOURCED",
+  "OTHER",
+] as const;
+const updateReceiptSchema = z
+  .object({
+    vendor: z.string().max(120).nullable().optional(),
+    category: z.enum(RECEIPT_CATEGORY_KEYS).nullable().optional(),
+    notes: z.string().max(2000).nullable().optional(),
+    receiptDataUrl: z
+      .string()
+      .max(MAX_RECEIPT_DATA_URL_BYTES)
+      .nullable()
+      .optional(),
+  })
+  .strict();
+
+router.put(
+  "/maintenance-logs/:id/receipt",
+  requireAuth,
+  requireSection("fleet.maintenance", "edit"),
+  async (req, res) => {
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id)) {
+      res.status(400).json({ error: "invalid_id" });
+      return;
+    }
+    const parsed = updateReceiptSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: "invalid_body" });
+      return;
+    }
+    if (!(await assertMaintenanceLogInScope(req, res, id))) return;
+    if (parsed.data.receiptDataUrl) {
+      // Cheap mime guard: only allow inline data URLs that look like images.
+      if (!/^data:image\/(png|jpe?g|gif|webp);base64,/.test(parsed.data.receiptDataUrl)) {
+        res.status(400).json({ error: "receipt_must_be_image_data_url" });
+        return;
+      }
+    }
+    const [row] = await db
+      .update(maintenanceLogsTable)
+      .set(parsed.data as Partial<typeof maintenanceLogsTable.$inferInsert>)
+      .where(eq(maintenanceLogsTable.id, id))
+      .returning({
+        id: maintenanceLogsTable.id,
+        vendor: maintenanceLogsTable.vendor,
+        category: maintenanceLogsTable.category,
+        notes: maintenanceLogsTable.notes,
+        receiptDataUrl: maintenanceLogsTable.receiptDataUrl,
+      });
+    if (!row) {
+      res.status(404).json({ error: "not_found" });
+      return;
+    }
+    res.json({
+      log: {
+        id: row.id,
+        vendor: row.vendor,
+        category: row.category,
+        notes: row.notes,
+        hasReceipt: row.receiptDataUrl != null && row.receiptDataUrl.length > 0,
+      },
+    });
+  },
+);
+
+// Returns the full receipt data URL on demand (excluded from the list
+// payload to keep that response small). Same view permissions as the
+// list itself.
+router.get(
+  "/maintenance-logs/:id/receipt",
+  requireAuth,
+  requireSection("fleet.maintenance", "view"),
+  async (req, res) => {
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id)) {
+      res.status(400).json({ error: "invalid_id" });
+      return;
+    }
+    const [row] = await db
+      .select({
+        receiptDataUrl: maintenanceLogsTable.receiptDataUrl,
+      })
+      .from(maintenanceLogsTable)
+      .where(eq(maintenanceLogsTable.id, id));
+    if (!row) {
+      res.status(404).json({ error: "not_found" });
+      return;
+    }
+    res.json({ receiptDataUrl: row.receiptDataUrl ?? null });
   },
 );
 
@@ -1335,6 +1457,77 @@ router.post(
   },
 );
 
+// PATCH /crews/:id — update an existing crew's lead, name, or department.
+// Same edit gate as POST /crews. Useful for re-pointing a crew at a new
+// crew lead without forcing the user to delete-and-recreate. When
+// leadUserId changes the new lead is also auto-added as a member if
+// they aren't already.
+const updateCrewSchema = z
+  .object({
+    name: z.string().trim().min(1).max(120).optional(),
+    leadUserId: z.number().int().positive().optional(),
+    departmentId: z.number().int().positive().nullable().optional(),
+  })
+  .strict();
+
+router.patch(
+  "/crews/:id",
+  requireAuth,
+  (req, res, next) => {
+    if (!req.user) { res.status(401).json({ error: "unauthenticated" }); return; }
+    const canFleet = hasSectionAccess(req.user, "fleet.trucks", "edit");
+    const canAdmin = hasSectionAccess(req.user, "admin.users", "edit");
+    if (!canFleet && !canAdmin) {
+      res.status(403).json({ error: "forbidden", section: "fleet.trucks|admin.users", action: "edit" });
+      return;
+    }
+    next();
+  },
+  async (req, res) => {
+    const crewId = Number(req.params.id);
+    if (!Number.isFinite(crewId)) {
+      res.status(400).json({ error: "invalid_id" });
+      return;
+    }
+    const parsed = updateCrewSchema.safeParse(req.body);
+    if (!parsed.success || Object.keys(parsed.data).length === 0) {
+      res.status(400).json({ error: "invalid_body" });
+      return;
+    }
+    if (parsed.data.leadUserId != null) {
+      const [leadUser] = await db
+        .select({ id: usersTable.id })
+        .from(usersTable)
+        .where(eq(usersTable.id, parsed.data.leadUserId));
+      if (!leadUser) {
+        res.status(400).json({ error: "lead_user_not_found" });
+        return;
+      }
+    }
+    const [updated] = await db
+      .update(crewsTable)
+      .set(parsed.data)
+      .where(eq(crewsTable.id, crewId))
+      .returning({
+        id: crewsTable.id,
+        name: crewsTable.name,
+        leadUserId: crewsTable.leadUserId,
+        departmentId: crewsTable.departmentId,
+      });
+    if (!updated) {
+      res.status(404).json({ error: "not_found" });
+      return;
+    }
+    if (parsed.data.leadUserId != null) {
+      await db
+        .insert(crewMembersTable)
+        .values({ crewId, userId: parsed.data.leadUserId })
+        .onConflictDoNothing();
+    }
+    res.json({ crew: updated });
+  },
+);
+
 // GET /crews/lead-candidates — returns a minimal user list (id + fullName) that
 // can be assigned as crew leads. Gated by fleet.trucks view so MECHANIC users
 // can populate the crew-creation form without needing admin.users view.
@@ -1378,7 +1571,12 @@ router.get(
       return;
     }
     const [crew] = await db
-      .select({ id: crewsTable.id, name: crewsTable.name })
+      .select({
+        id: crewsTable.id,
+        name: crewsTable.name,
+        leadUserId: crewsTable.leadUserId,
+        departmentId: crewsTable.departmentId,
+      })
       .from(crewsTable)
       .where(eq(crewsTable.id, crewId));
     if (!crew) {

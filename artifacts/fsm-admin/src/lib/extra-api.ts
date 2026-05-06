@@ -38,6 +38,8 @@ export type CrewMember = {
 export type CrewDetail = {
   id: number;
   name: string;
+  leadUserId: number;
+  departmentId: number | null;
   members: CrewMember[];
   trucks: Array<{ id: number; name: string; status: string; slug: string | null }>;
   equipment: Array<{ id: number; name: string; type: string; status: string; slug: string | null }>;
@@ -48,7 +50,7 @@ const CREWS_KEY = ["crews"] as const;
 export function useListCrews() {
   return useQuery({
     queryKey: CREWS_KEY,
-    queryFn: () => customFetch<{ crews: Crew[] }>("/crews"),
+    queryFn: () => customFetch<{ crews: Crew[] }>("/api/crews"),
   });
 }
 
@@ -59,7 +61,7 @@ export function getCrewDetailKey(id: number) {
 export function useCrewDetail(id: number) {
   return useQuery({
     queryKey: getCrewDetailKey(id),
-    queryFn: () => customFetch<{ crew: CrewDetail }>(`/crews/${id}`),
+    queryFn: () => customFetch<{ crew: CrewDetail }>(`/api/crews/${id}`),
     enabled: id > 0,
   });
 }
@@ -84,7 +86,7 @@ export function useEquipmentItems(equipmentId: number) {
   return useQuery({
     queryKey: getEquipmentItemsKey(equipmentId),
     queryFn: () =>
-      customFetch<{ items: EquipmentItem[] }>(`/equipment/${equipmentId}/items`),
+      customFetch<{ items: EquipmentItem[] }>(`/api/equipment/${equipmentId}/items`),
     enabled: equipmentId > 0,
   });
 }
@@ -99,7 +101,7 @@ export type CreateEquipmentItemBody = {
 export function useCreateEquipmentItem(equipmentId: number) {
   return useMutation({
     mutationFn: (body: CreateEquipmentItemBody) =>
-      customFetch<{ item: EquipmentItem }>(`/equipment/${equipmentId}/items`, {
+      customFetch<{ item: EquipmentItem }>(`/api/equipment/${equipmentId}/items`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify(body),
@@ -110,7 +112,7 @@ export function useCreateEquipmentItem(equipmentId: number) {
 export function useDeleteEquipmentItem(equipmentId: number) {
   return useMutation({
     mutationFn: (itemId: number) =>
-      customFetch<{ ok: boolean }>(`/equipment/${equipmentId}/items/${itemId}`, {
+      customFetch<{ ok: boolean }>(`/api/equipment/${equipmentId}/items/${itemId}`, {
         method: "DELETE",
       }),
   });
@@ -122,7 +124,7 @@ export type AssignAssetBody = { crewId: number | null; note?: string };
 export function useAssignAsset(slug: string) {
   return useMutation({
     mutationFn: (body: AssignAssetBody) =>
-      customFetch<{ asset: unknown }>(`/assets/${encodeURIComponent(slug)}/assign`, {
+      customFetch<{ asset: unknown }>(`/api/assets/${encodeURIComponent(slug)}/assign`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify(body),
@@ -151,7 +153,7 @@ export function useAssignmentHistory(slug: string) {
     queryKey: getAssignmentHistoryKey(slug),
     queryFn: () =>
       customFetch<{ history: AssignmentHistoryEntry[] }>(
-        `/assets/${encodeURIComponent(slug)}/assignment-history`,
+        `/api/assets/${encodeURIComponent(slug)}/assignment-history`,
       ),
   });
 }
@@ -175,7 +177,7 @@ export type CreateTruckBody = {
 export function useCreateTruck() {
   return useMutation({
     mutationFn: (body: CreateTruckBody) =>
-      customFetch<{ truck: unknown }>("/trucks", {
+      customFetch<{ truck: unknown }>("/api/trucks", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ ...body, status: body.status ?? "ACTIVE" }),
@@ -204,7 +206,7 @@ export type CreateEquipmentBody = {
 export function useCreateEquipment() {
   return useMutation({
     mutationFn: (body: CreateEquipmentBody) =>
-      customFetch<{ equipment: unknown }>("/equipment", {
+      customFetch<{ equipment: unknown }>("/api/equipment", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ ...body, status: body.status ?? "ACTIVE" }),
@@ -220,7 +222,7 @@ export type CrewLeadCandidate = { id: number; fullName: string };
 export function useListCrewLeadCandidates() {
   return useQuery({
     queryKey: ["crew-lead-candidates"] as const,
-    queryFn: () => customFetch<{ users: CrewLeadCandidate[] }>("/crews/lead-candidates"),
+    queryFn: () => customFetch<{ users: CrewLeadCandidate[] }>("/api/crews/lead-candidates"),
   });
 }
 
@@ -234,11 +236,85 @@ export type CreateCrewBody = {
 export function useCreateCrew() {
   return useMutation({
     mutationFn: (body: CreateCrewBody) =>
-      customFetch<{ crew: { id: number; name: string } }>("/crews", {
+      customFetch<{ crew: { id: number; name: string } }>("/api/crews", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify(body),
       }),
+  });
+}
+
+// ---------- Update Crew (re-point lead, rename, etc.) ----------
+export type UpdateCrewBody = {
+  name?: string;
+  leadUserId?: number;
+  departmentId?: number | null;
+};
+
+export function useUpdateCrew(crewId: number) {
+  return useMutation({
+    mutationFn: (body: UpdateCrewBody) =>
+      customFetch<{
+        crew: {
+          id: number;
+          name: string;
+          leadUserId: number;
+          departmentId: number | null;
+        };
+      }>(`/api/crews/${crewId}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+      }),
+  });
+}
+
+// ---------- Maintenance Receipt ----------
+// Side endpoint that lets the maintenance dialog attach a vendor
+// receipt photo (base64 data URL) and accountant-facing fields
+// without polluting the orval-generated maintenance log create/update
+// shapes.
+export type MaintenanceReceiptCategory =
+  | "LABOR"
+  | "PARTS"
+  | "FUEL"
+  | "OUTSOURCED"
+  | "OTHER";
+
+export type UpdateReceiptBody = {
+  vendor?: string | null;
+  category?: MaintenanceReceiptCategory | null;
+  notes?: string | null;
+  receiptDataUrl?: string | null;
+};
+
+export function useUpdateMaintenanceReceipt(logId: number) {
+  return useMutation({
+    mutationFn: (body: UpdateReceiptBody) =>
+      customFetch<{
+        log: {
+          id: number;
+          vendor: string | null;
+          category: string | null;
+          notes: string | null;
+          hasReceipt: boolean;
+        };
+      }>(`/api/maintenance-logs/${logId}/receipt`, {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+      }),
+  });
+}
+
+export function useMaintenanceReceipt(logId: number, enabled = true) {
+  return useQuery({
+    queryKey: ["maintenance-receipt", logId] as const,
+    queryFn: () =>
+      customFetch<{ receiptDataUrl: string | null }>(
+        `/api/maintenance-logs/${logId}/receipt`,
+      ),
+    enabled: enabled && logId > 0,
   });
 }
 
@@ -275,7 +351,7 @@ export const ACCOUNTING_KEY = ["accounting", "summary"] as const;
 export function useAccountingSummary() {
   return useQuery({
     queryKey: ACCOUNTING_KEY,
-    queryFn: () => customFetch<AccountingSummary>("/accounting/summary"),
+    queryFn: () => customFetch<AccountingSummary>("/api/accounting/summary"),
   });
 }
 

@@ -11,6 +11,8 @@ import {
 } from "recharts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Button } from "@/components/ui/button";
+import { rowsToCsv, downloadCsv } from "@/lib/csv";
 import {
   Table,
   TableBody,
@@ -26,6 +28,7 @@ import {
   Wrench,
   AlertTriangle,
   Wallet,
+  Download,
 } from "lucide-react";
 import { useAccountingSummary } from "@/lib/extra-api";
 
@@ -88,12 +91,43 @@ export function Accounting() {
 
   return (
     <div className="space-y-6" data-testid="accounting-page">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Accounting</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Per-branch financial visibility — collected revenue, open invoices,
-          quote pipeline, and fleet maintenance spend.
-        </p>
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Accounting</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Per-branch financial visibility — collected revenue, open invoices,
+            quote pipeline, and fleet maintenance spend.
+          </p>
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => {
+            const csv = rowsToCsv(data.branches, [
+              { header: "Branch", value: (b) => b.departmentLabel },
+              {
+                header: "Open invoices (USD)",
+                value: (b) => (b.openInvoiceCents / 100).toFixed(2),
+              },
+              {
+                header: "Collected revenue (USD)",
+                value: (b) => (b.collectedRevenueCents / 100).toFixed(2),
+              },
+              {
+                header: "Quote pipeline (USD)",
+                value: (b) => (b.quotePipelineCents / 100).toFixed(2),
+              },
+              {
+                header: "Maintenance spend (USD)",
+                value: (b) => (b.maintenanceSpendCents / 100).toFixed(2),
+              },
+            ]);
+            const stamp = new Date().toISOString().slice(0, 10);
+            downloadCsv(`accounting-by-branch-${stamp}.csv`, csv);
+          }}
+        >
+          <Download className="mr-2 h-4 w-4" /> Export CSV
+        </Button>
       </div>
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">

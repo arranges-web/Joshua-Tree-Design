@@ -21,6 +21,9 @@ import {
   trucksTable,
   equipmentTable,
   usersTable,
+  crewsTable,
+  crewMembersTable,
+  rolesTable,
   DEPARTMENT_KEYS,
 } from "./schema";
 
@@ -113,6 +116,14 @@ export async function backfillDepartments(): Promise<void> {
   if (process.env["NODE_ENV"] !== "production") {
     await ensureDepartmentFleet();
   }
+
+  // 5. Per-dept demo crew — runs in all environments because the live
+  // demo deploy was seeded before the Sales / Fertilization depts
+  // existed and the customer-count guard in backfillDemoData skips
+  // them. This adds one crew per visible dept that doesn't already
+  // have one, led by the highest-priority user already in that dept
+  // (CREW_LEAD > MECHANIC > ADMIN > anyone else).
+  await ensureDepartmentCrew();
 }
 
 type FleetSeed = {
@@ -396,4 +407,73 @@ async function ensureDepartmentFleet(): Promise<void> {
 
   // Suppress unused-import lint when no rows match.
   void sql;
+}
+
+const VISIBLE_DEPT_NAMES: Record<(typeof DEPARTMENT_KEYS)[number], string> = {
+  Admin: "",
+  Sales: "Sales Crew",
+  Lawn: "Lawn Crew",
+  Landscaping: "Landscape Crew",
+  Pest: "Pest Crew",
+  TreeService: "Tree Crew",
+  Fertilization: "Fertilization Crew",
+};
+
+const ROLE_PRIORITY: Record<string, number> = {
+  CREW_LEAD: 1,
+  MECHANIC: 2,
+  ADMIN: 3,
+  SALES: 4,
+  ACCOUNTING_MANAGER: 5,
+};
+
+async function ensureDepartmentCrew(): Promise<void> {
+  const allDepts = await db.select().from(departmentsTable);
+  const allCrews = await db.select().from(crewsTable);
+  const usersWithRole = await db
+    .select({
+      id: usersTable.id,
+      departmentId: usersTable.departmentId,
+      roleKey: rolesTable.key,
+    })
+    .from(usersTable)
+    .innerJoin(rolesTable, eq(usersTable.roleId, rolesTable.id));
+
+  for (const key of DEPARTMENT_KEYS) {
+    if (key === "Admin") continue;
+    const dept = allDepts.find((d) => d.key === key);
+    if (!dept) continue;
+    const existing = allCrews.filter((c) => c.departmentId === dept.id);
+    if (existing.length > 0) continue;
+
+    // Pick the best lead: prefer a user already in this dept, ordered by
+    // role priority. Fall back to any user with a CREW_LEAD role, then
+    // any user at all so the FK constraint is satisfied.
+    const inDept = usersWithRole
+      .filter((u) => u.departmentId === dept.id)
+      .sort(
+        (a, b) =>
+          (ROLE_PRIORITY[a.roleKey] ?? 99) - (ROLE_PRIORITY[b.roleKey] ?? 99),
+      );
+    let leadUser =
+      inDept[0] ??
+      usersWithRole.find((u) => u.roleKey === "CREW_LEAD") ??
+      usersWithRole[0];
+    if (!leadUser) continue;
+
+    const [newCrew] = await db
+      .insert(crewsTable)
+      .values({
+        name: VISIBLE_DEPT_NAMES[key],
+        leadUserId: leadUser.id,
+        departmentId: dept.id,
+      })
+      .returning();
+    if (newCrew) {
+      await db
+        .insert(crewMembersTable)
+        .values({ crewId: newCrew.id, userId: leadUser.id })
+        .onConflictDoNothing();
+    }
+  }
 }

@@ -16,6 +16,7 @@ import {
  * already present.
  */
 export async function backfillFleetData(): Promise<void> {
+  await backfillMaintenanceLogColumns();
   await backfillTruckFixtures();
   await backfillEquipmentFixtures();
   await backfillEquipmentCategories();
@@ -116,6 +117,28 @@ const EQUIP_FIXTURES: Record<
     serviceIntervalHours: 50,
   },
 };
+
+/**
+ * Idempotent ALTER TABLE that adds the receipt-tracking columns
+ * (vendor, category, notes, receipt_data_url) introduced for the
+ * accountant workflow. Uses IF NOT EXISTS so it's a no-op once the
+ * columns are present, and runs before any other maintenance backfill
+ * so subsequent updates can rely on the columns existing.
+ */
+async function backfillMaintenanceLogColumns() {
+  await db.execute(
+    sql`ALTER TABLE maintenance_logs ADD COLUMN IF NOT EXISTS vendor TEXT`,
+  );
+  await db.execute(
+    sql`ALTER TABLE maintenance_logs ADD COLUMN IF NOT EXISTS category TEXT`,
+  );
+  await db.execute(
+    sql`ALTER TABLE maintenance_logs ADD COLUMN IF NOT EXISTS notes TEXT`,
+  );
+  await db.execute(
+    sql`ALTER TABLE maintenance_logs ADD COLUMN IF NOT EXISTS receipt_data_url TEXT`,
+  );
+}
 
 async function backfillTruckFixtures() {
   const trucks = await db.select().from(trucksTable);
