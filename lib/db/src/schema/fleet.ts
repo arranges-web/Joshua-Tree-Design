@@ -160,6 +160,14 @@ export const maintenanceLogsTable = pgTable(
     costCents: integer("cost_cents").notNull().default(0),
     mileageAtService: integer("mileage_at_service"),
     hoursAtService: integer("hours_at_service"),
+    // Receipt-tracking fields, set by the maintenance log dialog when a
+    // mechanic uploads a photo of a vendor receipt and categorizes it
+    // for the accountant. All four are nullable so existing rows pre-
+    // dating the feature stay valid.
+    vendor: text("vendor"),
+    category: text("category"), // LABOR | PARTS | FUEL | OUTSOURCED | OTHER
+    notes: text("notes"),
+    receiptDataUrl: text("receipt_data_url"),
   },
   (t) => [
     index("maintenance_logs_truck_id_idx").on(t.truckId),

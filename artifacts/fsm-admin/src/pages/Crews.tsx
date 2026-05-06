@@ -6,7 +6,9 @@ import {
   useListCrews,
   useCrewDetail,
   useCreateCrew,
+  useUpdateCrew,
   useListCrewLeadCandidates,
+  getCrewDetailKey,
   type Crew,
   type CrewMember,
   type CrewLeadCandidate,
@@ -32,7 +34,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
-import { HardHat, Truck, Wrench, Users, ChevronRight, Plus } from "lucide-react";
+import { HardHat, Truck, Wrench, Users, ChevronRight, Plus, UserCog } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const STATUS_COLORS: Record<string, string> = {
@@ -55,7 +57,13 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
-function CrewDetailPanel({ crewId }: { crewId: number }) {
+function CrewDetailPanel({
+  crewId,
+  canEdit,
+}: {
+  crewId: number;
+  canEdit: boolean;
+}) {
   const { data, isLoading, error } = useCrewDetail(crewId);
 
   if (isLoading) {
@@ -75,9 +83,34 @@ function CrewDetailPanel({ crewId }: { crewId: number }) {
   }
 
   const { crew } = data;
+  const leadMember = crew.members.find((m) => m.userId === crew.leadUserId);
 
   return (
     <div className="space-y-5 p-1">
+      <section className="rounded-md border bg-muted/20 px-3 py-3">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <div className="text-xs font-mono uppercase tracking-widest text-muted-foreground">
+              Crew Lead
+            </div>
+            <div className="mt-1 text-sm font-semibold">
+              {leadMember?.fullName ?? "Unassigned"}
+            </div>
+            {leadMember?.department && (
+              <div className="text-xs text-muted-foreground">
+                {leadMember.department}
+              </div>
+            )}
+          </div>
+          {canEdit && (
+            <ChangeCrewLeadDialog
+              crewId={crew.id}
+              currentLeadUserId={crew.leadUserId}
+            />
+          )}
+        </div>
+      </section>
+
       <section>
         <div className="mb-2 flex items-center gap-2 text-xs font-mono uppercase tracking-widest text-muted-foreground">
           <Users className="h-3.5 w-3.5" />
@@ -163,6 +196,93 @@ function CrewDetailPanel({ crewId }: { crewId: number }) {
         )}
       </section>
     </div>
+  );
+}
+
+function ChangeCrewLeadDialog({
+  crewId,
+  currentLeadUserId,
+}: {
+  crewId: number;
+  currentLeadUserId: number;
+}) {
+  const [open, setOpen] = useState(false);
+  const [leadUserId, setLeadUserId] = useState(String(currentLeadUserId));
+  const [error, setError] = useState<string | null>(null);
+  const queryClient = useQueryClient();
+
+  const updateCrew = useUpdateCrew(crewId);
+  const { data: candidatesData } = useListCrewLeadCandidates();
+  const candidates: CrewLeadCandidate[] = candidatesData?.users ?? [];
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    const newLeadId = Number(leadUserId);
+    if (!newLeadId) {
+      setError("Please select a crew lead.");
+      return;
+    }
+    if (newLeadId === currentLeadUserId) {
+      setOpen(false);
+      return;
+    }
+    try {
+      await updateCrew.mutateAsync({ leadUserId: newLeadId });
+      queryClient.invalidateQueries({ queryKey: getCrewDetailKey(crewId) });
+      queryClient.invalidateQueries({ queryKey: ["crews"] });
+      setOpen(false);
+    } catch {
+      setError("Failed to update crew lead. Please try again.");
+    }
+  }
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        setOpen(next);
+        if (next) setLeadUserId(String(currentLeadUserId));
+      }}
+    >
+      <DialogTrigger asChild>
+        <Button size="sm" variant="outline" className="gap-1.5">
+          <UserCog className="h-3.5 w-3.5" />
+          Change Lead
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle>Change Crew Lead</DialogTitle>
+        </DialogHeader>
+        <form onSubmit={handleSubmit} className="space-y-4 pt-2">
+          <div>
+            <Label htmlFor="change-crew-lead">Crew Lead *</Label>
+            <Select value={leadUserId} onValueChange={setLeadUserId}>
+              <SelectTrigger id="change-crew-lead" className="mt-1">
+                <SelectValue placeholder="Select a lead" />
+              </SelectTrigger>
+              <SelectContent>
+                {candidates.map((c) => (
+                  <SelectItem key={c.id} value={String(c.id)}>
+                    {c.fullName}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          {error && <p className="text-sm text-destructive">{error}</p>}
+          <div className="flex justify-end gap-2 pt-1">
+            <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+              Cancel
+            </Button>
+            <Button type="submit" disabled={updateCrew.isPending}>
+              {updateCrew.isPending ? "Saving…" : "Save"}
+            </Button>
+          </div>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -353,7 +473,7 @@ export function Crews() {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <CrewDetailPanel crewId={selectedCrewId} />
+                <CrewDetailPanel crewId={selectedCrewId} canEdit={canCreateCrew} />
               </CardContent>
             </Card>
           ) : (
