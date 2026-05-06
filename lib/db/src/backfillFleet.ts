@@ -327,11 +327,17 @@ const EXTRA_EQUIP = [
 ];
 
 async function ensureExtraAssets() {
-  // Resolve the Fleet department id so newly inserted demo assets satisfy
-  // the NOT NULL department_id constraint introduced in task #38.
+  // Resolve a default department id so newly inserted demo assets satisfy
+  // the NOT NULL department_id constraint. The legacy "Fleet" department
+  // was retired with task #48 — fall back to Landscaping (the closest
+  // operational equivalent for general-purpose trucks) and finally to the
+  // first available row.
   const { departmentsTable } = await import("./schema");
   const allDepts = await db.select().from(departmentsTable);
-  const fleetDeptId = allDepts.find((d) => d.key === "Fleet")?.id ?? allDepts[0]?.id;
+  const fleetDeptId =
+    allDepts.find((d) => d.key === "Landscaping")?.id ??
+    allDepts.find((d) => d.key === "Admin")?.id ??
+    allDepts[0]?.id;
   if (fleetDeptId == null) return; // no departments yet — skip demo seeding
 
   const trucks = await db.select().from(trucksTable);
@@ -521,7 +527,10 @@ const EXTRA_CUSTOM = [
 async function ensureExtraTrailersAndHandhelds() {
   const { departmentsTable } = await import("./schema");
   const allDepts = await db.select().from(departmentsTable);
-  const fleetDeptId = allDepts.find((d) => d.key === "Fleet")?.id ?? allDepts[0]?.id;
+  const fleetDeptId =
+    allDepts.find((d) => d.key === "Landscaping")?.id ??
+    allDepts.find((d) => d.key === "Admin")?.id ??
+    allDepts[0]?.id;
   const tsDeptId = allDepts.find((d) => d.key === "TreeService")?.id ?? fleetDeptId;
   const lsDeptId = allDepts.find((d) => d.key === "Landscaping")?.id ?? fleetDeptId;
   if (fleetDeptId == null) return;

@@ -360,7 +360,21 @@ export async function customFetch<T = unknown>(
 
   const requestInfo = { method, url: resolveUrl(input) };
 
-  const response = await fetch(input, { ...init, method, headers });
+  // Always send cookies. The admin / portal frontends rely on the
+  // signed `jt_*_session` cookie set by `/api/auth/login`. In Replit
+  // deployments the static frontend and API can be served from
+  // different origins (or behind path-rewriting routers that the
+  // browser treats as cross-site), so the default `same-origin`
+  // credentials mode causes the session cookie to silently drop and
+  // the user gets stuck on the login screen.
+  const credentials: RequestCredentials = init.credentials ?? "include";
+
+  const response = await fetch(input, {
+    ...init,
+    method,
+    headers,
+    credentials,
+  });
 
   if (!response.ok) {
     const errorData = await parseErrorBody(response, method);

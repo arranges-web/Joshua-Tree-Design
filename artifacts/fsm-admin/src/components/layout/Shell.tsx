@@ -86,7 +86,7 @@ function DepartmentSwitcherInner() {
   const { activeDeptId, setActiveDeptId } = useDepartmentFilter();
   const { data: deptsData } = useListDepartments();
 
-  const HIDDEN_DEPT_KEYS = ["Admin", "Irrigation"];
+  const HIDDEN_DEPT_KEYS = ["Admin"];
   const depts = (deptsData?.departments ?? []).filter(
     (d) => !HIDDEN_DEPT_KEYS.includes(d.key),
   );

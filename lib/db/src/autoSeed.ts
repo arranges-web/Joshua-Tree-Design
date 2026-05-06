@@ -34,11 +34,12 @@ const ROLE_LABELS: Record<RoleKey, string> = {
 
 const DEPT_LABELS: Record<DepartmentKey, string> = {
   Admin: "Administration",
+  Sales: "Sales",
   Lawn: "Lawn",
-  Landscaping: "Land",
+  Landscaping: "Landscaping",
   Pest: "Pest",
   TreeService: "Tree",
-  Irrigation: "Irrigation Services",
+  Fertilization: "Fertilization",
 };
 
 const DEFAULT_MATRIX: Record<
@@ -174,14 +175,14 @@ export async function populateData(): Promise<void> {
 
   // ── Users ─────────────────────────────────────────────────────────────────
   const userDefs = [
-    { email: "admin@joshuatreeinc.test",    fullName: "Alex Admin",     role: "ADMIN"     as RoleKey, dept: "Admin"      as DepartmentKey },
-    { email: "sales1@joshuatreeinc.test",   fullName: "Sam Sales",      role: "SALES"     as RoleKey, dept: "Lawn"       as DepartmentKey },
-    { email: "sales2@joshuatreeinc.test",   fullName: "Sara Estimator", role: "SALES"     as RoleKey, dept: "Lawn"       as DepartmentKey },
-    { email: "lead1@joshuatreeinc.test",    fullName: "Carl CrewLead",  role: "CREW_LEAD" as RoleKey, dept: "Landscaping" as DepartmentKey },
-    { email: "lead2@joshuatreeinc.test",    fullName: "Cathy CrewLead", role: "CREW_LEAD" as RoleKey, dept: "Landscaping" as DepartmentKey },
+    { email: "admin@joshuatreeinc.test",    fullName: "Alex Admin",     role: "ADMIN"     as RoleKey, dept: "Admin"        as DepartmentKey },
+    { email: "sales1@joshuatreeinc.test",   fullName: "Sam Sales",      role: "SALES"     as RoleKey, dept: "Sales"        as DepartmentKey },
+    { email: "sales2@joshuatreeinc.test",   fullName: "Sara Estimator", role: "SALES"     as RoleKey, dept: "Sales"        as DepartmentKey },
+    { email: "lead1@joshuatreeinc.test",    fullName: "Carl CrewLead",  role: "CREW_LEAD" as RoleKey, dept: "Landscaping"  as DepartmentKey },
+    { email: "lead2@joshuatreeinc.test",    fullName: "Cathy CrewLead", role: "CREW_LEAD" as RoleKey, dept: "Lawn"         as DepartmentKey },
     { email: "lead3@joshuatreeinc.test",    fullName: "Bobby CrewLead", role: "CREW_LEAD" as RoleKey, dept: "TreeService"  as DepartmentKey },
     { email: "mechanic@joshuatreeinc.test", fullName: "Mike Mechanic",  role: "MECHANIC"  as RoleKey, dept: "Pest"         as DepartmentKey },
-    { email: "accounting@joshuatreeinc.test", fullName: "Anna Accountant", role: "ACCOUNTING_MANAGER" as RoleKey, dept: "Admin"      as DepartmentKey },
+    { email: "accounting@joshuatreeinc.test", fullName: "Anna Accountant", role: "ACCOUNTING_MANAGER" as RoleKey, dept: "Admin"     as DepartmentKey },
   ];
   const insertedUsers = await db
     .insert(usersTable)
@@ -369,9 +370,14 @@ export async function populateData(): Promise<void> {
   // ── Fleet ─────────────────────────────────────────────────────────────────
   // Trucks include brand/model/purchase data + odometer state so the Smart
   // Asset Registry, QR-code action pages, and Pulse dashboard have rich data.
-  const dLandscaping = deptByKey.get("Landscaping")!;
-  const dTreeService  = deptByKey.get("TreeService")!;
-  const dPest         = deptByKey.get("Pest")!;
+  // Each visible department gets at least one truck so the dept-filter
+  // dropdown changes the data shown.
+  const dSales         = deptByKey.get("Sales")!;
+  const dLawn          = deptByKey.get("Lawn")!;
+  const dLandscaping   = deptByKey.get("Landscaping")!;
+  const dPest          = deptByKey.get("Pest")!;
+  const dTreeService   = deptByKey.get("TreeService")!;
+  const dFertilization = deptByKey.get("Fertilization")!;
 
   const insertedTrucks = await db
     .insert(trucksTable)
@@ -417,6 +423,58 @@ export async function populateData(): Promise<void> {
         purchaseDate: new Date(2022, 5, 1),
         currentMileage: 41_310,
         serviceIntervalMiles: 7_500,
+      },
+      {
+        name: "T-06 Lawn Service Truck",
+        brand: "Ford",
+        model: "F-250 Super Duty",
+        vin: "1FT7W2BT0PED00006",
+        plate: "JTREE-6",
+        status: "ACTIVE",
+        departmentId: dLawn,
+        purchasePriceCents: 5_800_000,
+        purchaseDate: new Date(2023, 4, 20),
+        currentMileage: 28_450,
+        serviceIntervalMiles: 5_000,
+      },
+      {
+        name: "T-07 Pest Control Van",
+        brand: "Ford",
+        model: "Transit 250 Cargo",
+        vin: "1FTBR1Y83PKB00007",
+        plate: "JTREE-7",
+        status: "ACTIVE",
+        departmentId: dPest,
+        purchasePriceCents: 4_200_000,
+        purchaseDate: new Date(2022, 8, 14),
+        currentMileage: 61_230,
+        serviceIntervalMiles: 5_000,
+      },
+      {
+        name: "T-08 Sales Estimator",
+        brand: "Toyota",
+        model: "Tacoma SR5",
+        vin: "3TYCZ5AN0PT00008",
+        plate: "JTREE-8",
+        status: "ACTIVE",
+        departmentId: dSales,
+        purchasePriceCents: 3_950_000,
+        purchaseDate: new Date(2024, 2, 6),
+        currentMileage: 12_140,
+        serviceIntervalMiles: 5_000,
+      },
+      {
+        name: "T-09 Fertilization Tank Truck",
+        brand: "Isuzu",
+        model: "NPR-HD Tanker",
+        vin: "JALC4W160P7000009",
+        plate: "JTREE-9",
+        status: "ACTIVE",
+        departmentId: dFertilization,
+        purchasePriceCents: 6_450_000,
+        purchaseDate: new Date(2023, 1, 18),
+        currentMileage: 22_770,
+        serviceIntervalMiles: 5_000,
       },
     ])
     .returning();
@@ -493,6 +551,48 @@ export async function populateData(): Promise<void> {
         purchasePriceCents: 3_450_000,
         purchaseDate: new Date(2022, 8, 20),
         currentHours: 875,
+        serviceIntervalHours: 200,
+      },
+      // Sales — laser measure (estimating gear)
+      {
+        name: "Bosch GLM-50 Laser",
+        type: "Measuring Tool",
+        brand: "Bosch",
+        model: "GLM-50 C",
+        serial: "BSH-GLM50-006",
+        status: "ACTIVE",
+        departmentId: dSales,
+        purchasePriceCents: 18_900,
+        purchaseDate: new Date(2024, 1, 10),
+        currentHours: 0,
+        serviceIntervalHours: 999,
+      },
+      // Lawn dept primary mower
+      {
+        name: "Exmark Lazer Z Mower",
+        type: "Zero-Turn Mower",
+        brand: "Exmark",
+        model: "Lazer Z X-Series",
+        serial: "EX-LZX-007",
+        status: "ACTIVE",
+        departmentId: dLawn,
+        purchasePriceCents: 1_200_000,
+        purchaseDate: new Date(2023, 2, 10),
+        currentHours: 620,
+        serviceIntervalHours: 200,
+      },
+      // Fertilization dept rig
+      {
+        name: "Z-Spray Junior Spreader",
+        type: "Spreader/Sprayer",
+        brand: "Z-Spray",
+        model: "Junior Max",
+        serial: "ZS-JR-008",
+        status: "ACTIVE",
+        departmentId: dFertilization,
+        purchasePriceCents: 985_000,
+        purchaseDate: new Date(2023, 7, 11),
+        currentHours: 410,
         serviceIntervalHours: 200,
       },
     ])
