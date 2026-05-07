@@ -5,6 +5,7 @@ import {
   equipmentTable,
   maintenanceLogsTable,
 } from "./schema";
+import { isDemoMode } from "./demoMode";
 
 /**
  * Idempotent backfill that enriches the demo fleet with the new asset-registry
@@ -22,10 +23,11 @@ export async function backfillFleetData(): Promise<void> {
   await backfillEquipmentCategories();
   await backfillMaintenanceLogs();
   await backfillSlugs();
-  // Demo enrichment (extra synthetic assets) is gated to non-production
-  // environments so we never contaminate a real customer DB. In production,
-  // operators should add their own assets via the Asset Registry UI.
-  if (process.env.NODE_ENV !== "production") {
+  // Demo enrichment (extra synthetic assets) is gated by DEMO_MODE so
+  // the published Joshua Tree demo on Replit can ship with a fully
+  // populated fleet. Set DEMO_MODE=false to opt out before pointing
+  // this codebase at a real customer DB.
+  if (isDemoMode()) {
     await ensureExtraAssets();
     await ensureExtraTrailersAndHandhelds();
   }

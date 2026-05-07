@@ -27,6 +27,7 @@ import {
   rolesTable,
   DEPARTMENT_KEYS,
 } from "./schema";
+import { isDemoMode } from "./demoMode";
 
 const DEPT_LABELS: Record<(typeof DEPARTMENT_KEYS)[number], string> = {
   Admin: "Administration",
@@ -113,8 +114,10 @@ export async function backfillDepartments(): Promise<void> {
     }
   }
 
-  // 4. Per-dept demo fleet — non-production only.
-  if (process.env["NODE_ENV"] !== "production") {
+  // 4. Per-dept demo fleet. Gated by DEMO_MODE so the live published
+  // demo also seeds a starter truck + equipment for any visible dept
+  // that lacks one.
+  if (isDemoMode()) {
     await ensureDepartmentFleet();
   }
 
