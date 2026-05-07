@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import {
   useListMaintenanceLogs, useCreateMaintenanceLog, useUpdateMaintenanceLog, useDeleteMaintenanceLog, getListMaintenanceLogsQueryKey,
   useListTrucks, useListEquipment, useListEmployees,
@@ -22,7 +22,21 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
-import { Edit, Trash2, Plus, User, Paperclip, Upload, Download, X } from "lucide-react";
+import { Card, CardContent } from "@/components/ui/card";
+import {
+  Edit,
+  Trash2,
+  Plus,
+  Paperclip,
+  Upload,
+  Download,
+  X,
+  Search,
+  Wrench,
+  DollarSign,
+  Receipt,
+  Filter,
+} from "lucide-react";
 import { rowsToCsv, downloadCsv } from "@/lib/csv";
 
 const usd = (cents: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format((cents ?? 0) / 100);
@@ -53,12 +67,21 @@ export function Maintenance() {
   const { data: equipmentData } = useListEquipment(deptParams);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [previewLogId, setPreviewLogId] = useState<number | null>(null);
+  const [search, setSearch] = useState("");
+  const [kindFilter, setKindFilter] = useState<string>("ALL");
+  const [categoryFilter, setCategoryFilter] = useState<string>("ALL");
+  const [receiptFilter, setReceiptFilter] = useState<string>("ALL");
 
-  const truckById = new Map(
-    (trucksData?.trucks ?? []).map((t) => [t.id, t.name] as const),
+  const truckById = useMemo(
+    () => new Map((trucksData?.trucks ?? []).map((t) => [t.id, t.name] as const)),
+    [trucksData],
   );
-  const equipmentById = new Map(
-    (equipmentData?.equipment ?? []).map((e) => [e.id, e.name] as const),
+  const equipmentById = useMemo(
+    () =>
+      new Map(
+        (equipmentData?.equipment ?? []).map((e) => [e.id, e.name] as const),
+      ),
+    [equipmentData],
   );
 
   function assetName(log: MaintenanceLogExt): string {
@@ -68,10 +91,73 @@ export function Maintenance() {
     return "Unknown";
   }
 
-  const logs = (data?.logs ?? []) as MaintenanceLogExt[];
+  const allLogs = useMemo(
+    () => ((data?.logs ?? []) as MaintenanceLogExt[]),
+    [data],
+  );
+
+  const filteredLogs = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return allLogs.filter((log) => {
+      if (kindFilter !== "ALL" && log.kind !== kindFilter) return false;
+      if (categoryFilter !== "ALL") {
+        if (categoryFilter === "NONE" && log.category) return false;
+        if (categoryFilter !== "NONE" && log.category !== categoryFilter)
+          return false;
+      }
+      if (receiptFilter === "WITH" && !log.hasReceipt) return false;
+      if (receiptFilter === "WITHOUT" && log.hasReceipt) return false;
+      if (q) {
+        const haystack = [
+          assetName(log),
+          log.description,
+          log.vendor ?? "",
+          log.notes ?? "",
+          log.loggedByName ?? "",
+        ]
+          .join(" ")
+          .toLowerCase();
+        if (!haystack.includes(q)) return false;
+      }
+      return true;
+    });
+    // assetName is derived from in-memory maps that change with deptParams,
+    // and the filters are local — no need to memo across the asset name fn
+    // separately.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [allLogs, search, kindFilter, categoryFilter, receiptFilter, truckById, equipmentById]);
+
+  // Summary stats reflect the *filtered* set so the numbers always
+  // match what the table is showing — the accountant can scope by
+  // dept + filter and instantly read the totals.
+  const stats = useMemo(() => {
+    let totalCents = 0;
+    let laborCents = 0;
+    let partsCents = 0;
+    let withReceipt = 0;
+    const byCategory: Record<string, { count: number; cents: number }> = {};
+    for (const log of filteredLogs) {
+      totalCents += log.costCents ?? 0;
+      laborCents += log.laborCostCents ?? 0;
+      partsCents += log.partsCostCents ?? 0;
+      if (log.hasReceipt) withReceipt += 1;
+      const key = log.category ?? "UNCATEGORIZED";
+      const bucket = (byCategory[key] ??= { count: 0, cents: 0 });
+      bucket.count += 1;
+      bucket.cents += log.costCents ?? 0;
+    }
+    return {
+      count: filteredLogs.length,
+      totalCents,
+      laborCents,
+      partsCents,
+      withReceipt,
+      byCategory,
+    };
+  }, [filteredLogs]);
 
   function handleExport() {
-    const csv = rowsToCsv(logs, [
+    const csv = rowsToCsv(filteredLogs, [
       { header: "Date", value: (l) => new Date(l.performedAt).toISOString().slice(0, 10) },
       { header: "Asset", value: (l) => assetName(l) },
       { header: "Kind", value: (l) => l.kind },
@@ -91,16 +177,28 @@ export function Maintenance() {
     downloadCsv(`maintenance-logs-${stamp}.csv`, csv);
   }
 
+  const filtersActive =
+    search.trim() !== "" ||
+    kindFilter !== "ALL" ||
+    categoryFilter !== "ALL" ||
+    receiptFilter !== "ALL";
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap justify-between items-center gap-3">
-        <h1 className="text-3xl font-bold">Maintenance Logs</h1>
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Maintenance Logs</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Every wrench-turn, vendor receipt, and dollar spent — searchable
+            and exportable for your accountant.
+          </p>
+        </div>
         <div className="flex items-center gap-2">
           <Button
             variant="outline"
             size="sm"
             onClick={handleExport}
-            disabled={logs.length === 0}
+            disabled={filteredLogs.length === 0}
           >
             <Download className="mr-2 h-4 w-4" /> Export CSV
           </Button>
@@ -117,14 +215,130 @@ export function Maintenance() {
         </div>
       </div>
 
+      <div className="grid gap-3 md:grid-cols-4">
+        <SummaryCard
+          icon={Wrench}
+          label="Logs"
+          value={stats.count.toLocaleString()}
+          sub={
+            filtersActive
+              ? `of ${allLogs.length.toLocaleString()} total`
+              : "in current view"
+          }
+        />
+        <SummaryCard
+          icon={DollarSign}
+          label="Total spend"
+          value={usd(stats.totalCents)}
+          sub={`${usd(stats.laborCents)} labor · ${usd(stats.partsCents)} parts`}
+          tone="rose"
+        />
+        <SummaryCard
+          icon={Receipt}
+          label="Receipts"
+          value={`${stats.withReceipt.toLocaleString()} / ${stats.count.toLocaleString()}`}
+          sub={
+            stats.count > 0
+              ? `${Math.round((stats.withReceipt / stats.count) * 100)}% have a receipt attached`
+              : "—"
+          }
+        />
+        <SummaryCard
+          icon={Filter}
+          label="Top category"
+          value={
+            (() => {
+              const entries = Object.entries(stats.byCategory);
+              if (entries.length === 0) return "—";
+              entries.sort((a, b) => b[1].cents - a[1].cents);
+              return entries[0]![0] === "UNCATEGORIZED"
+                ? "Uncategorized"
+                : entries[0]![0];
+            })()
+          }
+          sub={
+            (() => {
+              const entries = Object.entries(stats.byCategory);
+              if (entries.length === 0) return "no spend yet";
+              entries.sort((a, b) => b[1].cents - a[1].cents);
+              return `${usd(entries[0]![1].cents)} this view`;
+            })()
+          }
+          tone="amber"
+        />
+      </div>
+
+      <Card className="border-border/60">
+        <CardContent className="flex flex-wrap items-center gap-3 p-4">
+          <div className="relative min-w-[220px] flex-1">
+            <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              placeholder="Search asset, vendor, description, notes…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="pl-8"
+            />
+          </div>
+          <Select value={kindFilter} onValueChange={setKindFilter}>
+            <SelectTrigger className="w-[160px]">
+              <SelectValue placeholder="Kind" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="ALL">All kinds</SelectItem>
+              <SelectItem value="SCHEDULED">Scheduled</SelectItem>
+              <SelectItem value="REPAIR">Repair</SelectItem>
+              <SelectItem value="INSPECTION">Inspection</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+            <SelectTrigger className="w-[170px]">
+              <SelectValue placeholder="Category" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="ALL">All categories</SelectItem>
+              {RECEIPT_CATEGORIES.map((c) => (
+                <SelectItem key={c.value} value={c.value}>
+                  {c.label}
+                </SelectItem>
+              ))}
+              <SelectItem value="NONE">Uncategorized</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select value={receiptFilter} onValueChange={setReceiptFilter}>
+            <SelectTrigger className="w-[170px]">
+              <SelectValue placeholder="Receipt" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="ALL">Any receipt</SelectItem>
+              <SelectItem value="WITH">With receipt</SelectItem>
+              <SelectItem value="WITHOUT">No receipt</SelectItem>
+            </SelectContent>
+          </Select>
+          {filtersActive && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setSearch("");
+                setKindFilter("ALL");
+                setCategoryFilter("ALL");
+                setReceiptFilter("ALL");
+              }}
+            >
+              Clear
+            </Button>
+          )}
+        </CardContent>
+      </Card>
+
       {isLoading ? (
         <div className="space-y-2">
           {Array.from({ length: 5 }).map((_, i) => (
             <Skeleton key={i} className="h-12 w-full" />
           ))}
         </div>
-      ) : logs.length > 0 ? (
-        <div className="rounded-md border bg-card">
+      ) : filteredLogs.length > 0 ? (
+        <div className="rounded-md border bg-card overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow>
@@ -142,9 +356,9 @@ export function Maintenance() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {logs.map((log) => (
+              {filteredLogs.map((log) => (
                 <TableRow key={log.id}>
-                  <TableCell className="text-sm font-medium">{assetName(log)}</TableCell>
+                  <TableCell className="text-sm font-medium whitespace-nowrap">{assetName(log)}</TableCell>
                   <TableCell><Badge variant="outline">{log.kind}</Badge></TableCell>
                   <TableCell>
                     {log.category ? (
@@ -158,8 +372,8 @@ export function Maintenance() {
                   <TableCell className="text-sm">
                     {log.vendor ?? <span className="text-xs text-muted-foreground/40">—</span>}
                   </TableCell>
-                  <TableCell>{log.description}</TableCell>
-                  <TableCell>{new Date(log.performedAt).toLocaleDateString()}</TableCell>
+                  <TableCell className="max-w-[280px] truncate" title={log.description}>{log.description}</TableCell>
+                  <TableCell className="whitespace-nowrap">{new Date(log.performedAt).toLocaleDateString()}</TableCell>
                   <TableCell className="text-right font-mono text-xs">{usd(log.laborCostCents ?? 0)}</TableCell>
                   <TableCell className="text-right font-mono text-xs">{usd(log.partsCostCents ?? 0)}</TableCell>
                   <TableCell className="text-right font-mono font-semibold">{usd(log.costCents)}</TableCell>
@@ -198,7 +412,9 @@ export function Maintenance() {
         </div>
       ) : (
         <div className="text-center py-12 text-muted-foreground border rounded-md bg-card">
-          No maintenance logs found.
+          {filtersActive
+            ? "No logs match the current filters."
+            : "No maintenance logs found."}
         </div>
       )}
 
@@ -209,6 +425,45 @@ export function Maintenance() {
         />
       )}
     </div>
+  );
+}
+
+function SummaryCard({
+  icon: Icon,
+  label,
+  value,
+  sub,
+  tone = "neutral",
+}: {
+  icon: React.ComponentType<{ className?: string }>;
+  label: string;
+  value: string;
+  sub?: string;
+  tone?: "neutral" | "rose" | "amber" | "emerald";
+}) {
+  const toneClass =
+    tone === "rose"
+      ? "text-rose-700"
+      : tone === "amber"
+        ? "text-amber-700"
+        : tone === "emerald"
+          ? "text-emerald-700"
+          : "text-foreground";
+  return (
+    <Card className="border-border/60">
+      <CardContent className="flex items-start justify-between p-5">
+        <div>
+          <div className="text-xs font-mono uppercase tracking-wider text-muted-foreground">
+            {label}
+          </div>
+          <div className={`mt-2 text-2xl font-bold ${toneClass}`}>{value}</div>
+          {sub && <div className="mt-1 text-xs text-muted-foreground">{sub}</div>}
+        </div>
+        <div className="flex h-10 w-10 items-center justify-center rounded-md bg-muted text-muted-foreground">
+          <Icon className="h-5 w-5" />
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 

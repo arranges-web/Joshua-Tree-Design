@@ -325,6 +325,33 @@ export type AccountingMonthRow = {
   maintenanceSpendCents: number;
 };
 
+export type AccountingAging = {
+  currentCents: number;
+  d1to30Cents: number;
+  d31to60Cents: number;
+  d61to90Cents: number;
+  d90plusCents: number;
+};
+
+export type AccountingExpenseCategoryKey =
+  | "LABOR"
+  | "PARTS"
+  | "FUEL"
+  | "OUTSOURCED"
+  | "OTHER"
+  | "UNCATEGORIZED";
+
+export type AccountingExpensesByCategory = Record<
+  AccountingExpenseCategoryKey,
+  { count: number; cents: number }
+>;
+
+export type AccountingQuotesByStatus = {
+  draft: { count: number; cents: number };
+  sent: { count: number; cents: number };
+  approved: { count: number; cents: number };
+};
+
 export type AccountingBranch = {
   departmentId: number | null;
   departmentLabel: string;
@@ -333,6 +360,17 @@ export type AccountingBranch = {
   quotePipelineCents: number;
   maintenanceSpendCents: number;
   monthly: AccountingMonthRow[];
+  aging: AccountingAging;
+  expensesByCategory: AccountingExpensesByCategory;
+  quotesByStatus: AccountingQuotesByStatus;
+  maintenanceLogCount: number;
+  maintenanceLogsWithReceipt: number;
+};
+
+export type AccountingTopVendor = {
+  vendor: string;
+  cents: number;
+  logCount: number;
 };
 
 export type AccountingSummary = {
@@ -344,6 +382,7 @@ export type AccountingSummary = {
   };
   branches: AccountingBranch[];
   orgMonthly: AccountingMonthRow[];
+  topVendors: AccountingTopVendor[];
 };
 
 export const ACCOUNTING_KEY = ["accounting", "summary"] as const;

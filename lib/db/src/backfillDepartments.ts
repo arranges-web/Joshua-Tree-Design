@@ -14,7 +14,7 @@
  *     data on screen. Skipped in production, since real customers add
  *     their own assets via the UI.
  */
-import { eq, isNull, notInArray, or, sql } from "drizzle-orm";
+import { eq, isNull, notInArray, or, sql, and } from "drizzle-orm";
 import { db } from "./client";
 import {
   departmentsTable,
@@ -23,6 +23,7 @@ import {
   usersTable,
   crewsTable,
   crewMembersTable,
+  maintenanceLogsTable,
   rolesTable,
   DEPARTMENT_KEYS,
 } from "./schema";
@@ -124,6 +125,14 @@ export async function backfillDepartments(): Promise<void> {
   // have one, led by the highest-priority user already in that dept
   // (CREW_LEAD > MECHANIC > ADMIN > anyone else).
   await ensureDepartmentCrew();
+
+  // 6. Enrich existing maintenance logs with vendor / category /
+  // notes / receipt so the accounting dashboards have something to
+  // show out of the box, and seed a maintenance trail for any truck
+  // or equipment row that has no logs yet (typical for the brand-new
+  // Sales / Fertilization assets).
+  await enrichMaintenanceLogs();
+  await seedMissingMaintenanceLogs();
 }
 
 type FleetSeed = {
@@ -426,6 +435,293 @@ const ROLE_PRIORITY: Record<string, number> = {
   SALES: 4,
   ACCOUNTING_MANAGER: 5,
 };
+
+// ---------- Maintenance enrichment ----------
+
+type ReceiptCategory = "LABOR" | "PARTS" | "FUEL" | "OUTSOURCED" | "OTHER";
+
+type VendorPick = {
+  vendor: string;
+  category: ReceiptCategory;
+  noteTemplate?: (cents: number) => string;
+};
+
+// Heuristic vendor + category mapping based on the existing
+// description text. Keeps the demo data feeling real without us
+// having to hand-author one entry per row.
+function inferVendor(description: string): VendorPick {
+  const d = description.toLowerCase();
+  if (d.includes("oil") || d.includes("filter") || d.includes("fluid"))
+    return { vendor: "NAPA Auto Parts — Fort Myers", category: "PARTS" };
+  if (d.includes("tire"))
+    return { vendor: "Discount Tire — Cape Coral", category: "PARTS" };
+  if (d.includes("hydraulic"))
+    return { vendor: "Mid-Florida Hydraulics", category: "LABOR" };
+  if (d.includes("fuel") || d.includes("gas"))
+    return { vendor: "Wawa Fleet Card #4412", category: "FUEL" };
+  if (d.includes("crane") || d.includes("certif"))
+    return { vendor: "Florida Crane Inspection Co.", category: "OUTSOURCED" };
+  if (d.includes("inspection") || d.includes("dot"))
+    return { vendor: "Sunshine State Inspection", category: "OUTSOURCED" };
+  if (d.includes("brake"))
+    return { vendor: "Big Truck Brake & Clutch", category: "PARTS" };
+  if (d.includes("chain") || d.includes("bar"))
+    return { vendor: "Bayshore Saw & Mower", category: "PARTS" };
+  if (d.includes("paint") || d.includes("body"))
+    return { vendor: "Jim's Auto Body", category: "OUTSOURCED" };
+  if (d.includes("seal") || d.includes("gasket"))
+    return { vendor: "Industrial Seal Supply", category: "PARTS" };
+  return { vendor: "Joshua Tree Shop", category: "LABOR" };
+}
+
+// Deterministic SVG receipt generator. We base64-encode the SVG so
+// the result is a `data:image/svg+xml;base64,…` URL that the existing
+// receipt-preview modal renders without any extra plumbing. Keeping
+// the layout simple and inlining the styles makes this resilient to
+// the email/img/etc. renderers users might paste into.
+function svgReceiptDataUrl(opts: {
+  vendor: string;
+  category: ReceiptCategory;
+  description: string;
+  totalCents: number;
+  laborCents: number;
+  partsCents: number;
+  performedAt: Date;
+}): string {
+  const { vendor, category, description, totalCents, laborCents, partsCents, performedAt } = opts;
+  const fmt = (cents: number) =>
+    `$${(cents / 100).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ",")}`;
+  const dateStr = performedAt.toISOString().slice(0, 10);
+  // Wrap long descriptions across two lines.
+  const desc =
+    description.length > 36 ? `${description.slice(0, 33)}…` : description;
+  const id = `INV-${Math.abs(
+    Array.from(`${vendor}${dateStr}${totalCents}`).reduce(
+      (h, c) => (h * 31 + c.charCodeAt(0)) | 0,
+      0,
+    ),
+  )
+    .toString(36)
+    .toUpperCase()
+    .slice(0, 8)}`;
+  // Two-column line items: labor + parts when both are non-zero,
+  // otherwise just one row. Tax is fixed at 6% of subtotal so the
+  // totals line up — matches FL state sales tax for plausibility.
+  const subtotalCents = laborCents + partsCents;
+  const taxCents = Math.max(0, totalCents - subtotalCents);
+  const rows: { label: string; cents: number }[] = [];
+  if (laborCents > 0) rows.push({ label: "Labor", cents: laborCents });
+  if (partsCents > 0) rows.push({ label: "Parts & supplies", cents: partsCents });
+  if (rows.length === 0) rows.push({ label: "Service", cents: totalCents });
+  const lineY = (i: number) => 200 + i * 22;
+  const linesSvg = rows
+    .map(
+      (r, i) =>
+        `<text x="36" y="${lineY(i)}" font-size="13" fill="#1f2937">${r.label}</text>` +
+        `<text x="464" y="${lineY(i)}" font-size="13" fill="#1f2937" text-anchor="end">${fmt(r.cents)}</text>`,
+    )
+    .join("");
+  const subtotalY = lineY(rows.length) + 16;
+  const totalY = subtotalY + 32;
+  const svg = `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 ${totalY + 60}" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">
+  <rect width="500" height="${totalY + 60}" fill="#fafaf7"/>
+  <rect x="14" y="14" width="472" height="${totalY + 32}" rx="6" fill="#ffffff" stroke="#d4d4cf"/>
+  <text x="36" y="56" font-size="20" font-weight="700" fill="#0f172a">${escapeSvg(vendor)}</text>
+  <text x="36" y="78" font-size="11" fill="#6b7280">Receipt · ${id}</text>
+  <text x="464" y="56" font-size="13" fill="#0f172a" text-anchor="end">${dateStr}</text>
+  <text x="464" y="76" font-size="11" fill="#6b7280" text-anchor="end">Category · ${category}</text>
+  <line x1="36" y1="100" x2="464" y2="100" stroke="#e5e7eb"/>
+  <text x="36" y="124" font-size="12" fill="#6b7280">Description</text>
+  <text x="36" y="146" font-size="14" fill="#0f172a">${escapeSvg(desc)}</text>
+  <line x1="36" y1="170" x2="464" y2="170" stroke="#e5e7eb"/>
+  <text x="36" y="190" font-size="11" fill="#6b7280" letter-spacing="1">LINE ITEMS</text>
+  ${linesSvg}
+  <line x1="36" y1="${subtotalY - 12}" x2="464" y2="${subtotalY - 12}" stroke="#e5e7eb"/>
+  <text x="36" y="${subtotalY}" font-size="12" fill="#6b7280">Subtotal</text>
+  <text x="464" y="${subtotalY}" font-size="12" fill="#1f2937" text-anchor="end">${fmt(subtotalCents)}</text>
+  <text x="36" y="${subtotalY + 18}" font-size="12" fill="#6b7280">Tax</text>
+  <text x="464" y="${subtotalY + 18}" font-size="12" fill="#1f2937" text-anchor="end">${fmt(taxCents)}</text>
+  <text x="36" y="${totalY}" font-size="14" font-weight="700" fill="#0f172a">TOTAL</text>
+  <text x="464" y="${totalY}" font-size="16" font-weight="700" fill="#0f172a" text-anchor="end">${fmt(totalCents)}</text>
+  <text x="36" y="${totalY + 26}" font-size="10" fill="#9ca3af">Auto-generated demo receipt · Joshua Tree Inc.</text>
+</svg>`;
+  // Buffer is available in node; if running in an env without it the
+  // backfill simply skips this step.
+  const b64 =
+    typeof Buffer !== "undefined"
+      ? Buffer.from(svg, "utf-8").toString("base64")
+      : btoa(svg);
+  return `data:image/svg+xml;base64,${b64}`;
+}
+
+function escapeSvg(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+async function enrichMaintenanceLogs(): Promise<void> {
+  // Pick up logs that don't yet have a vendor populated. The receipt
+  // column may have been added by the same boot's earlier ALTER step.
+  const logs = await db
+    .select()
+    .from(maintenanceLogsTable)
+    .where(or(isNull(maintenanceLogsTable.vendor), eq(maintenanceLogsTable.vendor, "")));
+
+  for (const log of logs) {
+    const pick = inferVendor(log.description);
+    const performedAt = new Date(log.performedAt);
+    const totalCents = log.costCents ?? 0;
+    const laborCents = log.laborCostCents ?? 0;
+    const partsCents = log.partsCostCents ?? 0;
+    const dataUrl = svgReceiptDataUrl({
+      vendor: pick.vendor,
+      category: pick.category,
+      description: log.description,
+      totalCents,
+      laborCents,
+      partsCents,
+      performedAt,
+    });
+    await db
+      .update(maintenanceLogsTable)
+      .set({
+        vendor: pick.vendor,
+        category: pick.category,
+        receiptDataUrl: dataUrl,
+        // Only set notes if the column was empty; preserves any
+        // accountant-entered notes from the UI.
+        notes:
+          log.notes && log.notes.length > 0
+            ? log.notes
+            : "Auto-attached demo receipt — replace on next visit.",
+      })
+      .where(eq(maintenanceLogsTable.id, log.id));
+  }
+}
+
+// Each visible-dept truck/equipment row that has zero maintenance
+// logs gets a small, recent maintenance trail so the Pulse + Money
+// Pits + Accounting expense category breakdowns have data per dept.
+const SEED_LOG_TEMPLATES: Array<{
+  daysAgo: number;
+  kind: "SCHEDULED" | "REPAIR" | "INSPECTION";
+  description: string;
+  laborCents: number;
+  partsCents: number;
+}> = [
+  {
+    daysAgo: 18,
+    kind: "SCHEDULED",
+    description: "Oil & filter change, lube fittings, fluid top-off",
+    laborCents: 9_500,
+    partsCents: 6_500,
+  },
+  {
+    daysAgo: 47,
+    kind: "REPAIR",
+    description: "Replaced front brake pads & rotors — pulsing complaint",
+    laborCents: 22_000,
+    partsCents: 38_000,
+  },
+  {
+    daysAgo: 92,
+    kind: "INSPECTION",
+    description: "Quarterly DOT safety inspection — passed with notes",
+    laborCents: 12_500,
+    partsCents: 0,
+  },
+];
+
+async function seedMissingMaintenanceLogs(): Promise<void> {
+  const allLogs = await db
+    .select({
+      truckId: maintenanceLogsTable.truckId,
+      equipmentId: maintenanceLogsTable.equipmentId,
+    })
+    .from(maintenanceLogsTable);
+  const trucksWithLogs = new Set(
+    allLogs.filter((l) => l.truckId != null).map((l) => l.truckId as number),
+  );
+  const equipWithLogs = new Set(
+    allLogs.filter((l) => l.equipmentId != null).map((l) => l.equipmentId as number),
+  );
+
+  const trucks = await db.select().from(trucksTable);
+  const equipment = await db.select().from(equipmentTable);
+
+  for (const t of trucks) {
+    if (trucksWithLogs.has(t.id)) continue;
+    const baseMileage = t.currentMileage ?? 0;
+    for (const tpl of SEED_LOG_TEMPLATES) {
+      const performedAt = new Date(Date.now() - tpl.daysAgo * 86_400_000);
+      const totalCents = tpl.laborCents + tpl.partsCents;
+      const pick = inferVendor(tpl.description);
+      const receipt = svgReceiptDataUrl({
+        vendor: pick.vendor,
+        category: pick.category,
+        description: tpl.description,
+        totalCents,
+        laborCents: tpl.laborCents,
+        partsCents: tpl.partsCents,
+        performedAt,
+      });
+      await db.insert(maintenanceLogsTable).values({
+        truckId: t.id,
+        kind: tpl.kind,
+        description: tpl.description,
+        performedAt,
+        laborCostCents: tpl.laborCents,
+        partsCostCents: tpl.partsCents,
+        costCents: totalCents,
+        mileageAtService: Math.max(0, baseMileage - tpl.daysAgo * 12),
+        vendor: pick.vendor,
+        category: pick.category,
+        notes: "Demo seed.",
+        receiptDataUrl: receipt,
+      });
+    }
+  }
+
+  for (const e of equipment) {
+    if (equipWithLogs.has(e.id)) continue;
+    const baseHours = e.currentHours ?? 0;
+    // Equipment gets a lighter trail (2 logs) tracked in hours.
+    for (const tpl of SEED_LOG_TEMPLATES.slice(0, 2)) {
+      const performedAt = new Date(Date.now() - tpl.daysAgo * 86_400_000);
+      const totalCents = tpl.laborCents + tpl.partsCents;
+      const pick = inferVendor(tpl.description);
+      const receipt = svgReceiptDataUrl({
+        vendor: pick.vendor,
+        category: pick.category,
+        description: tpl.description,
+        totalCents,
+        laborCents: tpl.laborCents,
+        partsCents: tpl.partsCents,
+        performedAt,
+      });
+      await db.insert(maintenanceLogsTable).values({
+        equipmentId: e.id,
+        kind: tpl.kind,
+        description: tpl.description,
+        performedAt,
+        laborCostCents: tpl.laborCents,
+        partsCostCents: tpl.partsCents,
+        costCents: totalCents,
+        hoursAtService: Math.max(0, baseHours - tpl.daysAgo),
+        vendor: pick.vendor,
+        category: pick.category,
+        notes: "Demo seed.",
+        receiptDataUrl: receipt,
+      });
+    }
+  }
+  // Suppress unused-import if no rows match.
+  void and;
+}
 
 async function ensureDepartmentCrew(): Promise<void> {
   const allDepts = await db.select().from(departmentsTable);

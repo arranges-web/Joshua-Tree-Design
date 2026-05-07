@@ -74,6 +74,39 @@ router.get(
       return lead?.departmentId ?? null;
     }
 
+    type AgingBucket = {
+      currentCents: number; // not yet due (< 1d past issuedAt)
+      d1to30Cents: number;
+      d31to60Cents: number;
+      d61to90Cents: number;
+      d90plusCents: number;
+    };
+
+    type CategoryBuckets = {
+      LABOR: { count: number; cents: number };
+      PARTS: { count: number; cents: number };
+      FUEL: { count: number; cents: number };
+      OUTSOURCED: { count: number; cents: number };
+      OTHER: { count: number; cents: number };
+      UNCATEGORIZED: { count: number; cents: number };
+    };
+    function emptyCategoryBuckets(): CategoryBuckets {
+      return {
+        LABOR: { count: 0, cents: 0 },
+        PARTS: { count: 0, cents: 0 },
+        FUEL: { count: 0, cents: 0 },
+        OUTSOURCED: { count: 0, cents: 0 },
+        OTHER: { count: 0, cents: 0 },
+        UNCATEGORIZED: { count: 0, cents: 0 },
+      };
+    }
+
+    type QuoteStatusBuckets = {
+      draft: { count: number; cents: number };
+      sent: { count: number; cents: number };
+      approved: { count: number; cents: number };
+    };
+
     type Bucket = {
       departmentId: number | null;
       departmentLabel: string;
@@ -86,6 +119,11 @@ router.get(
         string,
         { collectedRevenueCents: number; maintenanceSpendCents: number }
       >;
+      aging: AgingBucket;
+      expensesByCategory: CategoryBuckets;
+      quotesByStatus: QuoteStatusBuckets;
+      maintenanceLogCount: number;
+      maintenanceLogsWithReceipt: number;
     };
 
     const buckets = new Map<string, Bucket>();
@@ -125,6 +163,21 @@ router.get(
           quotePipelineCents: 0,
           maintenanceSpendCents: 0,
           monthly,
+          aging: {
+            currentCents: 0,
+            d1to30Cents: 0,
+            d31to60Cents: 0,
+            d61to90Cents: 0,
+            d90plusCents: 0,
+          },
+          expensesByCategory: emptyCategoryBuckets(),
+          quotesByStatus: {
+            draft: { count: 0, cents: 0 },
+            sent: { count: 0, cents: 0 },
+            approved: { count: 0, cents: 0 },
+          },
+          maintenanceLogCount: 0,
+          maintenanceLogsWithReceipt: 0,
         };
         buckets.set(key, bucket);
       }
@@ -135,7 +188,11 @@ router.get(
     // as a row in the page (keeps the UI predictable).
     for (const d of depts) bucketFor(d.id);
 
-    // Invoices: split open vs paid, attribute to job's crew's department.
+    const NOW = Date.now();
+    const DAY_MS = 86_400_000;
+
+    // Invoices: split open vs paid, attribute to job's crew's department,
+    // and bucket open invoices by days-past-issued for the receivables view.
     for (const inv of invoices) {
       const deptId = deptForJob(inv.jobId);
       const bucket = bucketFor(deptId);
@@ -150,30 +207,83 @@ router.get(
         }
       } else {
         bucket.openInvoiceCents += inv.totalCents;
+        // Aging is keyed off issuedAt → today. Falls into "current" when
+        // there's no issued timestamp yet (DRAFT) or it's still in the
+        // first day post-issue.
+        let daysOpen = 0;
+        if (inv.issuedAt) {
+          daysOpen = Math.max(
+            0,
+            Math.floor((NOW - new Date(inv.issuedAt).getTime()) / DAY_MS),
+          );
+        }
+        if (daysOpen < 1) bucket.aging.currentCents += inv.totalCents;
+        else if (daysOpen <= 30) bucket.aging.d1to30Cents += inv.totalCents;
+        else if (daysOpen <= 60) bucket.aging.d31to60Cents += inv.totalCents;
+        else if (daysOpen <= 90) bucket.aging.d61to90Cents += inv.totalCents;
+        else bucket.aging.d90plusCents += inv.totalCents;
       }
     }
 
-    // Quotes: pipeline = anything not yet decided (DRAFT, SENT). Owners
-    // come from sales; departments come from the owner user.
+    // Quotes: track every status (not just DRAFT/SENT) so the pipeline
+    // page can show conversion. Pipeline cents stays as
+    // DRAFT+SENT for backwards compat with the existing UI.
     for (const q of quotes) {
-      if (q.status !== "DRAFT" && q.status !== "SENT") continue;
       const owner = userById.get(q.ownerUserId);
       const bucket = bucketFor(owner?.departmentId ?? null);
-      bucket.quotePipelineCents += q.totalCents;
+      const status = q.status;
+      if (status === "DRAFT") {
+        bucket.quotesByStatus.draft.count += 1;
+        bucket.quotesByStatus.draft.cents += q.totalCents;
+        bucket.quotePipelineCents += q.totalCents;
+      } else if (status === "SENT") {
+        bucket.quotesByStatus.sent.count += 1;
+        bucket.quotesByStatus.sent.cents += q.totalCents;
+        bucket.quotePipelineCents += q.totalCents;
+      } else if (status === "APPROVED") {
+        bucket.quotesByStatus.approved.count += 1;
+        bucket.quotesByStatus.approved.cents += q.totalCents;
+      }
     }
 
     // Maintenance: each log targets exactly one asset, and that asset
     // carries a required departmentId — so attribution is direct.
-    for (const log of maintenanceLogs) {
+    // Tracks expenses by category + receipt coverage for the expenses tab.
+    type MaintenanceLogRow = (typeof maintenanceLogs)[number] & {
+      vendor?: string | null;
+      category?: string | null;
+      receiptDataUrl?: string | null;
+    };
+    const vendorTotals = new Map<string, { cents: number; count: number }>();
+    for (const raw of maintenanceLogs as MaintenanceLogRow[]) {
+      const log = raw;
       let deptId: number | null = null;
       if (log.truckId) deptId = truckDept.get(log.truckId) ?? null;
       else if (log.equipmentId) deptId = equipDept.get(log.equipmentId) ?? null;
       const bucket = bucketFor(deptId);
-      bucket.maintenanceSpendCents += log.costCents ?? 0;
+      const cents = log.costCents ?? 0;
+      bucket.maintenanceSpendCents += cents;
+      bucket.maintenanceLogCount += 1;
+      if (log.receiptDataUrl != null && log.receiptDataUrl.length > 0) {
+        bucket.maintenanceLogsWithReceipt += 1;
+      }
       const d = new Date(log.performedAt);
       const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
       const m = bucket.monthly.get(key);
-      if (m) m.maintenanceSpendCents += log.costCents ?? 0;
+      if (m) m.maintenanceSpendCents += cents;
+      const cat =
+        log.category != null && log.category in bucket.expensesByCategory
+          ? (log.category as keyof CategoryBuckets)
+          : "UNCATEGORIZED";
+      bucket.expensesByCategory[cat].count += 1;
+      bucket.expensesByCategory[cat].cents += cents;
+      if (log.vendor && log.vendor.trim().length > 0) {
+        const k = log.vendor.trim();
+        const v = vendorTotals.get(k) ?? { cents: 0, count: 0 };
+        v.cents += cents;
+        v.count += 1;
+        vendorTotals.set(k, v);
+      }
     }
 
     const branches = Array.from(buckets.values())
@@ -192,6 +302,11 @@ router.get(
             maintenanceSpendCents: v.maintenanceSpendCents,
           };
         }),
+        aging: b.aging,
+        expensesByCategory: b.expensesByCategory,
+        quotesByStatus: b.quotesByStatus,
+        maintenanceLogCount: b.maintenanceLogCount,
+        maintenanceLogsWithReceipt: b.maintenanceLogsWithReceipt,
       }))
       .sort((a, b) => {
         // Real branches first, then "Unattributed" last.
@@ -229,7 +344,17 @@ router.get(
       }, 0),
     }));
 
-    res.json({ totals, branches, orgMonthly });
+    // Top vendors org-wide. Cap at 10 so the UI table stays readable.
+    const topVendors = Array.from(vendorTotals.entries())
+      .sort((a, b) => b[1].cents - a[1].cents)
+      .slice(0, 10)
+      .map(([vendor, v]) => ({
+        vendor,
+        cents: v.cents,
+        logCount: v.count,
+      }));
+
+    res.json({ totals, branches, orgMonthly, topVendors });
   },
 );
 

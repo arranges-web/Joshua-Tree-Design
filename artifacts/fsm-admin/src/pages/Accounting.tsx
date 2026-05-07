@@ -1,9 +1,13 @@
 import { useMemo } from "react";
+import { useLocation } from "wouter";
 import {
   Bar,
   BarChart,
   CartesianGrid,
+  Cell,
   Legend,
+  Pie,
+  PieChart,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -12,7 +16,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
-import { rowsToCsv, downloadCsv } from "@/lib/csv";
+import { Badge } from "@/components/ui/badge";
 import {
   Table,
   TableBody,
@@ -21,6 +25,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Building2,
   Calculator,
@@ -29,8 +34,20 @@ import {
   AlertTriangle,
   Wallet,
   Download,
+  TrendingUp,
+  Receipt,
+  Users,
+  Hourglass,
 } from "lucide-react";
-import { useAccountingSummary } from "@/lib/extra-api";
+import {
+  useAccountingSummary,
+  type AccountingBranch,
+  type AccountingExpenseCategoryKey,
+  type AccountingExpensesByCategory,
+} from "@/lib/extra-api";
+import { useDepartmentFilter } from "@/context/DepartmentContext";
+import { rowsToCsv, downloadCsv } from "@/lib/csv";
+import { useUrlSearch } from "@/lib/use-url-search";
 
 const usd = (cents: number | null | undefined) =>
   new Intl.NumberFormat("en-US", {
@@ -55,21 +72,188 @@ function monthLabel(key: string) {
   return d.toLocaleString("en-US", { month: "short" });
 }
 
-export function Accounting() {
-  const { data, isLoading, error } = useAccountingSummary();
+const REVENUE_COLOR = "hsl(150 50% 45%)";
+const MAINT_COLOR = "hsl(0 70% 55%)";
 
-  // Recharts wants its rows pre-formatted with `$` axes in dollars and
-  // shorter month labels — do that mapping here so the chart components
-  // stay declarative.
-  const orgChartData = useMemo(
-    () =>
-      (data?.orgMonthly ?? []).map((m) => ({
+// Distinct hues for the expense pie so each category is readable.
+const CATEGORY_COLORS: Record<AccountingExpenseCategoryKey, string> = {
+  LABOR: "hsl(220 65% 55%)",
+  PARTS: "hsl(150 55% 45%)",
+  FUEL: "hsl(35 90% 55%)",
+  OUTSOURCED: "hsl(280 50% 55%)",
+  OTHER: "hsl(200 35% 50%)",
+  UNCATEGORIZED: "hsl(0 0% 60%)",
+};
+
+const CATEGORY_LABELS: Record<AccountingExpenseCategoryKey, string> = {
+  LABOR: "Labor",
+  PARTS: "Parts",
+  FUEL: "Fuel",
+  OUTSOURCED: "Outsourced",
+  OTHER: "Other",
+  UNCATEGORIZED: "Uncategorized",
+};
+
+const TABS = ["overview", "receivables", "expenses", "pipeline", "trends"] as const;
+type TabValue = (typeof TABS)[number];
+
+function tabFromSearch(search: string): TabValue {
+  const raw = new URLSearchParams(search).get("tab");
+  return (TABS as readonly string[]).includes(raw ?? "")
+    ? (raw as TabValue)
+    : "overview";
+}
+
+export function Accounting() {
+  const { activeDeptId } = useDepartmentFilter();
+  const { data, isLoading, error } = useAccountingSummary();
+  const [, setLocation] = useLocation();
+  // Tabs are URL-driven so the sidebar can deep-link into each one
+  // (Accounting section in Shell.tsx) and so a refresh keeps you put.
+  const search = useUrlSearch();
+  const tab = tabFromSearch(search);
+  const handleTabChange = (value: string) => {
+    if (!(TABS as readonly string[]).includes(value)) return;
+    const next =
+      value === "overview" ? "/accounting" : `/accounting?tab=${value}`;
+    setLocation(next);
+  };
+
+  // When the global dept filter is set, narrow the page to that branch.
+  // Otherwise we run org-wide and show the cross-branch table.
+  const scopedBranches = useMemo<AccountingBranch[]>(() => {
+    if (!data) return [];
+    if (activeDeptId == null) return data.branches;
+    return data.branches.filter((b) => b.departmentId === activeDeptId);
+  }, [data, activeDeptId]);
+
+  const isScopedToOne = activeDeptId != null && scopedBranches.length === 1;
+  const scopedLabel = isScopedToOne
+    ? scopedBranches[0]!.departmentLabel
+    : "All branches";
+
+  // Roll the (possibly narrowed) branch list into the same shape the
+  // org-wide totals had. This keeps the rest of the page agnostic.
+  const scopedTotals = useMemo(() => {
+    return scopedBranches.reduce(
+      (acc, b) => ({
+        openInvoiceCents: acc.openInvoiceCents + b.openInvoiceCents,
+        collectedRevenueCents:
+          acc.collectedRevenueCents + b.collectedRevenueCents,
+        quotePipelineCents: acc.quotePipelineCents + b.quotePipelineCents,
+        maintenanceSpendCents:
+          acc.maintenanceSpendCents + b.maintenanceSpendCents,
+      }),
+      {
+        openInvoiceCents: 0,
+        collectedRevenueCents: 0,
+        quotePipelineCents: 0,
+        maintenanceSpendCents: 0,
+      },
+    );
+  }, [scopedBranches]);
+
+  const scopedExpenses = useMemo(() => {
+    const empty: AccountingExpensesByCategory = {
+      LABOR: { count: 0, cents: 0 },
+      PARTS: { count: 0, cents: 0 },
+      FUEL: { count: 0, cents: 0 },
+      OUTSOURCED: { count: 0, cents: 0 },
+      OTHER: { count: 0, cents: 0 },
+      UNCATEGORIZED: { count: 0, cents: 0 },
+    };
+    for (const b of scopedBranches) {
+      for (const key of Object.keys(empty) as AccountingExpenseCategoryKey[]) {
+        empty[key].count += b.expensesByCategory[key]?.count ?? 0;
+        empty[key].cents += b.expensesByCategory[key]?.cents ?? 0;
+      }
+    }
+    return empty;
+  }, [scopedBranches]);
+
+  const scopedAging = useMemo(() => {
+    return scopedBranches.reduce(
+      (acc, b) => ({
+        currentCents: acc.currentCents + b.aging.currentCents,
+        d1to30Cents: acc.d1to30Cents + b.aging.d1to30Cents,
+        d31to60Cents: acc.d31to60Cents + b.aging.d31to60Cents,
+        d61to90Cents: acc.d61to90Cents + b.aging.d61to90Cents,
+        d90plusCents: acc.d90plusCents + b.aging.d90plusCents,
+      }),
+      {
+        currentCents: 0,
+        d1to30Cents: 0,
+        d31to60Cents: 0,
+        d61to90Cents: 0,
+        d90plusCents: 0,
+      },
+    );
+  }, [scopedBranches]);
+
+  const scopedQuoteCounts = useMemo(() => {
+    return scopedBranches.reduce(
+      (acc, b) => ({
+        draft: {
+          count: acc.draft.count + b.quotesByStatus.draft.count,
+          cents: acc.draft.cents + b.quotesByStatus.draft.cents,
+        },
+        sent: {
+          count: acc.sent.count + b.quotesByStatus.sent.count,
+          cents: acc.sent.cents + b.quotesByStatus.sent.cents,
+        },
+        approved: {
+          count: acc.approved.count + b.quotesByStatus.approved.count,
+          cents: acc.approved.cents + b.quotesByStatus.approved.cents,
+        },
+      }),
+      {
+        draft: { count: 0, cents: 0 },
+        sent: { count: 0, cents: 0 },
+        approved: { count: 0, cents: 0 },
+      },
+    );
+  }, [scopedBranches]);
+
+  const scopedMaintenanceCoverage = useMemo(() => {
+    let total = 0;
+    let withReceipt = 0;
+    for (const b of scopedBranches) {
+      total += b.maintenanceLogCount;
+      withReceipt += b.maintenanceLogsWithReceipt;
+    }
+    return { total, withReceipt };
+  }, [scopedBranches]);
+
+  const orgChartData = useMemo(() => {
+    const months = data?.orgMonthly ?? [];
+    if (activeDeptId == null) {
+      return months.map((m) => ({
         month: monthLabel(m.month),
         Revenue: m.collectedRevenueCents / 100,
         Maintenance: m.maintenanceSpendCents / 100,
-      })),
-    [data?.orgMonthly],
-  );
+      }));
+    }
+    // For a scoped branch, sum its monthly rows.
+    const rolled = new Map<
+      string,
+      { revenue: number; maintenance: number }
+    >();
+    for (const b of scopedBranches) {
+      for (const m of b.monthly) {
+        const r = rolled.get(m.month) ?? { revenue: 0, maintenance: 0 };
+        r.revenue += m.collectedRevenueCents;
+        r.maintenance += m.maintenanceSpendCents;
+        rolled.set(m.month, r);
+      }
+    }
+    return Array.from(rolled.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([month, v]) => ({
+        month: monthLabel(month),
+        Revenue: v.revenue / 100,
+        Maintenance: v.maintenance / 100,
+      }));
+  }, [data, scopedBranches, activeDeptId]);
 
   if (isLoading) {
     return (
@@ -89,190 +273,705 @@ export function Accounting() {
     );
   }
 
+  // Net contribution = revenue − maintenance (rough P&L proxy for the demo).
+  const netCents =
+    scopedTotals.collectedRevenueCents - scopedTotals.maintenanceSpendCents;
+
+  const expenseTotal =
+    scopedExpenses.LABOR.cents +
+    scopedExpenses.PARTS.cents +
+    scopedExpenses.FUEL.cents +
+    scopedExpenses.OUTSOURCED.cents +
+    scopedExpenses.OTHER.cents +
+    scopedExpenses.UNCATEGORIZED.cents;
+
+  const expensePieData = (
+    Object.keys(scopedExpenses) as AccountingExpenseCategoryKey[]
+  )
+    .map((key) => ({
+      name: CATEGORY_LABELS[key],
+      value: scopedExpenses[key].cents / 100,
+      key,
+    }))
+    .filter((d) => d.value > 0);
+
+  const totalAging =
+    scopedAging.currentCents +
+    scopedAging.d1to30Cents +
+    scopedAging.d31to60Cents +
+    scopedAging.d61to90Cents +
+    scopedAging.d90plusCents;
+
+  function exportBranchesCsv() {
+    const csv = rowsToCsv(scopedBranches, [
+      { header: "Branch", value: (b) => b.departmentLabel },
+      { header: "Open invoices (USD)", value: (b) => (b.openInvoiceCents / 100).toFixed(2) },
+      { header: "Collected revenue (USD)", value: (b) => (b.collectedRevenueCents / 100).toFixed(2) },
+      { header: "Quote pipeline (USD)", value: (b) => (b.quotePipelineCents / 100).toFixed(2) },
+      { header: "Maintenance spend (USD)", value: (b) => (b.maintenanceSpendCents / 100).toFixed(2) },
+      { header: "Aging current (USD)", value: (b) => (b.aging.currentCents / 100).toFixed(2) },
+      { header: "Aging 1-30 (USD)", value: (b) => (b.aging.d1to30Cents / 100).toFixed(2) },
+      { header: "Aging 31-60 (USD)", value: (b) => (b.aging.d31to60Cents / 100).toFixed(2) },
+      { header: "Aging 61-90 (USD)", value: (b) => (b.aging.d61to90Cents / 100).toFixed(2) },
+      { header: "Aging 90+ (USD)", value: (b) => (b.aging.d90plusCents / 100).toFixed(2) },
+      { header: "Maintenance logs", value: (b) => b.maintenanceLogCount },
+      { header: "Maintenance logs w/ receipt", value: (b) => b.maintenanceLogsWithReceipt },
+    ]);
+    const stamp = new Date().toISOString().slice(0, 10);
+    downloadCsv(`accounting-${stamp}.csv`, csv);
+  }
+
+  function exportTopVendorsCsv() {
+    const csv = rowsToCsv(data!.topVendors, [
+      { header: "Vendor", value: (v) => v.vendor },
+      { header: "Spend (USD)", value: (v) => (v.cents / 100).toFixed(2) },
+      { header: "Log count", value: (v) => v.logCount },
+    ]);
+    const stamp = new Date().toISOString().slice(0, 10);
+    downloadCsv(`top-vendors-${stamp}.csv`, csv);
+  }
+
   return (
     <div className="space-y-6" data-testid="accounting-page">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Accounting</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Per-branch financial visibility — collected revenue, open invoices,
-            quote pipeline, and fleet maintenance spend.
+            Per-branch financial visibility — receivables, expense category
+            mix, sales pipeline, and 12-month trend.
           </p>
         </div>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => {
-            const csv = rowsToCsv(data.branches, [
-              { header: "Branch", value: (b) => b.departmentLabel },
-              {
-                header: "Open invoices (USD)",
-                value: (b) => (b.openInvoiceCents / 100).toFixed(2),
-              },
-              {
-                header: "Collected revenue (USD)",
-                value: (b) => (b.collectedRevenueCents / 100).toFixed(2),
-              },
-              {
-                header: "Quote pipeline (USD)",
-                value: (b) => (b.quotePipelineCents / 100).toFixed(2),
-              },
-              {
-                header: "Maintenance spend (USD)",
-                value: (b) => (b.maintenanceSpendCents / 100).toFixed(2),
-              },
-            ]);
-            const stamp = new Date().toISOString().slice(0, 10);
-            downloadCsv(`accounting-by-branch-${stamp}.csv`, csv);
-          }}
-        >
-          <Download className="mr-2 h-4 w-4" /> Export CSV
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          <Badge
+            variant={isScopedToOne ? "default" : "outline"}
+            className="gap-1.5 px-3 py-1 text-xs"
+          >
+            <Building2 className="h-3 w-3" />
+            {scopedLabel}
+          </Badge>
+          <Button variant="outline" size="sm" onClick={exportBranchesCsv}>
+            <Download className="mr-2 h-4 w-4" /> Export CSV
+          </Button>
+        </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
         <KpiCard
           label="Open invoices"
-          value={usd(data.totals.openInvoiceCents)}
+          value={usd(scopedTotals.openInvoiceCents)}
           icon={CreditCard}
-          tone={data.totals.openInvoiceCents > 0 ? "amber" : "neutral"}
+          tone={scopedTotals.openInvoiceCents > 0 ? "amber" : "neutral"}
         />
         <KpiCard
           label="Collected revenue"
-          value={usd(data.totals.collectedRevenueCents)}
+          value={usd(scopedTotals.collectedRevenueCents)}
           icon={Wallet}
           tone="emerald"
         />
         <KpiCard
-          label="Quote pipeline"
-          value={usd(data.totals.quotePipelineCents)}
-          icon={Calculator}
+          label="Maintenance"
+          value={usd(scopedTotals.maintenanceSpendCents)}
+          icon={Wrench}
+          tone={scopedTotals.maintenanceSpendCents > 0 ? "rose" : "neutral"}
         />
         <KpiCard
-          label="Maintenance spend"
-          value={usd(data.totals.maintenanceSpendCents)}
-          icon={Wrench}
-          tone={data.totals.maintenanceSpendCents > 0 ? "rose" : "neutral"}
+          label="Net contribution"
+          value={usd(netCents)}
+          icon={TrendingUp}
+          tone={netCents >= 0 ? "emerald" : "rose"}
+          sub="revenue − maintenance"
+        />
+        <KpiCard
+          label="Quote pipeline"
+          value={usd(scopedTotals.quotePipelineCents)}
+          icon={Calculator}
+          tone="neutral"
         />
       </div>
 
-      <Card className="border-border/60">
-        <CardHeader>
-          <CardTitle className="text-base">Last 12 months — org wide</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="h-72 w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={orgChartData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--muted))" />
-                <XAxis dataKey="month" tick={{ fontSize: 12 }} />
-                <YAxis tickFormatter={(v) => usdShort(v * 100)} tick={{ fontSize: 12 }} />
-                <Tooltip
-                  formatter={(value: number) => usd(value * 100)}
-                  contentStyle={{
-                    background: "hsl(var(--card))",
-                    border: "1px solid hsl(var(--border))",
-                    borderRadius: 6,
-                    fontSize: 12,
-                  }}
-                />
-                <Legend wrapperStyle={{ fontSize: 12 }} />
-                <Bar dataKey="Revenue" fill="hsl(150 50% 45%)" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="Maintenance" fill="hsl(0 70% 55%)" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </CardContent>
-      </Card>
+      <Tabs value={tab} onValueChange={handleTabChange} className="space-y-4">
+        <TabsList className="grid w-full grid-cols-5 md:w-auto md:inline-flex">
+          <TabsTrigger value="overview">Overview</TabsTrigger>
+          <TabsTrigger value="receivables">Receivables</TabsTrigger>
+          <TabsTrigger value="expenses">Expenses</TabsTrigger>
+          <TabsTrigger value="pipeline">Pipeline</TabsTrigger>
+          <TabsTrigger value="trends">Trends</TabsTrigger>
+        </TabsList>
 
-      <Card className="border-border/60">
-        <CardHeader>
-          <CardTitle className="text-base">By branch</CardTitle>
-        </CardHeader>
-        <CardContent className="p-0">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-[28%]">Branch</TableHead>
-                <TableHead className="text-right">Open invoices</TableHead>
-                <TableHead className="text-right">Collected revenue</TableHead>
-                <TableHead className="text-right">Quote pipeline</TableHead>
-                <TableHead className="text-right">Maintenance</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {data.branches.map((b) => (
-                <TableRow
-                  key={b.departmentId ?? "unattributed"}
-                  data-testid={`branch-row-${b.departmentId ?? "unattributed"}`}
-                >
-                  <TableCell>
-                    <span className="flex items-center gap-2 text-sm font-medium">
-                      {b.departmentId == null ? (
-                        <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />
-                      ) : (
-                        <Building2 className="h-3.5 w-3.5 text-muted-foreground" />
-                      )}
-                      {b.departmentLabel}
-                    </span>
-                  </TableCell>
-                  <TableCell className="text-right font-mono text-sm">
-                    {usd(b.openInvoiceCents)}
-                  </TableCell>
-                  <TableCell className="text-right font-mono text-sm">
-                    {usd(b.collectedRevenueCents)}
-                  </TableCell>
-                  <TableCell className="text-right font-mono text-sm">
-                    {usd(b.quotePipelineCents)}
-                  </TableCell>
-                  <TableCell className="text-right font-mono text-sm">
-                    {usd(b.maintenanceSpendCents)}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+        {/* ---------- OVERVIEW ---------- */}
+        <TabsContent value="overview" className="space-y-4">
+          {!isScopedToOne && (
+            <Card className="border-border/60">
+              <CardHeader>
+                <CardTitle className="text-base">By branch</CardTitle>
+              </CardHeader>
+              <CardContent className="p-0">
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="w-[24%]">Branch</TableHead>
+                        <TableHead className="text-right">Open</TableHead>
+                        <TableHead className="text-right">Collected</TableHead>
+                        <TableHead className="text-right">Pipeline</TableHead>
+                        <TableHead className="text-right">Maintenance</TableHead>
+                        <TableHead className="text-right">Net</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {scopedBranches.map((b) => {
+                        const net =
+                          b.collectedRevenueCents - b.maintenanceSpendCents;
+                        return (
+                          <TableRow
+                            key={b.departmentId ?? "unattributed"}
+                            data-testid={`branch-row-${b.departmentId ?? "unattributed"}`}
+                          >
+                            <TableCell>
+                              <span className="flex items-center gap-2 text-sm font-medium">
+                                {b.departmentId == null ? (
+                                  <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />
+                                ) : (
+                                  <Building2 className="h-3.5 w-3.5 text-muted-foreground" />
+                                )}
+                                {b.departmentLabel}
+                              </span>
+                            </TableCell>
+                            <TableCell className="text-right font-mono text-sm">
+                              {usd(b.openInvoiceCents)}
+                            </TableCell>
+                            <TableCell className="text-right font-mono text-sm">
+                              {usd(b.collectedRevenueCents)}
+                            </TableCell>
+                            <TableCell className="text-right font-mono text-sm">
+                              {usd(b.quotePipelineCents)}
+                            </TableCell>
+                            <TableCell className="text-right font-mono text-sm">
+                              {usd(b.maintenanceSpendCents)}
+                            </TableCell>
+                            <TableCell
+                              className={`text-right font-mono text-sm font-semibold ${net >= 0 ? "text-emerald-700" : "text-rose-700"}`}
+                            >
+                              {usd(net)}
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-        {data.branches.map((b) => (
-          <Card
-            key={`mini-${b.departmentId ?? "unattributed"}`}
-            className="border-border/60"
-          >
+          <Card className="border-border/60">
             <CardHeader>
-              <CardTitle className="text-sm">{b.departmentLabel}</CardTitle>
+              <CardTitle className="flex items-center gap-2 text-base">
+                <TrendingUp className="h-4 w-4" /> Last 12 months —
+                revenue vs. maintenance
+              </CardTitle>
             </CardHeader>
-            <CardContent className="p-0">
-              <div className="h-40 w-full px-2 pb-2">
+            <CardContent>
+              <div className="h-72 w-full">
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart
-                    data={b.monthly.map((m) => ({
-                      month: monthLabel(m.month),
-                      Revenue: m.collectedRevenueCents / 100,
-                      Maintenance: m.maintenanceSpendCents / 100,
-                    }))}
-                  >
-                    <XAxis dataKey="month" tick={{ fontSize: 10 }} />
-                    <YAxis hide />
+                  <BarChart data={orgChartData}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--muted))" />
+                    <XAxis dataKey="month" tick={{ fontSize: 12 }} />
+                    <YAxis
+                      tickFormatter={(v) => usdShort(v * 100)}
+                      tick={{ fontSize: 12 }}
+                    />
                     <Tooltip
                       formatter={(value: number) => usd(value * 100)}
                       contentStyle={{
                         background: "hsl(var(--card))",
                         border: "1px solid hsl(var(--border))",
                         borderRadius: 6,
-                        fontSize: 11,
+                        fontSize: 12,
                       }}
                     />
-                    <Bar dataKey="Revenue" fill="hsl(150 50% 45%)" />
-                    <Bar dataKey="Maintenance" fill="hsl(0 70% 55%)" />
+                    <Legend wrapperStyle={{ fontSize: 12 }} />
+                    <Bar dataKey="Revenue" fill={REVENUE_COLOR} radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="Maintenance" fill={MAINT_COLOR} radius={[4, 4, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
             </CardContent>
           </Card>
-        ))}
+        </TabsContent>
+
+        {/* ---------- RECEIVABLES ---------- */}
+        <TabsContent value="receivables" className="space-y-4">
+          <div className="grid gap-3 md:grid-cols-5">
+            <KpiCard
+              label="Current"
+              value={usd(scopedAging.currentCents)}
+              sub={pct(scopedAging.currentCents, totalAging)}
+              icon={Hourglass}
+              tone="emerald"
+            />
+            <KpiCard
+              label="1–30 days"
+              value={usd(scopedAging.d1to30Cents)}
+              sub={pct(scopedAging.d1to30Cents, totalAging)}
+              icon={Hourglass}
+              tone={scopedAging.d1to30Cents > 0 ? "neutral" : "neutral"}
+            />
+            <KpiCard
+              label="31–60 days"
+              value={usd(scopedAging.d31to60Cents)}
+              sub={pct(scopedAging.d31to60Cents, totalAging)}
+              icon={Hourglass}
+              tone={scopedAging.d31to60Cents > 0 ? "amber" : "neutral"}
+            />
+            <KpiCard
+              label="61–90 days"
+              value={usd(scopedAging.d61to90Cents)}
+              sub={pct(scopedAging.d61to90Cents, totalAging)}
+              icon={Hourglass}
+              tone={scopedAging.d61to90Cents > 0 ? "amber" : "neutral"}
+            />
+            <KpiCard
+              label="90+ days"
+              value={usd(scopedAging.d90plusCents)}
+              sub={pct(scopedAging.d90plusCents, totalAging)}
+              icon={AlertTriangle}
+              tone={scopedAging.d90plusCents > 0 ? "rose" : "neutral"}
+            />
+          </div>
+
+          {!isScopedToOne && (
+            <Card className="border-border/60">
+              <CardHeader>
+                <CardTitle className="text-base">Aging by branch</CardTitle>
+              </CardHeader>
+              <CardContent className="p-0">
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Branch</TableHead>
+                        <TableHead className="text-right">Current</TableHead>
+                        <TableHead className="text-right">1–30</TableHead>
+                        <TableHead className="text-right">31–60</TableHead>
+                        <TableHead className="text-right">61–90</TableHead>
+                        <TableHead className="text-right">90+</TableHead>
+                        <TableHead className="text-right">Total open</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {scopedBranches.map((b) => (
+                        <TableRow key={b.departmentId ?? "unattributed"}>
+                          <TableCell className="text-sm font-medium">
+                            {b.departmentLabel}
+                          </TableCell>
+                          <TableCell className="text-right font-mono text-sm">
+                            {usd(b.aging.currentCents)}
+                          </TableCell>
+                          <TableCell className="text-right font-mono text-sm">
+                            {usd(b.aging.d1to30Cents)}
+                          </TableCell>
+                          <TableCell className="text-right font-mono text-sm">
+                            {usd(b.aging.d31to60Cents)}
+                          </TableCell>
+                          <TableCell className="text-right font-mono text-sm text-amber-700">
+                            {usd(b.aging.d61to90Cents)}
+                          </TableCell>
+                          <TableCell className="text-right font-mono text-sm text-rose-700">
+                            {usd(b.aging.d90plusCents)}
+                          </TableCell>
+                          <TableCell className="text-right font-mono text-sm font-semibold">
+                            {usd(b.openInvoiceCents)}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
+
+        {/* ---------- EXPENSES ---------- */}
+        <TabsContent value="expenses" className="space-y-4">
+          <div className="grid gap-4 md:grid-cols-2">
+            <Card className="border-border/60">
+              <CardHeader>
+                <CardTitle className="text-base">
+                  Spend by category{" "}
+                  <span className="ml-2 text-xs font-normal text-muted-foreground">
+                    {usd(expenseTotal)} total
+                  </span>
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {expensePieData.length === 0 ? (
+                  <div className="py-12 text-center text-sm text-muted-foreground">
+                    No maintenance spend logged yet.
+                  </div>
+                ) : (
+                  <div className="h-64 w-full">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie
+                          data={expensePieData}
+                          dataKey="value"
+                          nameKey="name"
+                          innerRadius={50}
+                          outerRadius={90}
+                          paddingAngle={2}
+                        >
+                          {expensePieData.map((entry) => (
+                            <Cell
+                              key={entry.key}
+                              fill={CATEGORY_COLORS[entry.key]}
+                            />
+                          ))}
+                        </Pie>
+                        <Tooltip
+                          formatter={(v: number) => usd(v * 100)}
+                          contentStyle={{
+                            background: "hsl(var(--card))",
+                            border: "1px solid hsl(var(--border))",
+                            borderRadius: 6,
+                            fontSize: 12,
+                          }}
+                        />
+                        <Legend wrapperStyle={{ fontSize: 11 }} />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card className="border-border/60">
+              <CardHeader>
+                <CardTitle className="flex items-center justify-between text-base">
+                  <span className="flex items-center gap-2">
+                    <Users className="h-4 w-4" />
+                    Top vendors
+                  </span>
+                  {data.topVendors.length > 0 && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={exportTopVendorsCsv}
+                    >
+                      <Download className="mr-1.5 h-3.5 w-3.5" /> CSV
+                    </Button>
+                  )}
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-0">
+                {data.topVendors.length === 0 ? (
+                  <div className="py-8 text-center text-sm text-muted-foreground">
+                    No vendor data yet — add a vendor when logging
+                    maintenance.
+                  </div>
+                ) : (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Vendor</TableHead>
+                        <TableHead className="text-right">Logs</TableHead>
+                        <TableHead className="text-right">Spend</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {data.topVendors.slice(0, 8).map((v) => (
+                        <TableRow key={v.vendor}>
+                          <TableCell className="text-sm font-medium">
+                            {v.vendor}
+                          </TableCell>
+                          <TableCell className="text-right font-mono text-sm">
+                            {v.logCount}
+                          </TableCell>
+                          <TableCell className="text-right font-mono text-sm font-semibold">
+                            {usd(v.cents)}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+
+          <Card className="border-border/60">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Receipt className="h-4 w-4" />
+                Receipt coverage
+                <span className="ml-2 text-xs font-normal text-muted-foreground">
+                  {scopedMaintenanceCoverage.withReceipt} of{" "}
+                  {scopedMaintenanceCoverage.total} logs have a receipt attached
+                </span>
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ReceiptCoverageBar
+                total={scopedMaintenanceCoverage.total}
+                withReceipt={scopedMaintenanceCoverage.withReceipt}
+              />
+              <p className="mt-3 text-xs text-muted-foreground">
+                Snap a photo when you log maintenance and accounting can
+                reconcile every line.
+              </p>
+            </CardContent>
+          </Card>
+
+          {!isScopedToOne && (
+            <Card className="border-border/60">
+              <CardHeader>
+                <CardTitle className="text-base">
+                  Expenses by branch &amp; category
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-0">
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Branch</TableHead>
+                        <TableHead className="text-right">Labor</TableHead>
+                        <TableHead className="text-right">Parts</TableHead>
+                        <TableHead className="text-right">Fuel</TableHead>
+                        <TableHead className="text-right">Outsourced</TableHead>
+                        <TableHead className="text-right">Other</TableHead>
+                        <TableHead className="text-right">Uncat.</TableHead>
+                        <TableHead className="text-right">Total</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {scopedBranches.map((b) => (
+                        <TableRow key={b.departmentId ?? "unattributed"}>
+                          <TableCell className="text-sm font-medium">
+                            {b.departmentLabel}
+                          </TableCell>
+                          {(
+                            [
+                              "LABOR",
+                              "PARTS",
+                              "FUEL",
+                              "OUTSOURCED",
+                              "OTHER",
+                              "UNCATEGORIZED",
+                            ] as AccountingExpenseCategoryKey[]
+                          ).map((cat) => (
+                            <TableCell
+                              key={cat}
+                              className="text-right font-mono text-sm"
+                            >
+                              {usd(b.expensesByCategory[cat]?.cents ?? 0)}
+                            </TableCell>
+                          ))}
+                          <TableCell className="text-right font-mono text-sm font-semibold">
+                            {usd(b.maintenanceSpendCents)}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
+
+        {/* ---------- PIPELINE ---------- */}
+        <TabsContent value="pipeline" className="space-y-4">
+          <div className="grid gap-3 md:grid-cols-3">
+            <KpiCard
+              label="Drafts"
+              value={usd(scopedQuoteCounts.draft.cents)}
+              sub={`${scopedQuoteCounts.draft.count} quote${scopedQuoteCounts.draft.count === 1 ? "" : "s"}`}
+              icon={Calculator}
+            />
+            <KpiCard
+              label="Sent"
+              value={usd(scopedQuoteCounts.sent.cents)}
+              sub={`${scopedQuoteCounts.sent.count} awaiting decision`}
+              icon={Calculator}
+              tone="amber"
+            />
+            <KpiCard
+              label="Approved"
+              value={usd(scopedQuoteCounts.approved.cents)}
+              sub={`${scopedQuoteCounts.approved.count} converted`}
+              icon={Calculator}
+              tone="emerald"
+            />
+          </div>
+
+          {!isScopedToOne && (
+            <Card className="border-border/60">
+              <CardHeader>
+                <CardTitle className="text-base">Pipeline by branch</CardTitle>
+              </CardHeader>
+              <CardContent className="p-0">
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Branch</TableHead>
+                        <TableHead className="text-right">Drafts</TableHead>
+                        <TableHead className="text-right">Sent</TableHead>
+                        <TableHead className="text-right">Approved</TableHead>
+                        <TableHead className="text-right">Pipeline $</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {scopedBranches.map((b) => (
+                        <TableRow key={b.departmentId ?? "unattributed"}>
+                          <TableCell className="text-sm font-medium">
+                            {b.departmentLabel}
+                          </TableCell>
+                          <TableCell className="text-right font-mono text-sm">
+                            {b.quotesByStatus.draft.count} ·{" "}
+                            <span className="text-xs text-muted-foreground">
+                              {usd(b.quotesByStatus.draft.cents)}
+                            </span>
+                          </TableCell>
+                          <TableCell className="text-right font-mono text-sm">
+                            {b.quotesByStatus.sent.count} ·{" "}
+                            <span className="text-xs text-muted-foreground">
+                              {usd(b.quotesByStatus.sent.cents)}
+                            </span>
+                          </TableCell>
+                          <TableCell className="text-right font-mono text-sm">
+                            {b.quotesByStatus.approved.count} ·{" "}
+                            <span className="text-xs text-muted-foreground">
+                              {usd(b.quotesByStatus.approved.cents)}
+                            </span>
+                          </TableCell>
+                          <TableCell className="text-right font-mono text-sm font-semibold">
+                            {usd(b.quotePipelineCents)}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
+
+        {/* ---------- TRENDS ---------- */}
+        <TabsContent value="trends" className="space-y-4">
+          {!isScopedToOne ? (
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+              {scopedBranches.map((b) => (
+                <Card
+                  key={`mini-${b.departmentId ?? "unattributed"}`}
+                  className="border-border/60"
+                >
+                  <CardHeader>
+                    <CardTitle className="flex items-center justify-between text-sm">
+                      <span>{b.departmentLabel}</span>
+                      <span className="font-mono text-xs text-muted-foreground">
+                        {usd(b.collectedRevenueCents)}
+                      </span>
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="p-0">
+                    <div className="h-40 w-full px-2 pb-2">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart
+                          data={b.monthly.map((m) => ({
+                            month: monthLabel(m.month),
+                            Revenue: m.collectedRevenueCents / 100,
+                            Maintenance: m.maintenanceSpendCents / 100,
+                          }))}
+                        >
+                          <XAxis dataKey="month" tick={{ fontSize: 10 }} />
+                          <YAxis hide />
+                          <Tooltip
+                            formatter={(value: number) => usd(value * 100)}
+                            contentStyle={{
+                              background: "hsl(var(--card))",
+                              border: "1px solid hsl(var(--border))",
+                              borderRadius: 6,
+                              fontSize: 11,
+                            }}
+                          />
+                          <Bar dataKey="Revenue" fill={REVENUE_COLOR} />
+                          <Bar dataKey="Maintenance" fill={MAINT_COLOR} />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          ) : (
+            <Card className="border-border/60">
+              <CardHeader>
+                <CardTitle className="text-base">12-month trend — {scopedLabel}</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="h-72 w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={orgChartData}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--muted))" />
+                      <XAxis dataKey="month" tick={{ fontSize: 12 }} />
+                      <YAxis tickFormatter={(v) => usdShort(v * 100)} tick={{ fontSize: 12 }} />
+                      <Tooltip
+                        formatter={(v: number) => usd(v * 100)}
+                        contentStyle={{
+                          background: "hsl(var(--card))",
+                          border: "1px solid hsl(var(--border))",
+                          borderRadius: 6,
+                          fontSize: 12,
+                        }}
+                      />
+                      <Legend wrapperStyle={{ fontSize: 12 }} />
+                      <Bar dataKey="Revenue" fill={REVENUE_COLOR} radius={[4, 4, 0, 0]} />
+                      <Bar dataKey="Maintenance" fill={MAINT_COLOR} radius={[4, 4, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
+      </Tabs>
+    </div>
+  );
+}
+
+function pct(part: number, whole: number): string {
+  if (whole <= 0) return "—";
+  return `${Math.round((part / whole) * 100)}% of open`;
+}
+
+function ReceiptCoverageBar({
+  total,
+  withReceipt,
+}: {
+  total: number;
+  withReceipt: number;
+}) {
+  if (total === 0) {
+    return (
+      <div className="text-xs text-muted-foreground">No logs yet.</div>
+    );
+  }
+  const pctVal = Math.round((withReceipt / total) * 100);
+  return (
+    <div>
+      <div className="flex justify-between text-xs">
+        <span className="font-medium">{pctVal}%</span>
+        <span className="text-muted-foreground">target 100%</span>
+      </div>
+      <div className="mt-1 h-2.5 w-full overflow-hidden rounded-full bg-muted">
+        <div
+          className="h-full rounded-full bg-emerald-500 transition-all"
+          style={{ width: `${pctVal}%` }}
+        />
       </div>
     </div>
   );
@@ -281,11 +980,13 @@ export function Accounting() {
 function KpiCard({
   label,
   value,
+  sub,
   icon: Icon,
   tone = "neutral",
 }: {
   label: string;
   value: string;
+  sub?: string;
   icon: React.ComponentType<{ className?: string }>;
   tone?: "neutral" | "rose" | "amber" | "emerald";
 }) {
@@ -305,6 +1006,7 @@ function KpiCard({
             {label}
           </div>
           <div className={`mt-2 text-2xl font-bold ${toneClass}`}>{value}</div>
+          {sub && <div className="mt-1 text-xs text-muted-foreground">{sub}</div>}
         </div>
         <div className="flex h-10 w-10 items-center justify-center rounded-md bg-muted text-muted-foreground">
           <Icon className="h-5 w-5" />
