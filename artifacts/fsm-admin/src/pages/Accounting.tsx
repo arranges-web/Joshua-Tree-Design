@@ -104,6 +104,40 @@ function tabFromSearch(search: string): TabValue {
     : "overview";
 }
 
+// Old API responses (or any unexpected shape) might be missing the
+// aging / expensesByCategory / quotesByStatus blocks. Filling in
+// zero-valued defaults here means the dashboard always renders, even
+// during the brief window after the frontend deploys but before the
+// backend has redeployed.
+function normalizeBranch(b: AccountingBranch): AccountingBranch {
+  const emptyCat = { count: 0, cents: 0 };
+  return {
+    ...b,
+    aging: b.aging ?? {
+      currentCents: 0,
+      d1to30Cents: 0,
+      d31to60Cents: 0,
+      d61to90Cents: 0,
+      d90plusCents: 0,
+    },
+    expensesByCategory: {
+      LABOR: b.expensesByCategory?.LABOR ?? emptyCat,
+      PARTS: b.expensesByCategory?.PARTS ?? emptyCat,
+      FUEL: b.expensesByCategory?.FUEL ?? emptyCat,
+      OUTSOURCED: b.expensesByCategory?.OUTSOURCED ?? emptyCat,
+      OTHER: b.expensesByCategory?.OTHER ?? emptyCat,
+      UNCATEGORIZED: b.expensesByCategory?.UNCATEGORIZED ?? emptyCat,
+    },
+    quotesByStatus: b.quotesByStatus ?? {
+      draft: { count: 0, cents: 0 },
+      sent: { count: 0, cents: 0 },
+      approved: { count: 0, cents: 0 },
+    },
+    maintenanceLogCount: b.maintenanceLogCount ?? 0,
+    maintenanceLogsWithReceipt: b.maintenanceLogsWithReceipt ?? 0,
+  };
+}
+
 export function Accounting() {
   const { activeDeptId } = useDepartmentFilter();
   const { data, isLoading, error } = useAccountingSummary();
@@ -121,10 +155,16 @@ export function Accounting() {
 
   // When the global dept filter is set, narrow the page to that branch.
   // Otherwise we run org-wide and show the cross-branch table.
+  // Defensive: if the API response is from an older deploy and is
+  // missing aging/expensesByCategory/quotesByStatus, fill in zeros
+  // so the page renders instead of crashing with "Cannot read
+  // properties of undefined".
   const scopedBranches = useMemo<AccountingBranch[]>(() => {
     if (!data) return [];
-    if (activeDeptId == null) return data.branches;
-    return data.branches.filter((b) => b.departmentId === activeDeptId);
+    const list = activeDeptId == null
+      ? data.branches
+      : data.branches.filter((b) => b.departmentId === activeDeptId);
+    return list.map(normalizeBranch);
   }, [data, activeDeptId]);
 
   const isScopedToOne = activeDeptId != null && scopedBranches.length === 1;
@@ -321,8 +361,10 @@ export function Accounting() {
     downloadCsv(`accounting-${stamp}.csv`, csv);
   }
 
+  const topVendors = data?.topVendors ?? [];
+
   function exportTopVendorsCsv() {
-    const csv = rowsToCsv(data!.topVendors, [
+    const csv = rowsToCsv(topVendors, [
       { header: "Vendor", value: (v) => v.vendor },
       { header: "Spend (USD)", value: (v) => (v.cents / 100).toFixed(2) },
       { header: "Log count", value: (v) => v.logCount },
@@ -653,7 +695,7 @@ export function Accounting() {
                     <Users className="h-4 w-4" />
                     Top vendors
                   </span>
-                  {data.topVendors.length > 0 && (
+                  {topVendors.length > 0 && (
                     <Button
                       variant="ghost"
                       size="sm"
@@ -665,7 +707,7 @@ export function Accounting() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="p-0">
-                {data.topVendors.length === 0 ? (
+                {topVendors.length === 0 ? (
                   <div className="py-8 text-center text-sm text-muted-foreground">
                     No vendor data yet — add a vendor when logging
                     maintenance.
@@ -680,7 +722,7 @@ export function Accounting() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {data.topVendors.slice(0, 8).map((v) => (
+                      {topVendors.slice(0, 8).map((v) => (
                         <TableRow key={v.vendor}>
                           <TableCell className="text-sm font-medium">
                             {v.vendor}
