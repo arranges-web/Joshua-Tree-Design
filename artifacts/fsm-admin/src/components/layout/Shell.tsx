@@ -12,6 +12,10 @@ import {
   Building2,
   Calculator,
   HardHat,
+  CreditCard,
+  Hourglass,
+  Receipt,
+  TrendingUp,
 } from "lucide-react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import {
@@ -22,6 +26,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useState } from "react";
+import { useUrlSearch } from "@/lib/use-url-search";
 import { useQueryClient } from "@tanstack/react-query";
 import { getGetMeQueryKey } from "@workspace/api-client-react";
 import { DepartmentProvider, useDepartmentFilter } from "@/context/DepartmentContext";
@@ -46,12 +51,36 @@ const NAV_GROUPS: Array<{ label: string; items: NavItem[] }> = [
     ],
   },
   {
-    label: "Finance",
+    label: "Accounting",
     items: [
       {
         href: "/accounting",
-        label: "Accounting",
+        label: "Overview",
         icon: Calculator,
+        roles: ["ADMIN", "ACCOUNTING_MANAGER"],
+      },
+      {
+        href: "/accounting?tab=receivables",
+        label: "Receivables",
+        icon: Hourglass,
+        roles: ["ADMIN", "ACCOUNTING_MANAGER"],
+      },
+      {
+        href: "/accounting?tab=expenses",
+        label: "Expenses",
+        icon: Receipt,
+        roles: ["ADMIN", "ACCOUNTING_MANAGER"],
+      },
+      {
+        href: "/accounting?tab=pipeline",
+        label: "Pipeline",
+        icon: CreditCard,
+        roles: ["ADMIN", "ACCOUNTING_MANAGER"],
+      },
+      {
+        href: "/accounting?tab=trends",
+        label: "Trends",
+        icon: TrendingUp,
         roles: ["ADMIN", "ACCOUNTING_MANAGER"],
       },
     ],
@@ -120,6 +149,7 @@ function DepartmentSwitcherInner() {
 function ShellInner({ children }: { children: React.ReactNode }) {
   const { data: authData } = useGetMe();
   const [location, setLocation] = useLocation();
+  const currentSearch = useUrlSearch();
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
   const logoutMutation = useLogout();
   const queryClient = useQueryClient();
@@ -150,7 +180,18 @@ function ShellInner({ children }: { children: React.ReactNode }) {
             {group.label}
           </div>
           {group.items.map((item) => {
-            const isActive = location === item.href;
+            // Items with `?tab=...` need the search string compared too;
+            // wouter's location is path-only. The bare-path entry stays
+            // active only when there's no `tab` query.
+            const [itemPath, itemQuery = ""] = item.href.split("?");
+            let isActive = false;
+            if (location === itemPath) {
+              if (itemQuery === "") {
+                isActive = currentSearch === "" || !currentSearch.includes("tab=");
+              } else {
+                isActive = currentSearch.includes(itemQuery);
+              }
+            }
             const Icon = item.icon;
             return (
               <Link
