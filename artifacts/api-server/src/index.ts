@@ -42,23 +42,29 @@ async function startup() {
     logger.error({ err }, "Failed to sync default permission matrix on boot");
   }
 
-  // Migrate any DB seeded against an older department layout to the
-  // current 7-key canonical set, re-home orphaned assets, and (in
-  // non-production) make sure every visible department has at least one
-  // truck + equipment so the fleet dept-filter dropdown is meaningful.
-  // Runs before the fleet/demo backfills since both consume dept keys.
-  try {
-    await backfillDepartments();
-  } catch (err) {
-    logger.error({ err }, "Failed to backfill departments on boot");
-  }
-
-  // Enrich fleet and demo data. Both functions are fully idempotent (each has
-  // its own row-count guard) so they run on every boot in all environments.
+  // Fleet backfill runs FIRST because its first step is the
+  // idempotent ALTER TABLE that adds the maintenance_logs vendor /
+  // category / notes / receipt_data_url columns. Subsequent steps
+  // (and the accounting endpoint) read those columns via drizzle's
+  // explicit column lists, so they MUST exist before any other code
+  // queries the table.
   try {
     await backfillFleetData();
   } catch (err) {
     logger.error({ err }, "Failed to backfill fleet data on boot");
+  }
+
+  // Migrate any DB seeded against an older department layout to the
+  // current 7-key canonical set, re-home orphaned assets, and (in
+  // non-production) make sure every visible department has at least
+  // one truck + equipment so the fleet dept-filter dropdown is
+  // meaningful. Also enriches maintenance logs with vendor /
+  // category / receipt — relies on the columns added by the fleet
+  // backfill above.
+  try {
+    await backfillDepartments();
+  } catch (err) {
+    logger.error({ err }, "Failed to backfill departments on boot");
   }
   try {
     await backfillDemoData();
