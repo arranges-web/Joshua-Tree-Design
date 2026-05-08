@@ -16,6 +16,7 @@ import {
   Hourglass,
   Receipt,
   TrendingUp,
+  Truck,
 } from "lucide-react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import {
@@ -57,6 +58,12 @@ const NAV_GROUPS: Array<{ label: string; items: NavItem[] }> = [
         href: "/accounting",
         label: "Overview",
         icon: Calculator,
+        roles: ["ADMIN", "ACCOUNTING_MANAGER"],
+      },
+      {
+        href: "/accounting?tab=assets",
+        label: "Assets",
+        icon: Truck,
         roles: ["ADMIN", "ACCOUNTING_MANAGER"],
       },
       {

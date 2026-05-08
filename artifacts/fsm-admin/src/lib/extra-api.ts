@@ -373,6 +373,46 @@ export type AccountingTopVendor = {
   logCount: number;
 };
 
+export type AssetCategoryKey = "TRUCK" | "TRAILER" | "HANDHELD" | "CUSTOM";
+
+export type AccountingAssetSpend = {
+  kind: "TRUCK" | "EQUIPMENT";
+  assetCategory: AssetCategoryKey;
+  customCategoryLabel: string | null;
+  id: number;
+  slug: string | null;
+  name: string;
+  status: string;
+  departmentId: number | null;
+  departmentLabel: string;
+  purchasePriceCents: number;
+  lifeToDateSpendCents: number;
+  ytdSpendCents: number;
+  last30DaysSpendCents: number;
+  logCount: number;
+  logsWithReceipt: number;
+};
+
+export type AccountingAssetTypeRollup = Record<
+  AssetCategoryKey,
+  {
+    count: number;
+    lifeToDateSpendCents: number;
+    ytdSpendCents: number;
+    last30DaysSpendCents: number;
+    logCount: number;
+    logsWithReceipt: number;
+    purchasePriceCents: number;
+  }
+>;
+
+export type AccountingDeptAssetMatrixRow = {
+  departmentId: number | null;
+  departmentLabel: string;
+  cells: Record<AssetCategoryKey, { count: number; cents: number }>;
+  totalCents: number;
+};
+
 export type AccountingSummary = {
   totals: {
     openInvoiceCents: number;
@@ -383,6 +423,9 @@ export type AccountingSummary = {
   branches: AccountingBranch[];
   orgMonthly: AccountingMonthRow[];
   topVendors: AccountingTopVendor[];
+  assetSpend: AccountingAssetSpend[];
+  assetTypeRollup: AccountingAssetTypeRollup;
+  deptAssetMatrix: AccountingDeptAssetMatrixRow[];
 };
 
 export const ACCOUNTING_KEY = ["accounting", "summary"] as const;

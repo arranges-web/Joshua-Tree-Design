@@ -338,77 +338,92 @@ export function Maintenance() {
           ))}
         </div>
       ) : filteredLogs.length > 0 ? (
-        <div className="rounded-md border bg-card overflow-x-auto">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Asset</TableHead>
-                <TableHead>Kind</TableHead>
-                <TableHead>Category</TableHead>
-                <TableHead>Vendor</TableHead>
-                <TableHead>Description</TableHead>
-                <TableHead>Performed At</TableHead>
-                <TableHead className="text-right">Labor</TableHead>
-                <TableHead className="text-right">Parts</TableHead>
-                <TableHead className="text-right">Total</TableHead>
-                <TableHead>Receipt</TableHead>
-                <TableHead className="w-[100px]">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filteredLogs.map((log) => (
-                <TableRow key={log.id}>
-                  <TableCell className="text-sm font-medium whitespace-nowrap">{assetName(log)}</TableCell>
-                  <TableCell><Badge variant="outline">{log.kind}</Badge></TableCell>
-                  <TableCell>
-                    {log.category ? (
-                      <Badge variant="secondary" className="text-xs">
-                        {log.category}
-                      </Badge>
-                    ) : (
-                      <span className="text-xs text-muted-foreground/40">—</span>
-                    )}
-                  </TableCell>
-                  <TableCell className="text-sm">
-                    {log.vendor ?? <span className="text-xs text-muted-foreground/40">—</span>}
-                  </TableCell>
-                  <TableCell className="max-w-[280px] truncate" title={log.description}>{log.description}</TableCell>
-                  <TableCell className="whitespace-nowrap">{new Date(log.performedAt).toLocaleDateString()}</TableCell>
-                  <TableCell className="text-right font-mono text-xs">{usd(log.laborCostCents ?? 0)}</TableCell>
-                  <TableCell className="text-right font-mono text-xs">{usd(log.partsCostCents ?? 0)}</TableCell>
-                  <TableCell className="text-right font-mono font-semibold">{usd(log.costCents)}</TableCell>
-                  <TableCell>
-                    {log.hasReceipt ? (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-7 gap-1.5 text-primary"
-                        onClick={() => setPreviewLogId(log.id)}
-                      >
-                        <Paperclip className="h-3.5 w-3.5" />
-                        View
-                      </Button>
-                    ) : (
-                      <span className="text-xs text-muted-foreground/40">—</span>
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-2">
-                      <MaintenanceFormDialog
-                        log={log}
-                        trigger={
-                          <Button variant="ghost" size="icon" className="h-8 w-8">
-                            <Edit className="h-4 w-4" />
-                          </Button>
-                        }
-                      />
-                      <DeleteMaintenance id={log.id} />
-                    </div>
-                  </TableCell>
+        <div className="rounded-md border bg-card overflow-hidden">
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader className="sticky top-0 z-10 bg-muted/40 backdrop-blur">
+                <TableRow>
+                  <TableHead className="whitespace-nowrap">Asset</TableHead>
+                  <TableHead>Kind</TableHead>
+                  <TableHead>Category</TableHead>
+                  <TableHead>Vendor</TableHead>
+                  <TableHead>Description</TableHead>
+                  <TableHead className="whitespace-nowrap">Performed At</TableHead>
+                  <TableHead className="text-right">Labor</TableHead>
+                  <TableHead className="text-right">Parts</TableHead>
+                  <TableHead className="text-right">Total</TableHead>
+                  <TableHead>Receipt</TableHead>
+                  <TableHead className="w-[100px]">Actions</TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {filteredLogs.map((log) => (
+                  <TableRow key={log.id} className="hover:bg-muted/40">
+                    <TableCell className="text-sm font-medium whitespace-nowrap">{assetName(log)}</TableCell>
+                    <TableCell>
+                      <Badge
+                        variant="outline"
+                        className={
+                          log.kind === "REPAIR"
+                            ? "border-rose-300 bg-rose-50 text-rose-700"
+                            : log.kind === "INSPECTION"
+                              ? "border-blue-300 bg-blue-50 text-blue-700"
+                              : "border-emerald-300 bg-emerald-50 text-emerald-700"
+                        }
+                      >
+                        {log.kind}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      {log.category ? (
+                        <Badge variant="secondary" className="text-xs">
+                          {log.category}
+                        </Badge>
+                      ) : (
+                        <span className="text-xs text-muted-foreground/40">—</span>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-sm">
+                      {log.vendor ?? <span className="text-xs text-muted-foreground/40">—</span>}
+                    </TableCell>
+                    <TableCell className="max-w-[280px] truncate" title={log.description}>{log.description}</TableCell>
+                    <TableCell className="whitespace-nowrap text-sm text-muted-foreground">{new Date(log.performedAt).toLocaleDateString()}</TableCell>
+                    <TableCell className="text-right font-mono text-xs">{usd(log.laborCostCents ?? 0)}</TableCell>
+                    <TableCell className="text-right font-mono text-xs">{usd(log.partsCostCents ?? 0)}</TableCell>
+                    <TableCell className="text-right font-mono font-semibold">{usd(log.costCents)}</TableCell>
+                    <TableCell>
+                      {log.hasReceipt ? (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 gap-1.5 text-primary"
+                          onClick={() => setPreviewLogId(log.id)}
+                        >
+                          <Paperclip className="h-3.5 w-3.5" />
+                          View
+                        </Button>
+                      ) : (
+                        <span className="text-xs text-muted-foreground/40">—</span>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        <MaintenanceFormDialog
+                          log={log}
+                          trigger={
+                            <Button variant="ghost" size="icon" className="h-8 w-8">
+                              <Edit className="h-4 w-4" />
+                            </Button>
+                          }
+                        />
+                        <DeleteMaintenance id={log.id} />
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
         </div>
       ) : (
         <div className="text-center py-12 text-muted-foreground border rounded-md bg-card">
