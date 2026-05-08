@@ -17,6 +17,7 @@ import {
   Receipt,
   TrendingUp,
   Truck,
+  Sparkles,
 } from "lucide-react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import {
@@ -49,6 +50,17 @@ const NAV_GROUPS: Array<{ label: string; items: NavItem[] }> = [
       { href: "/maintenance", label: "Maintenance Log", icon: Wrench },
       { href: "/crews", label: "Crews", icon: HardHat },
       { href: "/team", label: "Team", icon: Users },
+    ],
+  },
+  {
+    label: "AI",
+    items: [
+      {
+        href: "/assistant",
+        label: "Assistant",
+        icon: Sparkles,
+        roles: ["ADMIN", "ACCOUNTING_MANAGER"],
+      },
     ],
   },
   {

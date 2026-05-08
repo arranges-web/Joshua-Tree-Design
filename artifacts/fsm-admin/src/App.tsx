@@ -23,6 +23,7 @@ import { Employees } from "@/pages/Employees";
 import { Permissions } from "@/pages/Permissions";
 import { Accounting } from "@/pages/Accounting";
 import { Crews } from "@/pages/Crews";
+import { Assistant } from "@/pages/Assistant";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -96,6 +97,7 @@ function AppRouter() {
               <Route path="/employees" component={Employees} />
               <Route path="/permissions" component={Permissions} />
               <Route path="/accounting" component={Accounting} />
+              <Route path="/assistant" component={Assistant} />
               <Route component={NotFound} />
             </Switch>
           </Shell>
