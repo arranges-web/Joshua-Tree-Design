@@ -26,6 +26,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Link } from "wouter";
 import {
   Building2,
   Calculator,
@@ -38,12 +39,19 @@ import {
   Receipt,
   Users,
   Hourglass,
+  Truck as TruckIcon,
+  Caravan,
+  Hammer,
+  Package,
+  ChevronRight,
 } from "lucide-react";
 import {
   useAccountingSummary,
   type AccountingBranch,
   type AccountingExpenseCategoryKey,
   type AccountingExpensesByCategory,
+  type AccountingAssetSpend,
+  type AssetCategoryKey,
 } from "@/lib/extra-api";
 import { useDepartmentFilter } from "@/context/DepartmentContext";
 import { rowsToCsv, downloadCsv } from "@/lib/csv";
@@ -94,7 +102,7 @@ const CATEGORY_LABELS: Record<AccountingExpenseCategoryKey, string> = {
   UNCATEGORIZED: "Uncategorized",
 };
 
-const TABS = ["overview", "receivables", "expenses", "pipeline", "trends"] as const;
+const TABS = ["overview", "assets", "receivables", "expenses", "pipeline", "trends"] as const;
 type TabValue = (typeof TABS)[number];
 
 function tabFromSearch(search: string): TabValue {
@@ -432,8 +440,9 @@ export function Accounting() {
       </div>
 
       <Tabs value={tab} onValueChange={handleTabChange} className="space-y-4">
-        <TabsList className="grid w-full grid-cols-5 md:w-auto md:inline-flex">
+        <TabsList className="grid w-full grid-cols-3 md:w-auto md:inline-flex md:grid-cols-6">
           <TabsTrigger value="overview">Overview</TabsTrigger>
+          <TabsTrigger value="assets">Assets</TabsTrigger>
           <TabsTrigger value="receivables">Receivables</TabsTrigger>
           <TabsTrigger value="expenses">Expenses</TabsTrigger>
           <TabsTrigger value="pipeline">Pipeline</TabsTrigger>
@@ -540,6 +549,17 @@ export function Accounting() {
               </div>
             </CardContent>
           </Card>
+        </TabsContent>
+
+        {/* ---------- ASSETS ---------- */}
+        <TabsContent value="assets" className="space-y-4">
+          <AssetsTab
+            assetSpend={data.assetSpend ?? []}
+            rollup={data.assetTypeRollup}
+            deptMatrix={data.deptAssetMatrix ?? []}
+            activeDeptId={activeDeptId}
+            isScopedToOne={isScopedToOne}
+          />
         </TabsContent>
 
         {/* ---------- RECEIVABLES ---------- */}
@@ -981,6 +1001,416 @@ export function Accounting() {
           )}
         </TabsContent>
       </Tabs>
+    </div>
+  );
+}
+
+// Defaults so the Assets tab can render even if the API hasn't shipped
+// the new fields yet.
+const ASSET_CATEGORY_KEYS: AssetCategoryKey[] = [
+  "TRUCK",
+  "TRAILER",
+  "HANDHELD",
+  "CUSTOM",
+];
+const ASSET_CATEGORY_LABELS: Record<AssetCategoryKey, string> = {
+  TRUCK: "Trucks",
+  TRAILER: "Trailers",
+  HANDHELD: "Handheld equipment",
+  CUSTOM: "Custom equipment",
+};
+const ASSET_CATEGORY_ICONS: Record<
+  AssetCategoryKey,
+  React.ComponentType<{ className?: string }>
+> = {
+  TRUCK: TruckIcon,
+  TRAILER: Caravan,
+  HANDHELD: Hammer,
+  CUSTOM: Package,
+};
+const ASSET_CATEGORY_COLORS: Record<AssetCategoryKey, string> = {
+  TRUCK: "hsl(220 65% 55%)",
+  TRAILER: "hsl(40 80% 50%)",
+  HANDHELD: "hsl(150 55% 45%)",
+  CUSTOM: "hsl(280 50% 55%)",
+};
+
+function emptyRollupCell() {
+  return {
+    count: 0,
+    lifeToDateSpendCents: 0,
+    ytdSpendCents: 0,
+    last30DaysSpendCents: 0,
+    logCount: 0,
+    logsWithReceipt: 0,
+    purchasePriceCents: 0,
+  };
+}
+
+function AssetsTab({
+  assetSpend,
+  rollup,
+  deptMatrix,
+  activeDeptId,
+  isScopedToOne,
+}: {
+  assetSpend: AccountingAssetSpend[];
+  rollup:
+    | Record<AssetCategoryKey, ReturnType<typeof emptyRollupCell>>
+    | undefined;
+  deptMatrix: Array<{
+    departmentId: number | null;
+    departmentLabel: string;
+    cells: Record<AssetCategoryKey, { count: number; cents: number }>;
+    totalCents: number;
+  }>;
+  activeDeptId: number | undefined;
+  isScopedToOne: boolean;
+}) {
+  // Defensive defaults so the page renders against an older API.
+  const safeRollup = useMemo(() => {
+    return {
+      TRUCK: rollup?.TRUCK ?? emptyRollupCell(),
+      TRAILER: rollup?.TRAILER ?? emptyRollupCell(),
+      HANDHELD: rollup?.HANDHELD ?? emptyRollupCell(),
+      CUSTOM: rollup?.CUSTOM ?? emptyRollupCell(),
+    };
+  }, [rollup]);
+
+  // Narrow the per-asset list to the active dept (when filtered).
+  const filteredAssets = useMemo(() => {
+    if (activeDeptId == null) return assetSpend;
+    return assetSpend.filter((a) => a.departmentId === activeDeptId);
+  }, [assetSpend, activeDeptId]);
+
+  // Recompute the rollup against the (possibly filtered) list so the
+  // KPI cards always match the table below.
+  const scopedRollup = useMemo(() => {
+    if (activeDeptId == null) return safeRollup;
+    const r: Record<AssetCategoryKey, ReturnType<typeof emptyRollupCell>> = {
+      TRUCK: emptyRollupCell(),
+      TRAILER: emptyRollupCell(),
+      HANDHELD: emptyRollupCell(),
+      CUSTOM: emptyRollupCell(),
+    };
+    for (const a of filteredAssets) {
+      const cat = a.assetCategory;
+      r[cat].count += 1;
+      r[cat].lifeToDateSpendCents += a.lifeToDateSpendCents;
+      r[cat].ytdSpendCents += a.ytdSpendCents;
+      r[cat].last30DaysSpendCents += a.last30DaysSpendCents;
+      r[cat].logCount += a.logCount;
+      r[cat].logsWithReceipt += a.logsWithReceipt;
+      r[cat].purchasePriceCents += a.purchasePriceCents;
+    }
+    return r;
+  }, [filteredAssets, safeRollup, activeDeptId]);
+
+  const totalLtd =
+    scopedRollup.TRUCK.lifeToDateSpendCents +
+    scopedRollup.TRAILER.lifeToDateSpendCents +
+    scopedRollup.HANDHELD.lifeToDateSpendCents +
+    scopedRollup.CUSTOM.lifeToDateSpendCents;
+  const totalYtd =
+    scopedRollup.TRUCK.ytdSpendCents +
+    scopedRollup.TRAILER.ytdSpendCents +
+    scopedRollup.HANDHELD.ytdSpendCents +
+    scopedRollup.CUSTOM.ytdSpendCents;
+  const totalAssets =
+    scopedRollup.TRUCK.count +
+    scopedRollup.TRAILER.count +
+    scopedRollup.HANDHELD.count +
+    scopedRollup.CUSTOM.count;
+
+  const exportAssetsCsv = () => {
+    const csv = rowsToCsv(filteredAssets, [
+      { header: "Asset", value: (a) => a.name },
+      { header: "Type", value: (a) => ASSET_CATEGORY_LABELS[a.assetCategory] },
+      {
+        header: "Custom category",
+        value: (a) => a.customCategoryLabel ?? "",
+      },
+      { header: "Department", value: (a) => a.departmentLabel },
+      { header: "Status", value: (a) => a.status },
+      {
+        header: "Purchase price (USD)",
+        value: (a) => (a.purchasePriceCents / 100).toFixed(2),
+      },
+      {
+        header: "Lifetime spend (USD)",
+        value: (a) => (a.lifeToDateSpendCents / 100).toFixed(2),
+      },
+      {
+        header: "YTD spend (USD)",
+        value: (a) => (a.ytdSpendCents / 100).toFixed(2),
+      },
+      {
+        header: "Last 30 days (USD)",
+        value: (a) => (a.last30DaysSpendCents / 100).toFixed(2),
+      },
+      { header: "Log count", value: (a) => a.logCount },
+      { header: "Logs with receipt", value: (a) => a.logsWithReceipt },
+    ]);
+    const stamp = new Date().toISOString().slice(0, 10);
+    downloadCsv(`asset-spend-${stamp}.csv`, csv);
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="text-sm text-muted-foreground">
+          Lifetime maintenance spend rolled up per equipment type and
+          per asset, with last-30-days trend so you can see what's
+          burning money right now.
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={exportAssetsCsv}
+          disabled={filteredAssets.length === 0}
+        >
+          <Download className="mr-2 h-4 w-4" /> Export CSV
+        </Button>
+      </div>
+
+      <div className="grid gap-3 md:grid-cols-4">
+        {ASSET_CATEGORY_KEYS.map((key) => {
+          const r = scopedRollup[key];
+          const Icon = ASSET_CATEGORY_ICONS[key];
+          return (
+            <Card key={key} className="border-border/60">
+              <CardContent className="p-5">
+                <div className="flex items-start justify-between">
+                  <div>
+                    <div className="text-xs font-mono uppercase tracking-wider text-muted-foreground">
+                      {ASSET_CATEGORY_LABELS[key]}
+                    </div>
+                    <div className="mt-2 text-2xl font-bold">
+                      {usd(r.lifeToDateSpendCents)}
+                    </div>
+                    <div className="mt-1 text-xs text-muted-foreground">
+                      {r.count} asset{r.count === 1 ? "" : "s"} · YTD{" "}
+                      {usd(r.ytdSpendCents)}
+                    </div>
+                  </div>
+                  <div
+                    className="flex h-10 w-10 items-center justify-center rounded-md text-white"
+                    style={{ backgroundColor: ASSET_CATEGORY_COLORS[key] }}
+                  >
+                    <Icon className="h-5 w-5" />
+                  </div>
+                </div>
+                <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-muted">
+                  <div
+                    className="h-full rounded-full"
+                    style={{
+                      width:
+                        totalLtd > 0
+                          ? `${Math.round((r.lifeToDateSpendCents / totalLtd) * 100)}%`
+                          : "0%",
+                      backgroundColor: ASSET_CATEGORY_COLORS[key],
+                    }}
+                  />
+                </div>
+                <div className="mt-1.5 flex justify-between text-[10px] text-muted-foreground">
+                  <span>
+                    {totalLtd > 0
+                      ? `${Math.round((r.lifeToDateSpendCents / totalLtd) * 100)}% of fleet`
+                      : "—"}
+                  </span>
+                  <span>30d {usd(r.last30DaysSpendCents)}</span>
+                </div>
+              </CardContent>
+            </Card>
+          );
+        })}
+      </div>
+
+      {!isScopedToOne && deptMatrix.length > 0 && (
+        <Card className="border-border/60">
+          <CardHeader>
+            <CardTitle className="text-base">
+              Spend by department × asset type
+              <span className="ml-2 text-xs font-normal text-muted-foreground">
+                lifetime totals
+              </span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-0">
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Department</TableHead>
+                    {ASSET_CATEGORY_KEYS.map((k) => (
+                      <TableHead key={k} className="text-right">
+                        {ASSET_CATEGORY_LABELS[k]}
+                      </TableHead>
+                    ))}
+                    <TableHead className="text-right">Total</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {deptMatrix.map((row) => (
+                    <TableRow key={row.departmentId ?? "unattributed"}>
+                      <TableCell className="text-sm font-medium">
+                        {row.departmentLabel}
+                      </TableCell>
+                      {ASSET_CATEGORY_KEYS.map((k) => {
+                        const cell = row.cells[k];
+                        return (
+                          <TableCell
+                            key={k}
+                            className="text-right font-mono text-sm"
+                          >
+                            {cell.count > 0 ? (
+                              <>
+                                {usd(cell.cents)}
+                                <span className="ml-1 text-[10px] text-muted-foreground">
+                                  ({cell.count})
+                                </span>
+                              </>
+                            ) : (
+                              <span className="text-muted-foreground/40">—</span>
+                            )}
+                          </TableCell>
+                        );
+                      })}
+                      <TableCell className="text-right font-mono text-sm font-semibold">
+                        {usd(row.totalCents)}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      <Card className="border-border/60">
+        <CardHeader>
+          <CardTitle className="text-base">
+            Per-asset spend
+            <span className="ml-2 text-xs font-normal text-muted-foreground">
+              {totalAssets} asset{totalAssets === 1 ? "" : "s"} · {usd(totalLtd)} lifetime
+            </span>
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="p-0">
+          {filteredAssets.length === 0 ? (
+            <div className="px-6 py-12 text-center text-sm text-muted-foreground">
+              No assets in scope. Add a truck or piece of equipment from the
+              Asset Registry, or pick a different department.
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Asset</TableHead>
+                    <TableHead>Type</TableHead>
+                    <TableHead>Department</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead className="text-right">Lifetime</TableHead>
+                    <TableHead className="text-right">YTD</TableHead>
+                    <TableHead className="text-right">30 days</TableHead>
+                    <TableHead className="text-right">Logs</TableHead>
+                    <TableHead className="w-[44px]" />
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredAssets.map((a) => {
+                    const Icon = ASSET_CATEGORY_ICONS[a.assetCategory];
+                    return (
+                      <TableRow key={`${a.kind}-${a.id}`}>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            <span
+                              className="flex h-7 w-7 items-center justify-center rounded-md text-white"
+                              style={{
+                                backgroundColor:
+                                  ASSET_CATEGORY_COLORS[a.assetCategory],
+                              }}
+                            >
+                              <Icon className="h-3.5 w-3.5" />
+                            </span>
+                            <div>
+                              <div className="text-sm font-medium">
+                                {a.name}
+                              </div>
+                              {a.customCategoryLabel && (
+                                <div className="text-xs text-muted-foreground">
+                                  {a.customCategoryLabel}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="outline" className="text-xs">
+                            {ASSET_CATEGORY_LABELS[a.assetCategory]}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-sm">
+                          {a.departmentLabel}
+                        </TableCell>
+                        <TableCell>
+                          <Badge
+                            variant={
+                              a.status === "ACTIVE"
+                                ? "default"
+                                : a.status === "IN_SHOP"
+                                  ? "secondary"
+                                  : "outline"
+                            }
+                            className="text-[10px]"
+                          >
+                            {a.status === "RETIRED"
+                              ? "Out of service"
+                              : a.status.replace("_", " ")}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-right font-mono text-sm font-semibold">
+                          {usd(a.lifeToDateSpendCents)}
+                        </TableCell>
+                        <TableCell className="text-right font-mono text-sm">
+                          {usd(a.ytdSpendCents)}
+                        </TableCell>
+                        <TableCell
+                          className={`text-right font-mono text-sm ${a.last30DaysSpendCents > 0 ? "text-rose-700" : "text-muted-foreground/60"}`}
+                        >
+                          {usd(a.last30DaysSpendCents)}
+                        </TableCell>
+                        <TableCell className="text-right font-mono text-sm">
+                          {a.logCount}
+                          {a.logsWithReceipt > 0 && (
+                            <span className="ml-1 inline-flex items-center gap-0.5 text-[10px] text-emerald-700">
+                              <Receipt className="h-3 w-3" />
+                              {a.logsWithReceipt}
+                            </span>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          {a.slug && (
+                            <Link
+                              href={`/assets/${a.slug}`}
+                              className="text-muted-foreground hover:text-primary"
+                              aria-label={`Open ${a.name}`}
+                            >
+                              <ChevronRight className="h-4 w-4" />
+                            </Link>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }

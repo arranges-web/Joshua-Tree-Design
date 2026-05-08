@@ -53,14 +53,37 @@ router.get(
       db.select().from(jobsTable),
       db.select().from(crewsTable),
       db.select().from(usersTable),
-      db.select({ id: trucksTable.id, departmentId: trucksTable.departmentId }).from(trucksTable),
-      db.select({ id: equipmentTable.id, departmentId: equipmentTable.departmentId }).from(equipmentTable),
+      db
+        .select({
+          id: trucksTable.id,
+          name: trucksTable.name,
+          slug: trucksTable.slug,
+          status: trucksTable.status,
+          vehicleType: trucksTable.vehicleType,
+          departmentId: trucksTable.departmentId,
+          purchasePriceCents: trucksTable.purchasePriceCents,
+        })
+        .from(trucksTable),
+      db
+        .select({
+          id: equipmentTable.id,
+          name: equipmentTable.name,
+          slug: equipmentTable.slug,
+          status: equipmentTable.status,
+          category: equipmentTable.category,
+          customCategoryLabel: equipmentTable.customCategoryLabel,
+          departmentId: equipmentTable.departmentId,
+          purchasePriceCents: equipmentTable.purchasePriceCents,
+        })
+        .from(equipmentTable),
       db.select().from(maintenanceLogsTable),
     ]);
 
     const userById = new Map(users.map((u) => [u.id, u]));
     const crewById = new Map(crews.map((c) => [c.id, c]));
     const jobById = new Map(jobs.map((j) => [j.id, j]));
+    const truckById = new Map(trucks.map((t) => [t.id, t]));
+    const equipById = new Map(equipment.map((e) => [e.id, e]));
     const truckDept = new Map(trucks.map((t) => [t.id, t.departmentId]));
     const equipDept = new Map(equipment.map((e) => [e.id, e.departmentId]));
 
@@ -344,6 +367,170 @@ router.get(
       }, 0),
     }));
 
+    // ── Per-asset financial rollup ──────────────────────────────────────────
+    // The accounting page leads with money-by-asset-type, so build a
+    // per-asset spend table and a per-type aggregate. Asset categories:
+    //   TRUCK / TRAILER come from trucks.vehicle_type
+    //   HANDHELD / CUSTOM come from equipment.category
+    type AssetSpendRow = {
+      kind: "TRUCK" | "EQUIPMENT";
+      assetCategory: "TRUCK" | "TRAILER" | "HANDHELD" | "CUSTOM";
+      customCategoryLabel: string | null;
+      id: number;
+      slug: string | null;
+      name: string;
+      status: string;
+      departmentId: number | null;
+      departmentLabel: string;
+      purchasePriceCents: number;
+      lifeToDateSpendCents: number;
+      ytdSpendCents: number;
+      last30DaysSpendCents: number;
+      logCount: number;
+      logsWithReceipt: number;
+    };
+
+    const ytdStart = new Date(new Date().getFullYear(), 0, 1).getTime();
+    const last30Start = NOW - 30 * DAY_MS;
+
+    const assetSpendByKey = new Map<string, AssetSpendRow>();
+    const deptLabelById = new Map(depts.map((d) => [d.id, d.label] as const));
+
+    for (const t of trucks) {
+      assetSpendByKey.set(`truck-${t.id}`, {
+        kind: "TRUCK",
+        assetCategory: t.vehicleType === "TRAILER" ? "TRAILER" : "TRUCK",
+        customCategoryLabel: null,
+        id: t.id,
+        slug: t.slug,
+        name: t.name,
+        status: t.status,
+        departmentId: t.departmentId,
+        departmentLabel:
+          (t.departmentId != null ? deptLabelById.get(t.departmentId) : null) ??
+          "Unattributed",
+        purchasePriceCents: t.purchasePriceCents ?? 0,
+        lifeToDateSpendCents: 0,
+        ytdSpendCents: 0,
+        last30DaysSpendCents: 0,
+        logCount: 0,
+        logsWithReceipt: 0,
+      });
+    }
+    for (const e of equipment) {
+      assetSpendByKey.set(`equip-${e.id}`, {
+        kind: "EQUIPMENT",
+        assetCategory: e.category === "CUSTOM" ? "CUSTOM" : "HANDHELD",
+        customCategoryLabel: e.customCategoryLabel,
+        id: e.id,
+        slug: e.slug,
+        name: e.name,
+        status: e.status,
+        departmentId: e.departmentId,
+        departmentLabel:
+          (e.departmentId != null ? deptLabelById.get(e.departmentId) : null) ??
+          "Unattributed",
+        purchasePriceCents: e.purchasePriceCents ?? 0,
+        lifeToDateSpendCents: 0,
+        ytdSpendCents: 0,
+        last30DaysSpendCents: 0,
+        logCount: 0,
+        logsWithReceipt: 0,
+      });
+    }
+
+    for (const log of maintenanceLogs as MaintenanceLogRow[]) {
+      let key: string | null = null;
+      if (log.truckId) key = `truck-${log.truckId}`;
+      else if (log.equipmentId) key = `equip-${log.equipmentId}`;
+      if (!key) continue;
+      const row = assetSpendByKey.get(key);
+      if (!row) continue;
+      const cents = log.costCents ?? 0;
+      row.lifeToDateSpendCents += cents;
+      row.logCount += 1;
+      if (log.receiptDataUrl != null && log.receiptDataUrl.length > 0) {
+        row.logsWithReceipt += 1;
+      }
+      const ts = new Date(log.performedAt).getTime();
+      if (ts >= ytdStart) row.ytdSpendCents += cents;
+      if (ts >= last30Start) row.last30DaysSpendCents += cents;
+    }
+
+    const assetSpend = Array.from(assetSpendByKey.values()).sort(
+      (a, b) => b.lifeToDateSpendCents - a.lifeToDateSpendCents,
+    );
+
+    type AssetCategoryKey = "TRUCK" | "TRAILER" | "HANDHELD" | "CUSTOM";
+    const ASSET_CATEGORY_KEYS: AssetCategoryKey[] = [
+      "TRUCK",
+      "TRAILER",
+      "HANDHELD",
+      "CUSTOM",
+    ];
+    const assetTypeRollup: Record<
+      AssetCategoryKey,
+      {
+        count: number;
+        lifeToDateSpendCents: number;
+        ytdSpendCents: number;
+        last30DaysSpendCents: number;
+        logCount: number;
+        logsWithReceipt: number;
+        purchasePriceCents: number;
+      }
+    > = {
+      TRUCK: { count: 0, lifeToDateSpendCents: 0, ytdSpendCents: 0, last30DaysSpendCents: 0, logCount: 0, logsWithReceipt: 0, purchasePriceCents: 0 },
+      TRAILER: { count: 0, lifeToDateSpendCents: 0, ytdSpendCents: 0, last30DaysSpendCents: 0, logCount: 0, logsWithReceipt: 0, purchasePriceCents: 0 },
+      HANDHELD: { count: 0, lifeToDateSpendCents: 0, ytdSpendCents: 0, last30DaysSpendCents: 0, logCount: 0, logsWithReceipt: 0, purchasePriceCents: 0 },
+      CUSTOM: { count: 0, lifeToDateSpendCents: 0, ytdSpendCents: 0, last30DaysSpendCents: 0, logCount: 0, logsWithReceipt: 0, purchasePriceCents: 0 },
+    };
+    for (const row of assetSpend) {
+      const cat = row.assetCategory;
+      assetTypeRollup[cat].count += 1;
+      assetTypeRollup[cat].lifeToDateSpendCents += row.lifeToDateSpendCents;
+      assetTypeRollup[cat].ytdSpendCents += row.ytdSpendCents;
+      assetTypeRollup[cat].last30DaysSpendCents += row.last30DaysSpendCents;
+      assetTypeRollup[cat].logCount += row.logCount;
+      assetTypeRollup[cat].logsWithReceipt += row.logsWithReceipt;
+      assetTypeRollup[cat].purchasePriceCents += row.purchasePriceCents;
+    }
+
+    // Per-dept × per-asset-category matrix so the page can show a
+    // "spend by department × asset type" cross-section.
+    type DeptAssetCell = { count: number; cents: number };
+    const deptAssetMatrix: Array<{
+      departmentId: number | null;
+      departmentLabel: string;
+      cells: Record<AssetCategoryKey, DeptAssetCell>;
+      totalCents: number;
+    }> = [];
+    for (const b of branches) {
+      const cells: Record<AssetCategoryKey, DeptAssetCell> = {
+        TRUCK: { count: 0, cents: 0 },
+        TRAILER: { count: 0, cents: 0 },
+        HANDHELD: { count: 0, cents: 0 },
+        CUSTOM: { count: 0, cents: 0 },
+      };
+      let total = 0;
+      for (const row of assetSpend) {
+        if (row.departmentId !== b.departmentId) continue;
+        cells[row.assetCategory].count += 1;
+        cells[row.assetCategory].cents += row.lifeToDateSpendCents;
+        total += row.lifeToDateSpendCents;
+      }
+      deptAssetMatrix.push({
+        departmentId: b.departmentId,
+        departmentLabel: b.departmentLabel,
+        cells,
+        totalCents: total,
+      });
+    }
+
+    void truckById;
+    void equipById;
+    void ASSET_CATEGORY_KEYS;
+
     // Top vendors org-wide. Cap at 10 so the UI table stays readable.
     const topVendors = Array.from(vendorTotals.entries())
       .sort((a, b) => b[1].cents - a[1].cents)
@@ -354,7 +541,15 @@ router.get(
         logCount: v.count,
       }));
 
-    res.json({ totals, branches, orgMonthly, topVendors });
+    res.json({
+      totals,
+      branches,
+      orgMonthly,
+      topVendors,
+      assetSpend,
+      assetTypeRollup,
+      deptAssetMatrix,
+    });
   },
 );
 
