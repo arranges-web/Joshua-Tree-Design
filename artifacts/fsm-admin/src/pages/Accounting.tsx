@@ -33,7 +33,6 @@ import {
   CreditCard,
   Wrench,
   AlertTriangle,
-  Wallet,
   Download,
   TrendingUp,
   Receipt,
@@ -321,10 +320,6 @@ export function Accounting() {
     );
   }
 
-  // Net contribution = revenue − maintenance (rough P&L proxy for the demo).
-  const netCents =
-    scopedTotals.collectedRevenueCents - scopedTotals.maintenanceSpendCents;
-
   const expenseTotal =
     scopedExpenses.LABOR.cents +
     scopedExpenses.PARTS.cents +
@@ -371,6 +366,31 @@ export function Accounting() {
 
   const topVendors = data?.topVendors ?? [];
 
+  // Fleet-money rollup. The page leads with money tied to equipment
+  // (lifetime / YTD / last-30-day spend across all asset categories),
+  // not collected revenue, because that's the question the
+  // accountant + ops lead actually want answered first.
+  const scopedAssetSpend = useMemo(() => {
+    const list = data?.assetSpend ?? [];
+    return activeDeptId == null
+      ? list
+      : list.filter((a) => a.departmentId === activeDeptId);
+  }, [data, activeDeptId]);
+
+  const fleetTotals = useMemo(() => {
+    let lifetime = 0;
+    let ytd = 0;
+    let last30 = 0;
+    let assetCount = 0;
+    for (const a of scopedAssetSpend) {
+      lifetime += a.lifeToDateSpendCents;
+      ytd += a.ytdSpendCents;
+      last30 += a.last30DaysSpendCents;
+      assetCount += 1;
+    }
+    return { lifetime, ytd, last30, assetCount };
+  }, [scopedAssetSpend]);
+
   function exportTopVendorsCsv() {
     const csv = rowsToCsv(topVendors, [
       { header: "Vendor", value: (v) => v.vendor },
@@ -387,8 +407,9 @@ export function Accounting() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Accounting</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Per-branch financial visibility — receivables, expense category
-            mix, sales pipeline, and 12-month trend.
+            Money tied to your fleet — lifetime, YTD, and last-30-day spend
+            across every truck, trailer, and piece of equipment, with
+            receivables and pipeline in supporting tabs.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -407,29 +428,35 @@ export function Accounting() {
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
         <KpiCard
+          label="Fleet spend (lifetime)"
+          value={usd(fleetTotals.lifetime)}
+          sub={`${fleetTotals.assetCount} asset${fleetTotals.assetCount === 1 ? "" : "s"} in scope`}
+          icon={Wrench}
+          tone={fleetTotals.lifetime > 0 ? "rose" : "neutral"}
+        />
+        <KpiCard
+          label="Fleet spend (YTD)"
+          value={usd(fleetTotals.ytd)}
+          sub={
+            fleetTotals.lifetime > 0
+              ? `${Math.round((fleetTotals.ytd / fleetTotals.lifetime) * 100)}% of lifetime`
+              : ""
+          }
+          icon={TrendingUp}
+          tone={fleetTotals.ytd > 0 ? "amber" : "neutral"}
+        />
+        <KpiCard
+          label="Fleet spend (last 30d)"
+          value={usd(fleetTotals.last30)}
+          sub="recent burn rate"
+          icon={Wrench}
+          tone={fleetTotals.last30 > 0 ? "rose" : "neutral"}
+        />
+        <KpiCard
           label="Open invoices"
           value={usd(scopedTotals.openInvoiceCents)}
           icon={CreditCard}
           tone={scopedTotals.openInvoiceCents > 0 ? "amber" : "neutral"}
-        />
-        <KpiCard
-          label="Collected revenue"
-          value={usd(scopedTotals.collectedRevenueCents)}
-          icon={Wallet}
-          tone="emerald"
-        />
-        <KpiCard
-          label="Maintenance"
-          value={usd(scopedTotals.maintenanceSpendCents)}
-          icon={Wrench}
-          tone={scopedTotals.maintenanceSpendCents > 0 ? "rose" : "neutral"}
-        />
-        <KpiCard
-          label="Net contribution"
-          value={usd(netCents)}
-          icon={TrendingUp}
-          tone={netCents >= 0 ? "emerald" : "rose"}
-          sub="revenue − maintenance"
         />
         <KpiCard
           label="Quote pipeline"
