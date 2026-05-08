@@ -302,6 +302,33 @@ export function Accounting() {
       }));
   }, [data, scopedBranches, activeDeptId]);
 
+  // Fleet-money rollup powering the page-level KPI strip ("Fleet
+  // spend lifetime / YTD / 30d"). Defined here, BEFORE the loading
+  // / error early returns, so the hook count stays stable across
+  // renders. Placing useMemo after a conditional `return` violates
+  // the Rules of Hooks and crashes on the second render — exactly
+  // what the runtime overlay caught earlier.
+  const scopedAssetSpend = useMemo(() => {
+    const list = data?.assetSpend ?? [];
+    return activeDeptId == null
+      ? list
+      : list.filter((a) => a.departmentId === activeDeptId);
+  }, [data, activeDeptId]);
+
+  const fleetTotals = useMemo(() => {
+    let lifetime = 0;
+    let ytd = 0;
+    let last30 = 0;
+    let assetCount = 0;
+    for (const a of scopedAssetSpend) {
+      lifetime += a.lifeToDateSpendCents;
+      ytd += a.ytdSpendCents;
+      last30 += a.last30DaysSpendCents;
+      assetCount += 1;
+    }
+    return { lifetime, ytd, last30, assetCount };
+  }, [scopedAssetSpend]);
+
   if (isLoading) {
     return (
       <div className="space-y-4">
@@ -365,31 +392,6 @@ export function Accounting() {
   }
 
   const topVendors = data?.topVendors ?? [];
-
-  // Fleet-money rollup. The page leads with money tied to equipment
-  // (lifetime / YTD / last-30-day spend across all asset categories),
-  // not collected revenue, because that's the question the
-  // accountant + ops lead actually want answered first.
-  const scopedAssetSpend = useMemo(() => {
-    const list = data?.assetSpend ?? [];
-    return activeDeptId == null
-      ? list
-      : list.filter((a) => a.departmentId === activeDeptId);
-  }, [data, activeDeptId]);
-
-  const fleetTotals = useMemo(() => {
-    let lifetime = 0;
-    let ytd = 0;
-    let last30 = 0;
-    let assetCount = 0;
-    for (const a of scopedAssetSpend) {
-      lifetime += a.lifeToDateSpendCents;
-      ytd += a.ytdSpendCents;
-      last30 += a.last30DaysSpendCents;
-      assetCount += 1;
-    }
-    return { lifetime, ytd, last30, assetCount };
-  }, [scopedAssetSpend]);
 
   function exportTopVendorsCsv() {
     const csv = rowsToCsv(topVendors, [
