@@ -81,9 +81,16 @@ export function Assistant() {
         content,
       }));
       const result = await chat.mutateAsync(apiMessages);
+      const replyText = result.reply?.trim() ?? "";
+      if (!replyText) {
+        setErrorBanner("The assistant returned an empty response — please try again.");
+        setMessages((prev) => prev.slice(0, -1));
+        setInput(trimmed);
+        return;
+      }
       setMessages((prev) => [
         ...prev,
-        { id: newId(), role: "assistant", content: result.reply },
+        { id: newId(), role: "assistant", content: replyText },
       ]);
     } catch (err) {
       const status =
@@ -92,7 +99,7 @@ export function Assistant() {
           : undefined;
       const fallback =
         status === 503
-          ? "The AI assistant isn't configured. Add `OPENAI_API_KEY` as a Replit secret to enable it."
+          ? "The assistant returned an empty response — please try again."
           : status === 429
             ? "The assistant is rate-limited right now. Try again in a minute."
             : status === 403

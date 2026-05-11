@@ -341,7 +341,22 @@ router.post(
         max_completion_tokens: 1500,
         messages: apiMessages,
       });
-      const reply = completion.choices[0]?.message?.content ?? "";
+      const choice = completion.choices[0];
+      logger.info({
+        finishReason: choice?.finish_reason,
+        contentNull: choice?.message?.content === null,
+        contentLength: choice?.message?.content?.length ?? 0,
+        refusal: choice?.message?.refusal ?? null,
+      }, "AI completion received");
+      const reply = choice?.message?.content ?? choice?.message?.refusal ?? "";
+      if (!reply) {
+        logger.warn({ finishReason: choice?.finish_reason }, "AI model returned empty content — returning retryable error");
+        res.status(503).json({
+          error: "ai_empty_response",
+          message: "The AI model returned an empty response. Please try again.",
+        });
+        return;
+      }
       res.json({
         reply,
         usage: {
