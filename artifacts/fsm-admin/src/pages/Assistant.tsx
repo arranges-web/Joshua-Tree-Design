@@ -92,7 +92,7 @@ export function Assistant() {
           : undefined;
       const fallback =
         status === 503
-          ? "The AI assistant isn't configured. Add `ANTHROPIC_API_KEY` as a Replit secret to enable it."
+          ? "The AI assistant isn't configured. Add `OPENAI_API_KEY` as a Replit secret to enable it."
           : status === 429
             ? "The assistant is rate-limited right now. Try again in a minute."
             : status === 403
@@ -128,7 +128,7 @@ export function Assistant() {
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">
             Ask anything about your data — fleet, accounting, departments,
-            crews — or have it draft a status report. Powered by Claude.
+            crews — or have it draft a status report. Powered by OpenAI.
           </p>
         </div>
         {messages.length > 0 && (

@@ -91,12 +91,6 @@ const NAV_GROUPS: Array<{ label: string; items: NavItem[] }> = [
         roles: ["ADMIN", "ACCOUNTING_MANAGER"],
       },
       {
-        href: "/accounting?tab=pipeline",
-        label: "Pipeline",
-        icon: CreditCard,
-        roles: ["ADMIN", "ACCOUNTING_MANAGER"],
-      },
-      {
         href: "/accounting?tab=trends",
         label: "Trends",
         icon: TrendingUp,

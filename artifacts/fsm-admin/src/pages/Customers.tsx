@@ -53,8 +53,9 @@ export function Customers() {
         ) : rows.length === 0 ? (
           <div className="p-12 text-center text-sm text-muted-foreground">No customers match the current search.</div>
         ) : (
+          <div className="max-h-[70vh] overflow-auto">
           <Table>
-            <TableHeader>
+            <TableHeader className="sticky top-0 z-10 bg-muted/40 backdrop-blur">
               <TableRow>
                 <TableHead><SortHeader label="Name" sortKey="fullName" state={state} /></TableHead>
                 <TableHead><SortHeader label="Email" sortKey="email" state={state} /></TableHead>
@@ -69,6 +70,7 @@ export function Customers() {
               ))}
             </TableBody>
           </Table>
+          </div>
         )}
         <Pager state={state} totalPages={totalPages} total={total} />
       </div>

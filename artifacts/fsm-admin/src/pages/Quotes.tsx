@@ -71,8 +71,9 @@ export function Quotes() {
         ) : rows.length === 0 ? (
           <div className="p-12 text-center text-sm text-muted-foreground">No quotes match the current filters.</div>
         ) : (
+          <div className="max-h-[70vh] overflow-auto">
           <Table>
-            <TableHeader>
+            <TableHeader className="sticky top-0 z-10 bg-muted/40 backdrop-blur">
               <TableRow>
                 <TableHead className="w-[80px]"><SortHeader label="ID" sortKey="id" state={state} /></TableHead>
                 <TableHead><SortHeader label="Customer" sortKey="customerId" state={state} /></TableHead>
@@ -86,7 +87,7 @@ export function Quotes() {
             </TableHeader>
             <TableBody>
               {rows.map((quote) => (
-                <TableRow key={quote.id} className="text-sm">
+                <TableRow key={quote.id} className="text-sm hover:bg-muted/40">
                   <TableCell className="font-mono text-xs text-muted-foreground">#{quote.id}</TableCell>
                   <TableCell className="font-mono text-xs">Customer #{quote.customerId}</TableCell>
                   <TableCell><StatusBadge status={quote.status} /></TableCell>
@@ -104,6 +105,7 @@ export function Quotes() {
               ))}
             </TableBody>
           </Table>
+          </div>
         )}
         <Pager state={state} totalPages={totalPages} total={total} />
       </div>
