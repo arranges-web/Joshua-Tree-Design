@@ -22,14 +22,15 @@ import { logger } from "../lib/logger";
 
 const router: IRouter = Router();
 
-// Lazy-initialize so the rest of the API still boots if the key is missing —
-// only the /chat endpoint will 503 instead of taking down the whole server.
+// Lazy-initialize using Replit AI Integrations proxy — no personal API key
+// required. Falls back gracefully so the rest of the server still boots.
 let openai: OpenAI | null = null;
 function getClient(): OpenAI | null {
   if (openai) return openai;
-  const key = process.env["OPENAI_API_KEY"];
-  if (!key) return null;
-  openai = new OpenAI({ apiKey: key });
+  const baseURL = process.env["AI_INTEGRATIONS_OPENAI_BASE_URL"];
+  const apiKey  = process.env["AI_INTEGRATIONS_OPENAI_API_KEY"];
+  if (!baseURL || !apiKey) return null;
+  openai = new OpenAI({ baseURL, apiKey });
   return openai;
 }
 
@@ -298,8 +299,7 @@ router.post(
     if (!client) {
       res.status(503).json({
         error: "ai_not_configured",
-        message:
-          "OPENAI_API_KEY is not set on the server. Add it as a Replit secret to enable the assistant.",
+        message: "AI integration is not configured on the server.",
       });
       return;
     }
@@ -336,13 +336,9 @@ router.post(
     ];
 
     try {
-      // gpt-4o-mini is cheap, fast, and easily good enough for
-      // chat-style Q&A over a 5–10K-token snapshot. Switch to
-      // gpt-4o or gpt-4.1 if a harder analytical workload is needed.
       const completion = await client.chat.completions.create({
-        model: "gpt-4o-mini",
-        max_tokens: 1500,
-        temperature: 0.4,
+        model: "gpt-5-mini",
+        max_completion_tokens: 1500,
         messages: apiMessages,
       });
       const reply = completion.choices[0]?.message?.content ?? "";
