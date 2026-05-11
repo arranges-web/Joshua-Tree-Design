@@ -338,7 +338,7 @@ router.post(
     try {
       const completion = await client.chat.completions.create({
         model: "gpt-5-mini",
-        max_completion_tokens: 1500,
+        max_completion_tokens: 8192,
         messages: apiMessages,
       });
       const choice = completion.choices[0];
