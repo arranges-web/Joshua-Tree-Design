@@ -29,7 +29,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Link } from "wouter";
 import {
   Building2,
-  Calculator,
   CreditCard,
   Wrench,
   AlertTriangle,
@@ -101,7 +100,7 @@ const CATEGORY_LABELS: Record<AccountingExpenseCategoryKey, string> = {
   UNCATEGORIZED: "Uncategorized",
 };
 
-const TABS = ["overview", "assets", "receivables", "expenses", "pipeline", "trends"] as const;
+const TABS = ["overview", "assets", "receivables", "expenses", "trends"] as const;
 type TabValue = (typeof TABS)[number];
 
 function tabFromSearch(search: string): TabValue {
@@ -237,30 +236,6 @@ export function Accounting() {
     );
   }, [scopedBranches]);
 
-  const scopedQuoteCounts = useMemo(() => {
-    return scopedBranches.reduce(
-      (acc, b) => ({
-        draft: {
-          count: acc.draft.count + b.quotesByStatus.draft.count,
-          cents: acc.draft.cents + b.quotesByStatus.draft.cents,
-        },
-        sent: {
-          count: acc.sent.count + b.quotesByStatus.sent.count,
-          cents: acc.sent.cents + b.quotesByStatus.sent.cents,
-        },
-        approved: {
-          count: acc.approved.count + b.quotesByStatus.approved.count,
-          cents: acc.approved.cents + b.quotesByStatus.approved.cents,
-        },
-      }),
-      {
-        draft: { count: 0, cents: 0 },
-        sent: { count: 0, cents: 0 },
-        approved: { count: 0, cents: 0 },
-      },
-    );
-  }, [scopedBranches]);
-
   const scopedMaintenanceCoverage = useMemo(() => {
     let total = 0;
     let withReceipt = 0;
@@ -377,7 +352,6 @@ export function Accounting() {
       { header: "Branch", value: (b) => b.departmentLabel },
       { header: "Open invoices (USD)", value: (b) => (b.openInvoiceCents / 100).toFixed(2) },
       { header: "Collected revenue (USD)", value: (b) => (b.collectedRevenueCents / 100).toFixed(2) },
-      { header: "Quote pipeline (USD)", value: (b) => (b.quotePipelineCents / 100).toFixed(2) },
       { header: "Maintenance spend (USD)", value: (b) => (b.maintenanceSpendCents / 100).toFixed(2) },
       { header: "Aging current (USD)", value: (b) => (b.aging.currentCents / 100).toFixed(2) },
       { header: "Aging 1-30 (USD)", value: (b) => (b.aging.d1to30Cents / 100).toFixed(2) },
@@ -411,7 +385,7 @@ export function Accounting() {
           <p className="mt-1 text-sm text-muted-foreground">
             Money tied to your fleet — lifetime, YTD, and last-30-day spend
             across every truck, trailer, and piece of equipment, with
-            receivables and pipeline in supporting tabs.
+            receivables and expenses in supporting tabs.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -461,20 +435,19 @@ export function Accounting() {
           tone={scopedTotals.openInvoiceCents > 0 ? "amber" : "neutral"}
         />
         <KpiCard
-          label="Quote pipeline"
-          value={usd(scopedTotals.quotePipelineCents)}
-          icon={Calculator}
-          tone="neutral"
+          label="Collected revenue"
+          value={usd(scopedTotals.collectedRevenueCents)}
+          icon={CreditCard}
+          tone="emerald"
         />
       </div>
 
       <Tabs value={tab} onValueChange={handleTabChange} className="space-y-4">
-        <TabsList className="grid w-full grid-cols-3 md:w-auto md:inline-flex md:grid-cols-6">
+        <TabsList className="grid w-full grid-cols-3 md:w-auto md:inline-flex md:grid-cols-5">
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="assets">Assets</TabsTrigger>
           <TabsTrigger value="receivables">Receivables</TabsTrigger>
           <TabsTrigger value="expenses">Expenses</TabsTrigger>
-          <TabsTrigger value="pipeline">Pipeline</TabsTrigger>
           <TabsTrigger value="trends">Trends</TabsTrigger>
         </TabsList>
 
@@ -490,10 +463,9 @@ export function Accounting() {
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead className="w-[24%]">Branch</TableHead>
-                        <TableHead className="text-right">Open</TableHead>
+                        <TableHead className="w-[28%]">Branch</TableHead>
+                        <TableHead className="text-right">Open invoices</TableHead>
                         <TableHead className="text-right">Collected</TableHead>
-                        <TableHead className="text-right">Pipeline</TableHead>
                         <TableHead className="text-right">Maintenance</TableHead>
                         <TableHead className="text-right">Net</TableHead>
                       </TableRow>
@@ -522,9 +494,6 @@ export function Accounting() {
                             </TableCell>
                             <TableCell className="text-right font-mono text-sm">
                               {usd(b.collectedRevenueCents)}
-                            </TableCell>
-                            <TableCell className="text-right font-mono text-sm">
-                              {usd(b.quotePipelineCents)}
                             </TableCell>
                             <TableCell className="text-right font-mono text-sm">
                               {usd(b.maintenanceSpendCents)}
@@ -861,85 +830,6 @@ export function Accounting() {
                           ))}
                           <TableCell className="text-right font-mono text-sm font-semibold">
                             {usd(b.maintenanceSpendCents)}
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
-              </CardContent>
-            </Card>
-          )}
-        </TabsContent>
-
-        {/* ---------- PIPELINE ---------- */}
-        <TabsContent value="pipeline" className="space-y-4">
-          <div className="grid gap-3 md:grid-cols-3">
-            <KpiCard
-              label="Drafts"
-              value={usd(scopedQuoteCounts.draft.cents)}
-              sub={`${scopedQuoteCounts.draft.count} quote${scopedQuoteCounts.draft.count === 1 ? "" : "s"}`}
-              icon={Calculator}
-            />
-            <KpiCard
-              label="Sent"
-              value={usd(scopedQuoteCounts.sent.cents)}
-              sub={`${scopedQuoteCounts.sent.count} awaiting decision`}
-              icon={Calculator}
-              tone="amber"
-            />
-            <KpiCard
-              label="Approved"
-              value={usd(scopedQuoteCounts.approved.cents)}
-              sub={`${scopedQuoteCounts.approved.count} converted`}
-              icon={Calculator}
-              tone="emerald"
-            />
-          </div>
-
-          {!isScopedToOne && (
-            <Card className="border-border/60">
-              <CardHeader>
-                <CardTitle className="text-base">Pipeline by branch</CardTitle>
-              </CardHeader>
-              <CardContent className="p-0">
-                <div className="overflow-x-auto">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Branch</TableHead>
-                        <TableHead className="text-right">Drafts</TableHead>
-                        <TableHead className="text-right">Sent</TableHead>
-                        <TableHead className="text-right">Approved</TableHead>
-                        <TableHead className="text-right">Pipeline $</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {scopedBranches.map((b) => (
-                        <TableRow key={b.departmentId ?? "unattributed"}>
-                          <TableCell className="text-sm font-medium">
-                            {b.departmentLabel}
-                          </TableCell>
-                          <TableCell className="text-right font-mono text-sm">
-                            {b.quotesByStatus.draft.count} ·{" "}
-                            <span className="text-xs text-muted-foreground">
-                              {usd(b.quotesByStatus.draft.cents)}
-                            </span>
-                          </TableCell>
-                          <TableCell className="text-right font-mono text-sm">
-                            {b.quotesByStatus.sent.count} ·{" "}
-                            <span className="text-xs text-muted-foreground">
-                              {usd(b.quotesByStatus.sent.cents)}
-                            </span>
-                          </TableCell>
-                          <TableCell className="text-right font-mono text-sm">
-                            {b.quotesByStatus.approved.count} ·{" "}
-                            <span className="text-xs text-muted-foreground">
-                              {usd(b.quotesByStatus.approved.cents)}
-                            </span>
-                          </TableCell>
-                          <TableCell className="text-right font-mono text-sm font-semibold">
-                            {usd(b.quotePipelineCents)}
                           </TableCell>
                         </TableRow>
                       ))}

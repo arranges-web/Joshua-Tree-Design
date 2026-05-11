@@ -181,8 +181,9 @@ export function Jobs() {
             No jobs match the current filters.
           </div>
         ) : (
+          <div className="max-h-[70vh] overflow-auto">
           <Table>
-            <TableHeader>
+            <TableHeader className="sticky top-0 z-10 bg-muted/40 backdrop-blur">
               <TableRow>
                 <TableHead className="w-[80px]">
                   <SortHeader
@@ -225,7 +226,7 @@ export function Jobs() {
             </TableHeader>
             <TableBody>
               {rows.map((job) => (
-                <TableRow key={job.id} className="text-sm">
+                <TableRow key={job.id} className="text-sm hover:bg-muted/40">
                   <TableCell className="font-mono text-xs text-muted-foreground">
                     #{job.id}
                   </TableCell>
@@ -266,6 +267,7 @@ export function Jobs() {
               ))}
             </TableBody>
           </Table>
+          </div>
         )}
         <Pager state={state} totalPages={totalPages} total={total} />
       </div>

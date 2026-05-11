@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { z } from "zod";
-import Anthropic from "@anthropic-ai/sdk";
+import OpenAI from "openai";
 import { eq, and, sql, desc, gte } from "drizzle-orm";
 import {
   db,
@@ -24,13 +24,13 @@ const router: IRouter = Router();
 
 // Lazy-initialize so the rest of the API still boots if the key is missing —
 // only the /chat endpoint will 503 instead of taking down the whole server.
-let anthropic: Anthropic | null = null;
-function getClient(): Anthropic | null {
-  if (anthropic) return anthropic;
-  const key = process.env["ANTHROPIC_API_KEY"];
+let openai: OpenAI | null = null;
+function getClient(): OpenAI | null {
+  if (openai) return openai;
+  const key = process.env["OPENAI_API_KEY"];
   if (!key) return null;
-  anthropic = new Anthropic({ apiKey: key });
-  return anthropic;
+  openai = new OpenAI({ apiKey: key });
+  return openai;
 }
 
 const messageSchema = z.object({
@@ -299,7 +299,7 @@ router.post(
       res.status(503).json({
         error: "ai_not_configured",
         message:
-          "ANTHROPIC_API_KEY is not set on the server. Add it as a Replit secret to enable the assistant.",
+          "OPENAI_API_KEY is not set on the server. Add it as a Replit secret to enable the assistant.",
       });
       return;
     }
@@ -319,61 +319,62 @@ router.post(
       return;
     }
 
-    // Inject the operational snapshot as a system block alongside the
-    // base persona prompt. Two-block system + cache_control on the
-    // last block lets prompt caching kick in for repeat questions in
-    // the same conversation, even though the snapshot itself is
-    // always fresh.
-    const messages = parsed.data.messages.map((m) => ({
-      role: m.role,
-      content: m.content,
-    }));
+    // OpenAI chat completions stream `system` + `user`/`assistant`
+    // turns as a flat array. We inject the operational snapshot as
+    // a second system message so the persona + data context are
+    // both pinned at the front of every turn.
+    const apiMessages: OpenAI.Chat.ChatCompletionMessageParam[] = [
+      { role: "system", content: SYSTEM_PROMPT },
+      {
+        role: "system",
+        content: `OPERATIONAL CONTEXT (auto-generated):\n\n${context}`,
+      },
+      ...parsed.data.messages.map((m) => ({
+        role: m.role,
+        content: m.content,
+      })),
+    ];
 
     try {
-      const response = await client.messages.create({
-        model: "claude-sonnet-4-6",
+      // gpt-4o-mini is cheap, fast, and easily good enough for
+      // chat-style Q&A over a 5–10K-token snapshot. Switch to
+      // gpt-4o or gpt-4.1 if a harder analytical workload is needed.
+      const completion = await client.chat.completions.create({
+        model: "gpt-4o-mini",
         max_tokens: 1500,
-        system: [
-          { type: "text", text: SYSTEM_PROMPT },
-          {
-            type: "text",
-            text: `OPERATIONAL CONTEXT (auto-generated):\n\n${context}`,
-            cache_control: { type: "ephemeral" },
-          },
-        ],
-        messages,
+        temperature: 0.4,
+        messages: apiMessages,
       });
-      const replyBlock = response.content.find((b) => b.type === "text");
-      const reply = replyBlock && replyBlock.type === "text" ? replyBlock.text : "";
+      const reply = completion.choices[0]?.message?.content ?? "";
       res.json({
         reply,
         usage: {
-          inputTokens: response.usage.input_tokens,
-          outputTokens: response.usage.output_tokens,
-          cacheReadTokens: response.usage.cache_read_input_tokens ?? 0,
-          cacheWriteTokens: response.usage.cache_creation_input_tokens ?? 0,
+          inputTokens: completion.usage?.prompt_tokens ?? 0,
+          outputTokens: completion.usage?.completion_tokens ?? 0,
+          cacheReadTokens: 0,
+          cacheWriteTokens: 0,
         },
       });
     } catch (err) {
       // Distinguish auth + rate-limit so the UI can render a useful
       // hint instead of "something went wrong".
-      if (err instanceof Anthropic.AuthenticationError) {
-        logger.error({ err }, "Anthropic API key auth failed");
+      if (err instanceof OpenAI.AuthenticationError) {
+        logger.error({ err }, "OpenAI API key auth failed");
         res.status(503).json({
           error: "ai_auth_failed",
-          message: "ANTHROPIC_API_KEY is set but rejected by Anthropic.",
+          message: "OPENAI_API_KEY is set but rejected by OpenAI.",
         });
         return;
       }
-      if (err instanceof Anthropic.RateLimitError) {
+      if (err instanceof OpenAI.RateLimitError) {
         res.status(429).json({
           error: "ai_rate_limited",
           message: "AI assistant is rate-limited. Try again shortly.",
         });
         return;
       }
-      if (err instanceof Anthropic.APIError) {
-        logger.error({ err, status: err.status }, "Anthropic API error");
+      if (err instanceof OpenAI.APIError) {
+        logger.error({ err, status: err.status }, "OpenAI API error");
         res.status(502).json({
           error: "ai_upstream_error",
           message: "AI assistant request failed. Please try again.",

@@ -71,8 +71,9 @@ export function Invoices() {
         ) : rows.length === 0 ? (
           <div className="p-12 text-center text-sm text-muted-foreground">No invoices match the current filters.</div>
         ) : (
+          <div className="max-h-[70vh] overflow-auto">
           <Table>
-            <TableHeader>
+            <TableHeader className="sticky top-0 z-10 bg-muted/40 backdrop-blur">
               <TableRow>
                 <TableHead className="w-[80px]"><SortHeader label="ID" sortKey="id" state={state} /></TableHead>
                 <TableHead><SortHeader label="Customer" sortKey="customerId" state={state} /></TableHead>
@@ -86,7 +87,7 @@ export function Invoices() {
             </TableHeader>
             <TableBody>
               {rows.map((invoice) => (
-                <TableRow key={invoice.id} className="text-sm">
+                <TableRow key={invoice.id} className="text-sm hover:bg-muted/40">
                   <TableCell className="font-mono text-xs text-muted-foreground">#{invoice.id}</TableCell>
                   <TableCell className="font-mono text-xs">Customer #{invoice.customerId}</TableCell>
                   <TableCell className="font-mono text-xs">{invoice.jobId ? `Job #${invoice.jobId}` : '—'}</TableCell>
@@ -104,6 +105,7 @@ export function Invoices() {
               ))}
             </TableBody>
           </Table>
+          </div>
         )}
         <Pager state={state} totalPages={totalPages} total={total} />
       </div>

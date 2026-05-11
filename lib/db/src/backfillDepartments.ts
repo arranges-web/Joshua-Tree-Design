@@ -14,7 +14,8 @@
  *     data on screen. Skipped in production, since real customers add
  *     their own assets via the UI.
  */
-import { eq, isNull, notInArray, or, sql, and } from "drizzle-orm";
+import { eq, isNull, notInArray, or, sql, and, inArray } from "drizzle-orm";
+import bcrypt from "bcryptjs";
 import { db } from "./client";
 import {
   departmentsTable,
@@ -136,6 +137,15 @@ export async function backfillDepartments(): Promise<void> {
   // Sales / Fertilization assets).
   await enrichMaintenanceLogs();
   await seedMissingMaintenanceLogs();
+
+  // 7. Repair the eight demo accounts on every boot when DEMO_MODE
+  // is on. Guarantees the published preview always has working
+  // logins after schema changes, role updates, or partial DB
+  // rebuilds — login was silently 401-ing on the live deploy
+  // because the seeded password hash had drifted out of sync.
+  if (isDemoMode()) {
+    await repairDemoUsers();
+  }
 }
 
 type FleetSeed = {
@@ -773,6 +783,98 @@ async function ensureDepartmentCrew(): Promise<void> {
         .insert(crewMembersTable)
         .values({ crewId: newCrew.id, userId: leadUser.id })
         .onConflictDoNothing();
+    }
+  }
+}
+
+// ---------- Demo user repair ----------
+
+/**
+ * The published Replit preview kept showing "invalid credentials"
+ * on the test accounts because at various points the seed migration
+ * had dropped some demo users, or the bcrypt hash they were seeded
+ * with had drifted (e.g. a column rename, partial restore, etc.).
+ *
+ * This step makes the demo accounts self-healing: on every boot in
+ * DEMO_MODE, it walks the canonical 8-user list, makes sure each
+ * row exists with the right role + dept + active flag, and resets
+ * the bcrypt hash for "password123" so the test accounts shown on
+ * the login page always work.
+ *
+ * Production-grade installs should set DEMO_MODE=false to skip
+ * this — it would otherwise reset live admin passwords on every
+ * boot.
+ */
+const DEMO_PASSWORD = "password123";
+
+type DemoUser = {
+  email: string;
+  fullName: string;
+  roleKey: "ADMIN" | "SALES" | "CREW_LEAD" | "MECHANIC" | "ACCOUNTING_MANAGER";
+  deptKey: (typeof DEPARTMENT_KEYS)[number];
+};
+
+const DEMO_USERS: DemoUser[] = [
+  { email: "admin@joshuatreeinc.test",      fullName: "Alex Admin",      roleKey: "ADMIN",              deptKey: "Admin" },
+  { email: "sales1@joshuatreeinc.test",     fullName: "Sam Sales",       roleKey: "SALES",              deptKey: "Sales" },
+  { email: "sales2@joshuatreeinc.test",     fullName: "Sara Estimator",  roleKey: "SALES",              deptKey: "Sales" },
+  { email: "lead1@joshuatreeinc.test",      fullName: "Carl CrewLead",   roleKey: "CREW_LEAD",          deptKey: "Landscaping" },
+  { email: "lead2@joshuatreeinc.test",      fullName: "Cathy CrewLead",  roleKey: "CREW_LEAD",          deptKey: "Lawn" },
+  { email: "lead3@joshuatreeinc.test",      fullName: "Bobby CrewLead",  roleKey: "CREW_LEAD",          deptKey: "TreeService" },
+  { email: "mechanic@joshuatreeinc.test",   fullName: "Mike Mechanic",   roleKey: "MECHANIC",           deptKey: "Pest" },
+  { email: "accounting@joshuatreeinc.test", fullName: "Anna Accountant", roleKey: "ACCOUNTING_MANAGER", deptKey: "Admin" },
+];
+
+async function repairDemoUsers(): Promise<void> {
+  const hashedPassword = await bcrypt.hash(DEMO_PASSWORD, 10);
+
+  const allRoles = await db.select().from(rolesTable);
+  const roleIdByKey = new Map(allRoles.map((r) => [r.key, r.id] as const));
+
+  const allDepts = await db.select().from(departmentsTable);
+  const deptIdByKey = new Map(allDepts.map((d) => [d.key, d.id] as const));
+
+  // Pre-fetch all demo emails so we can decide insert vs update in
+  // a single round trip. Drizzle's `inArray` keeps this efficient
+  // even when the demo set grows.
+  const emails = DEMO_USERS.map((u) => u.email);
+  const existing = await db
+    .select()
+    .from(usersTable)
+    .where(inArray(usersTable.email, emails));
+  const existingByEmail = new Map(existing.map((u) => [u.email, u]));
+
+  for (const u of DEMO_USERS) {
+    const roleId = roleIdByKey.get(u.roleKey);
+    const deptId = deptIdByKey.get(u.deptKey);
+    if (roleId == null || deptId == null) {
+      // Roles or depts haven't been seeded yet — skip rather than
+      // FK-violation. The caller (autoSeed) runs roles+depts before
+      // this; backfillDepartments runs after, so we should always
+      // have them.
+      continue;
+    }
+    const row = existingByEmail.get(u.email);
+    if (row) {
+      await db
+        .update(usersTable)
+        .set({
+          fullName: u.fullName,
+          roleId,
+          departmentId: deptId,
+          isActive: true,
+          hashedPassword,
+        })
+        .where(eq(usersTable.id, row.id));
+    } else {
+      await db.insert(usersTable).values({
+        email: u.email,
+        fullName: u.fullName,
+        roleId,
+        departmentId: deptId,
+        isActive: true,
+        hashedPassword,
+      });
     }
   }
 }
