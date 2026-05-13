@@ -13,7 +13,6 @@ import {
   Calculator,
   HardHat,
   CreditCard,
-  Hourglass,
   Receipt,
   TrendingUp,
   Truck,
@@ -68,25 +67,19 @@ const NAV_GROUPS: Array<{ label: string; items: NavItem[] }> = [
     items: [
       {
         href: "/accounting",
-        label: "Overview",
+        label: "By Department",
         icon: Calculator,
         roles: ["ADMIN", "ACCOUNTING_MANAGER"],
       },
       {
         href: "/accounting?tab=assets",
-        label: "Assets",
+        label: "Per Asset",
         icon: Truck,
         roles: ["ADMIN", "ACCOUNTING_MANAGER"],
       },
       {
-        href: "/accounting?tab=receivables",
-        label: "Receivables",
-        icon: Hourglass,
-        roles: ["ADMIN", "ACCOUNTING_MANAGER"],
-      },
-      {
         href: "/accounting?tab=expenses",
-        label: "Expenses",
+        label: "Expense Categories",
         icon: Receipt,
         roles: ["ADMIN", "ACCOUNTING_MANAGER"],
       },
@@ -228,7 +221,7 @@ function ShellInner({ children }: { children: React.ReactNode }) {
   );
 
   const UserCard = () => (
-    <div className="border-t border-sidebar-border p-4">
+    <div className="shrink-0 border-t border-sidebar-border bg-sidebar p-4 shadow-[0_-4px_8px_-4px_rgba(0,0,0,0.15)]">
       <div className="mb-3">
         <p className="text-sm font-medium text-sidebar-foreground">
           {authData?.user?.fullName ?? "—"}
@@ -256,7 +249,15 @@ function ShellInner({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="flex min-h-screen flex-col md:flex-row bg-background">
-      <aside className="hidden w-64 flex-col bg-sidebar text-sidebar-foreground md:flex">
+      {/*
+        Sticky + h-screen on the desktop sidebar keeps the brand
+        header at the top and the user card (with the "Log out"
+        button) pinned at the bottom of the viewport regardless of
+        how tall the main content is. Without these, when a long
+        page extends past the viewport, the sidebar stretches with
+        the page and the logout button drifts off-screen.
+      */}
+      <aside className="sticky top-0 hidden h-screen w-64 flex-col bg-sidebar text-sidebar-foreground md:flex">
         <div className="flex h-16 items-center border-b border-sidebar-border px-5">
           <Brand />
         </div>
@@ -277,7 +278,7 @@ function ShellInner({ children }: { children: React.ReactNode }) {
               </SheetTrigger>
               <SheetContent
                 side="left"
-                className="w-72 bg-sidebar p-0 text-sidebar-foreground"
+                className="flex w-72 flex-col bg-sidebar p-0 text-sidebar-foreground"
               >
                 <div className="flex h-16 items-center border-b border-sidebar-border px-5">
                   <Brand />
