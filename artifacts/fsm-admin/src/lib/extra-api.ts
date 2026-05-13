@@ -313,26 +313,6 @@ export type AssistantChatMessage = {
   content: string;
 };
 
-export type AssistantChatResponse = {
-  reply: string;
-  usage: {
-    inputTokens: number;
-    outputTokens: number;
-    cacheReadTokens: number;
-    cacheWriteTokens: number;
-  };
-};
-
-export function useAssistantChat() {
-  return useMutation({
-    mutationFn: (messages: AssistantChatMessage[]) =>
-      customFetch<AssistantChatResponse>("/api/ai/chat", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ messages }),
-      }),
-  });
-}
 
 export function useMaintenanceReceipt(logId: number, enabled = true) {
   return useQuery({
