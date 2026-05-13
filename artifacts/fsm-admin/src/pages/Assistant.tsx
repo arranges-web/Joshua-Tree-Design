@@ -77,8 +77,18 @@ export function Assistant() {
     }));
 
     const streamId = newId();
+    // All control-flow flags are local — never read React state for
+    // same-tick decisions, since setX calls are async batched.
     let hasContent = false;
-    let sawDone = false;
+    let sawErrorEvent = false;
+    let rolledBack = false;
+
+    function rollbackOnce() {
+      if (rolledBack) return;
+      rolledBack = true;
+      setMessages((prev) => prev.slice(0, -1));
+      setInput(trimmed);
+    }
 
     try {
       const response = await fetch("/api/ai/chat", {
@@ -97,15 +107,13 @@ export function Assistant() {
               ? "Only admins and accounting managers can use the assistant."
               : "The assistant request failed. Please try again.";
         setErrorBanner(fallback);
-        setMessages((prev) => prev.slice(0, -1));
-        setInput(trimmed);
+        rollbackOnce();
         return;
       }
 
       if (!response.body) {
         setErrorBanner("The assistant request failed. Please try again.");
-        setMessages((prev) => prev.slice(0, -1));
-        setInput(trimmed);
+        rollbackOnce();
         return;
       }
 
@@ -127,10 +135,7 @@ export function Assistant() {
           if (!line.startsWith("data: ")) continue;
 
           const raw = line.slice(6);
-          if (raw === "[DONE]") {
-            sawDone = true;
-            break outer;
-          }
+          if (raw === "[DONE]") break outer;
 
           let parsed: Record<string, unknown>;
           try {
@@ -140,16 +145,13 @@ export function Assistant() {
           }
 
           if (typeof parsed.error === "string") {
+            sawErrorEvent = true;
             const msg =
               typeof parsed.message === "string"
                 ? parsed.message
                 : "The assistant request failed. Please try again.";
             setErrorBanner(msg);
-            if (!hasContent) {
-              setMessages((prev) => prev.slice(0, -1));
-              setInput(trimmed);
-            }
-            sawDone = true;
+            if (!hasContent) rollbackOnce();
             break outer;
           }
 
@@ -173,19 +175,14 @@ export function Assistant() {
         }
       }
 
-      void sawDone;
-
-      if (!hasContent && !errorBanner) {
+      // Stream ended without any content and no explicit error event
+      if (!hasContent && !sawErrorEvent) {
         setErrorBanner("The assistant returned an empty response — please try again.");
-        setMessages((prev) => prev.slice(0, -1));
-        setInput(trimmed);
+        rollbackOnce();
       }
     } catch {
       setErrorBanner("The assistant request failed. Please try again.");
-      if (!hasContent) {
-        setMessages((prev) => prev.slice(0, -1));
-        setInput(trimmed);
-      }
+      if (!hasContent) rollbackOnce();
     } finally {
       setIsPending(false);
     }
