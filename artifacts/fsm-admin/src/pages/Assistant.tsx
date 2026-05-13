@@ -13,13 +13,8 @@ import {
   Wand2,
   RefreshCw,
 } from "lucide-react";
-import {
-  useAssistantChat,
-  type AssistantChatMessage,
-} from "@/lib/extra-api";
+import type { AssistantChatMessage } from "@/lib/extra-api";
 
-// Same shape we send to the API but with a stable id so React can
-// keep its mind straight when we append optimistically.
 type LocalMessage = AssistantChatMessage & { id: string };
 
 const QUICK_PROMPTS: { label: string; prompt: string }[] = [
@@ -53,20 +48,19 @@ export function Assistant() {
   const [messages, setMessages] = useState<LocalMessage[]>([]);
   const [input, setInput] = useState("");
   const [errorBanner, setErrorBanner] = useState<string | null>(null);
-  const chat = useAssistantChat();
+  const [isPending, setIsPending] = useState(false);
   const scrollRef = useRef<HTMLDivElement | null>(null);
 
-  // Keep the message thread pinned to the bottom as new turns land
-  // (user message, then assistant response).
   useEffect(() => {
     if (!scrollRef.current) return;
     scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-  }, [messages, chat.isPending]);
+  }, [messages, isPending]);
 
   async function send(content: string) {
     setErrorBanner(null);
     const trimmed = content.trim();
-    if (!trimmed) return;
+    if (!trimmed || isPending) return;
+
     const userMessage: LocalMessage = {
       id: newId(),
       role: "user",
@@ -75,47 +69,131 @@ export function Assistant() {
     const next = [...messages, userMessage];
     setMessages(next);
     setInput("");
+    setIsPending(true);
+
+    const apiMessages: AssistantChatMessage[] = next.map(({ role, content: c }) => ({
+      role,
+      content: c,
+    }));
+
+    const streamId = newId();
+    let hasContent = false;
+    let sawDone = false;
+
     try {
-      const apiMessages: AssistantChatMessage[] = next.map(({ role, content }) => ({
-        role,
-        content,
-      }));
-      const result = await chat.mutateAsync(apiMessages);
-      const replyText = result.reply?.trim() ?? "";
-      if (!replyText) {
-        setErrorBanner("The assistant returned an empty response — please try again.");
-        setMessages((prev) => prev.slice(0, -1));
-        setInput(trimmed);
-        return;
-      }
-      setMessages((prev) => [
-        ...prev,
-        { id: newId(), role: "assistant", content: replyText },
-      ]);
-    } catch (err) {
-      const status =
-        typeof err === "object" && err !== null && "status" in err
-          ? (err as { status?: number }).status
-          : undefined;
-      const fallback =
-        status === 503
-          ? "The assistant returned an empty response — please try again."
-          : status === 429
+      const response = await fetch("/api/ai/chat", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ messages: apiMessages }),
+        credentials: "include",
+      });
+
+      if (!response.ok) {
+        const status = response.status;
+        const fallback =
+          status === 429
             ? "The assistant is rate-limited right now. Try again in a minute."
             : status === 403
               ? "Only admins and accounting managers can use the assistant."
               : "The assistant request failed. Please try again.";
-      setErrorBanner(fallback);
-      // Roll back the optimistic user message so the prompt stays in
-      // the input box for retry.
-      setMessages((prev) => prev.slice(0, -1));
-      setInput(trimmed);
+        setErrorBanner(fallback);
+        setMessages((prev) => prev.slice(0, -1));
+        setInput(trimmed);
+        return;
+      }
+
+      if (!response.body) {
+        setErrorBanner("The assistant request failed. Please try again.");
+        setMessages((prev) => prev.slice(0, -1));
+        setInput(trimmed);
+        return;
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      outer: while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+
+        const parts = buffer.split("\n\n");
+        buffer = parts.pop() ?? "";
+
+        for (const part of parts) {
+          const line = part.trim();
+          if (!line.startsWith("data: ")) continue;
+
+          const raw = line.slice(6);
+          if (raw === "[DONE]") {
+            sawDone = true;
+            break outer;
+          }
+
+          let parsed: Record<string, unknown>;
+          try {
+            parsed = JSON.parse(raw) as Record<string, unknown>;
+          } catch {
+            continue;
+          }
+
+          if (typeof parsed.error === "string") {
+            const msg =
+              typeof parsed.message === "string"
+                ? parsed.message
+                : "The assistant request failed. Please try again.";
+            setErrorBanner(msg);
+            if (!hasContent) {
+              setMessages((prev) => prev.slice(0, -1));
+              setInput(trimmed);
+            }
+            sawDone = true;
+            break outer;
+          }
+
+          if (typeof parsed.content === "string" && parsed.content) {
+            if (!hasContent) {
+              hasContent = true;
+              setMessages((prev) => [
+                ...prev,
+                { id: streamId, role: "assistant", content: parsed.content as string },
+              ]);
+            } else {
+              setMessages((prev) =>
+                prev.map((m) =>
+                  m.id === streamId
+                    ? { ...m, content: m.content + (parsed.content as string) }
+                    : m,
+                ),
+              );
+            }
+          }
+        }
+      }
+
+      void sawDone;
+
+      if (!hasContent && !errorBanner) {
+        setErrorBanner("The assistant returned an empty response — please try again.");
+        setMessages((prev) => prev.slice(0, -1));
+        setInput(trimmed);
+      }
+    } catch {
+      setErrorBanner("The assistant request failed. Please try again.");
+      if (!hasContent) {
+        setMessages((prev) => prev.slice(0, -1));
+        setInput(trimmed);
+      }
+    } finally {
+      setIsPending(false);
     }
   }
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (chat.isPending) return;
+    if (isPending) return;
     void send(input);
   }
 
@@ -124,6 +202,9 @@ export function Assistant() {
     setInput("");
     setErrorBanner(null);
   }
+
+  const lastMessage = messages[messages.length - 1];
+  const showSkeleton = isPending && (!lastMessage || lastMessage.role === "user");
 
   return (
     <div className="flex h-full max-h-[calc(100vh-7rem)] flex-col gap-4">
@@ -160,14 +241,14 @@ export function Assistant() {
             className="flex-1 overflow-y-auto px-5 py-5"
             data-testid="assistant-thread"
           >
-            {messages.length === 0 ? (
-              <EmptyState onPrompt={send} disabled={chat.isPending} />
+            {messages.length === 0 && !isPending ? (
+              <EmptyState onPrompt={send} disabled={isPending} />
             ) : (
               <div className="space-y-5">
                 {messages.map((m) => (
-                  <ChatBubble key={m.id} message={m} />
+                  <ChatBubble key={m.id} message={m} streaming={isPending && m.id === messages[messages.length - 1]?.id && m.role === "assistant"} />
                 ))}
-                {chat.isPending && <ChatBubble loading />}
+                {showSkeleton && <ChatBubble loading />}
               </div>
             )}
           </div>
@@ -181,22 +262,22 @@ export function Assistant() {
               onChange={(e) => setInput(e.target.value)}
               placeholder="Ask about your data — e.g. 'how is the Pest department doing this month?'"
               rows={2}
-              disabled={chat.isPending}
+              disabled={isPending}
               onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.shiftKey) {
                   e.preventDefault();
-                  if (!chat.isPending) void send(input);
+                  if (!isPending) void send(input);
                 }
               }}
               className="min-h-[44px] flex-1 resize-none"
             />
             <Button
               type="submit"
-              disabled={chat.isPending || !input.trim()}
+              disabled={isPending || !input.trim()}
               className="h-11"
             >
               <Send className="mr-2 h-4 w-4" />
-              {chat.isPending ? "Thinking…" : "Send"}
+              {isPending ? "Thinking…" : "Send"}
             </Button>
           </form>
         </CardContent>
@@ -249,9 +330,11 @@ function EmptyState({
 function ChatBubble({
   message,
   loading,
+  streaming,
 }: {
   message?: LocalMessage;
   loading?: boolean;
+  streaming?: boolean;
 }) {
   if (loading) {
     return (
@@ -288,14 +371,14 @@ function ChatBubble({
         }`}
       >
         <FormattedReply text={message.content} />
+        {streaming && (
+          <span className="inline-block h-3.5 w-0.5 translate-y-0.5 animate-pulse bg-current opacity-70" />
+        )}
       </div>
     </div>
   );
 }
 
-// Lightweight markdown-ish renderer. Avoids pulling in a full library
-// and gives us bold, inline code, fenced code blocks, headings, and
-// bullets — which is what Claude's report output uses.
 function FormattedReply({ text }: { text: string }) {
   const blocks: React.ReactNode[] = [];
   const lines = text.split("\n");
@@ -378,9 +461,6 @@ function FormattedReply({ text }: { text: string }) {
   return <div className="space-y-0.5">{blocks}</div>;
 }
 
-// Inline markdown: **bold**, *italic*, `code`. Keep this small —
-// pulling in react-markdown for the assistant page would be a step
-// up in dependency cost.
 function renderInline(text: string): React.ReactNode {
   const parts: React.ReactNode[] = [];
   let remaining = text;

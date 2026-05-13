@@ -335,65 +335,62 @@ router.post(
       })),
     ];
 
+    // Open SSE stream — from this point forward all responses go through
+    // the event stream (errors are sent as SSE error events, not HTTP codes).
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("Connection", "keep-alive");
+    res.setHeader("X-Accel-Buffering", "no");
+    res.flushHeaders();
+
+    function sendEvent(payload: Record<string, unknown>): void {
+      res.write(`data: ${JSON.stringify(payload)}\n\n`);
+    }
+
     try {
-      const completion = await client.chat.completions.create({
+      const stream = await client.chat.completions.create({
         model: "gpt-5-mini",
         max_completion_tokens: 8192,
         messages: apiMessages,
+        stream: true,
       });
-      const choice = completion.choices[0];
-      logger.info({
-        finishReason: choice?.finish_reason,
-        contentNull: choice?.message?.content === null,
-        contentLength: choice?.message?.content?.length ?? 0,
-        refusal: choice?.message?.refusal ?? null,
-      }, "AI completion received");
-      const reply = choice?.message?.content ?? choice?.message?.refusal ?? "";
-      if (!reply) {
-        logger.warn({ finishReason: choice?.finish_reason }, "AI model returned empty content — returning retryable error");
-        res.status(503).json({
-          error: "ai_empty_response",
-          message: "The AI model returned an empty response. Please try again.",
-        });
-        return;
+
+      let totalContent = "";
+      for await (const chunk of stream) {
+        const delta = chunk.choices[0]?.delta?.content;
+        if (delta) {
+          totalContent += delta;
+          sendEvent({ content: delta });
+        }
       }
-      res.json({
-        reply,
-        usage: {
-          inputTokens: completion.usage?.prompt_tokens ?? 0,
-          outputTokens: completion.usage?.completion_tokens ?? 0,
-          cacheReadTokens: 0,
-          cacheWriteTokens: 0,
-        },
-      });
+
+      if (!totalContent) {
+        logger.warn("AI model streamed zero content");
+        sendEvent({
+          error: "ai_empty_response",
+          message: "The assistant returned an empty response — please try again.",
+        });
+      } else {
+        logger.info({ contentLength: totalContent.length }, "AI stream complete");
+      }
+
+      res.write("data: [DONE]\n\n");
+      res.end();
     } catch (err) {
-      // Distinguish auth + rate-limit so the UI can render a useful
-      // hint instead of "something went wrong".
+      let message = "The assistant request failed. Please try again.";
       if (err instanceof OpenAI.AuthenticationError) {
         logger.error({ err }, "OpenAI API key auth failed");
-        res.status(503).json({
-          error: "ai_auth_failed",
-          message: "OPENAI_API_KEY is set but rejected by OpenAI.",
-        });
-        return;
-      }
-      if (err instanceof OpenAI.RateLimitError) {
-        res.status(429).json({
-          error: "ai_rate_limited",
-          message: "AI assistant is rate-limited. Try again shortly.",
-        });
-        return;
-      }
-      if (err instanceof OpenAI.APIError) {
+        message = "AI integration authentication failed on the server.";
+      } else if (err instanceof OpenAI.RateLimitError) {
+        message = "The assistant is rate-limited right now. Try again in a minute.";
+      } else if (err instanceof OpenAI.APIError) {
         logger.error({ err, status: err.status }, "OpenAI API error");
-        res.status(502).json({
-          error: "ai_upstream_error",
-          message: "AI assistant request failed. Please try again.",
-        });
-        return;
+      } else {
+        logger.error({ err }, "AI chat unexpected error");
       }
-      logger.error({ err }, "AI chat unexpected error");
-      res.status(500).json({ error: "ai_unexpected_error" });
+      sendEvent({ error: "ai_error", message });
+      res.write("data: [DONE]\n\n");
+      res.end();
     }
   },
 );
