@@ -29,14 +29,12 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Link } from "wouter";
 import {
   Building2,
-  CreditCard,
   Wrench,
   AlertTriangle,
   Download,
   TrendingUp,
   Receipt,
   Users,
-  Hourglass,
   Truck as TruckIcon,
   Caravan,
   Hammer,
@@ -78,7 +76,6 @@ function monthLabel(key: string) {
   return d.toLocaleString("en-US", { month: "short" });
 }
 
-const REVENUE_COLOR = "hsl(150 50% 45%)";
 const MAINT_COLOR = "hsl(0 70% 55%)";
 
 // Distinct hues for the expense pie so each category is readable.
@@ -100,7 +97,7 @@ const CATEGORY_LABELS: Record<AccountingExpenseCategoryKey, string> = {
   UNCATEGORIZED: "Uncategorized",
 };
 
-const TABS = ["overview", "assets", "receivables", "expenses", "trends"] as const;
+const TABS = ["overview", "assets", "expenses", "trends"] as const;
 type TabValue = (typeof TABS)[number];
 
 function tabFromSearch(search: string): TabValue {
@@ -217,25 +214,6 @@ export function Accounting() {
     return empty;
   }, [scopedBranches]);
 
-  const scopedAging = useMemo(() => {
-    return scopedBranches.reduce(
-      (acc, b) => ({
-        currentCents: acc.currentCents + b.aging.currentCents,
-        d1to30Cents: acc.d1to30Cents + b.aging.d1to30Cents,
-        d31to60Cents: acc.d31to60Cents + b.aging.d31to60Cents,
-        d61to90Cents: acc.d61to90Cents + b.aging.d61to90Cents,
-        d90plusCents: acc.d90plusCents + b.aging.d90plusCents,
-      }),
-      {
-        currentCents: 0,
-        d1to30Cents: 0,
-        d31to60Cents: 0,
-        d61to90Cents: 0,
-        d90plusCents: 0,
-      },
-    );
-  }, [scopedBranches]);
-
   const scopedMaintenanceCoverage = useMemo(() => {
     let total = 0;
     let withReceipt = 0;
@@ -304,6 +282,59 @@ export function Accounting() {
     return { lifetime, ytd, last30, assetCount };
   }, [scopedAssetSpend]);
 
+  // Aggregate scopedAssetSpend by department for the headline
+  // "Fleet & equipment spend by department" table on the Overview
+  // tab. Departments without any spend still show with zeroes so
+  // operators can see at a glance that a dept is empty.
+  const fleetByDept = useMemo(() => {
+    type Row = {
+      departmentId: number | null;
+      departmentLabel: string;
+      assetCount: number;
+      lifetime: number;
+      ytd: number;
+      last30: number;
+    };
+    const byKey = new Map<string, Row>();
+    // Seed with the canonical branches so empty depts still appear.
+    for (const b of scopedBranches) {
+      const key = b.departmentId == null ? "unattributed" : `d-${b.departmentId}`;
+      byKey.set(key, {
+        departmentId: b.departmentId,
+        departmentLabel: b.departmentLabel,
+        assetCount: 0,
+        lifetime: 0,
+        ytd: 0,
+        last30: 0,
+      });
+    }
+    for (const a of scopedAssetSpend) {
+      const key = a.departmentId == null ? "unattributed" : `d-${a.departmentId}`;
+      let row = byKey.get(key);
+      if (!row) {
+        row = {
+          departmentId: a.departmentId,
+          departmentLabel: a.departmentLabel || "Unattributed",
+          assetCount: 0,
+          lifetime: 0,
+          ytd: 0,
+          last30: 0,
+        };
+        byKey.set(key, row);
+      }
+      row.assetCount += 1;
+      row.lifetime += a.lifeToDateSpendCents;
+      row.ytd += a.ytdSpendCents;
+      row.last30 += a.last30DaysSpendCents;
+    }
+    return Array.from(byKey.values()).sort((a, b) => {
+      // Real branches sorted alphabetically; "Unattributed" pinned last.
+      if (a.departmentId == null) return 1;
+      if (b.departmentId == null) return -1;
+      return a.departmentLabel.localeCompare(b.departmentLabel);
+    });
+  }, [scopedAssetSpend, scopedBranches]);
+
   if (isLoading) {
     return (
       <div className="space-y-4">
@@ -340,29 +371,16 @@ export function Accounting() {
     }))
     .filter((d) => d.value > 0);
 
-  const totalAging =
-    scopedAging.currentCents +
-    scopedAging.d1to30Cents +
-    scopedAging.d31to60Cents +
-    scopedAging.d61to90Cents +
-    scopedAging.d90plusCents;
-
   function exportBranchesCsv() {
-    const csv = rowsToCsv(scopedBranches, [
-      { header: "Branch", value: (b) => b.departmentLabel },
-      { header: "Open invoices (USD)", value: (b) => (b.openInvoiceCents / 100).toFixed(2) },
-      { header: "Collected revenue (USD)", value: (b) => (b.collectedRevenueCents / 100).toFixed(2) },
-      { header: "Maintenance spend (USD)", value: (b) => (b.maintenanceSpendCents / 100).toFixed(2) },
-      { header: "Aging current (USD)", value: (b) => (b.aging.currentCents / 100).toFixed(2) },
-      { header: "Aging 1-30 (USD)", value: (b) => (b.aging.d1to30Cents / 100).toFixed(2) },
-      { header: "Aging 31-60 (USD)", value: (b) => (b.aging.d31to60Cents / 100).toFixed(2) },
-      { header: "Aging 61-90 (USD)", value: (b) => (b.aging.d61to90Cents / 100).toFixed(2) },
-      { header: "Aging 90+ (USD)", value: (b) => (b.aging.d90plusCents / 100).toFixed(2) },
-      { header: "Maintenance logs", value: (b) => b.maintenanceLogCount },
-      { header: "Maintenance logs w/ receipt", value: (b) => b.maintenanceLogsWithReceipt },
+    const csv = rowsToCsv(fleetByDept, [
+      { header: "Department", value: (d) => d.departmentLabel },
+      { header: "Asset count", value: (d) => d.assetCount },
+      { header: "Lifetime spend (USD)", value: (d) => (d.lifetime / 100).toFixed(2) },
+      { header: "YTD spend (USD)", value: (d) => (d.ytd / 100).toFixed(2) },
+      { header: "Last-30-day spend (USD)", value: (d) => (d.last30 / 100).toFixed(2) },
     ]);
     const stamp = new Date().toISOString().slice(0, 10);
-    downloadCsv(`accounting-${stamp}.csv`, csv);
+    downloadCsv(`fleet-spend-by-department-${stamp}.csv`, csv);
   }
 
   const topVendors = data?.topVendors ?? [];
@@ -383,9 +401,10 @@ export function Accounting() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Accounting</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Money tied to your fleet — lifetime, YTD, and last-30-day spend
-            across every truck, trailer, and piece of equipment, with
-            receivables and expenses in supporting tabs.
+            Equipment &amp; fleet spend broken down department by department —
+            lifetime, YTD, and last-30-day cost of every truck, trailer, and
+            piece of equipment. Revenue and receivables are tracked on the
+            Invoices and Customers pages.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -402,7 +421,7 @@ export function Accounting() {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
         <KpiCard
           label="Fleet spend (lifetime)"
           value={usd(fleetTotals.lifetime)}
@@ -428,96 +447,79 @@ export function Accounting() {
           icon={Wrench}
           tone={fleetTotals.last30 > 0 ? "rose" : "neutral"}
         />
-        <KpiCard
-          label="Open invoices"
-          value={usd(scopedTotals.openInvoiceCents)}
-          icon={CreditCard}
-          tone={scopedTotals.openInvoiceCents > 0 ? "amber" : "neutral"}
-        />
-        <KpiCard
-          label="Collected revenue"
-          value={usd(scopedTotals.collectedRevenueCents)}
-          icon={CreditCard}
-          tone="emerald"
-        />
       </div>
 
       <Tabs value={tab} onValueChange={handleTabChange} className="space-y-4">
-        <TabsList className="grid w-full grid-cols-3 md:w-auto md:inline-flex md:grid-cols-5">
-          <TabsTrigger value="overview">Overview</TabsTrigger>
-          <TabsTrigger value="assets">Assets</TabsTrigger>
-          <TabsTrigger value="receivables">Receivables</TabsTrigger>
-          <TabsTrigger value="expenses">Expenses</TabsTrigger>
+        <TabsList className="grid w-full grid-cols-2 md:w-auto md:inline-flex md:grid-cols-4">
+          <TabsTrigger value="overview">By Department</TabsTrigger>
+          <TabsTrigger value="assets">Per Asset</TabsTrigger>
+          <TabsTrigger value="expenses">Expense Categories</TabsTrigger>
           <TabsTrigger value="trends">Trends</TabsTrigger>
         </TabsList>
 
         {/* ---------- OVERVIEW ---------- */}
         <TabsContent value="overview" className="space-y-4">
-          {!isScopedToOne && (
-            <Card className="border-border/60">
-              <CardHeader>
-                <CardTitle className="text-base">By branch</CardTitle>
-              </CardHeader>
-              <CardContent className="p-0">
-                <div className="overflow-x-auto">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead className="w-[28%]">Branch</TableHead>
-                        <TableHead className="text-right">Open invoices</TableHead>
-                        <TableHead className="text-right">Collected</TableHead>
-                        <TableHead className="text-right">Maintenance</TableHead>
-                        <TableHead className="text-right">Net</TableHead>
+          <Card className="border-border/60">
+            <CardHeader>
+              <CardTitle className="text-base">
+                Fleet &amp; equipment spend by department
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="p-0">
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-[28%]">Department</TableHead>
+                      <TableHead className="text-right">Assets</TableHead>
+                      <TableHead className="text-right">Lifetime</TableHead>
+                      <TableHead className="text-right">YTD</TableHead>
+                      <TableHead className="text-right">Last 30 days</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {fleetByDept.map((d) => (
+                      <TableRow
+                        key={d.departmentId ?? "unattributed"}
+                        data-testid={`branch-row-${d.departmentId ?? "unattributed"}`}
+                      >
+                        <TableCell>
+                          <span className="flex items-center gap-2 text-sm font-medium">
+                            {d.departmentId == null ? (
+                              <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />
+                            ) : (
+                              <Building2 className="h-3.5 w-3.5 text-muted-foreground" />
+                            )}
+                            {d.departmentLabel}
+                          </span>
+                        </TableCell>
+                        <TableCell className="text-right font-mono text-sm">
+                          {d.assetCount}
+                        </TableCell>
+                        <TableCell className="text-right font-mono text-sm font-semibold">
+                          {usd(d.lifetime)}
+                        </TableCell>
+                        <TableCell className="text-right font-mono text-sm">
+                          {usd(d.ytd)}
+                        </TableCell>
+                        <TableCell
+                          className={`text-right font-mono text-sm ${d.last30 > 0 ? "text-rose-700" : ""}`}
+                        >
+                          {usd(d.last30)}
+                        </TableCell>
                       </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {scopedBranches.map((b) => {
-                        const net =
-                          b.collectedRevenueCents - b.maintenanceSpendCents;
-                        return (
-                          <TableRow
-                            key={b.departmentId ?? "unattributed"}
-                            data-testid={`branch-row-${b.departmentId ?? "unattributed"}`}
-                          >
-                            <TableCell>
-                              <span className="flex items-center gap-2 text-sm font-medium">
-                                {b.departmentId == null ? (
-                                  <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />
-                                ) : (
-                                  <Building2 className="h-3.5 w-3.5 text-muted-foreground" />
-                                )}
-                                {b.departmentLabel}
-                              </span>
-                            </TableCell>
-                            <TableCell className="text-right font-mono text-sm">
-                              {usd(b.openInvoiceCents)}
-                            </TableCell>
-                            <TableCell className="text-right font-mono text-sm">
-                              {usd(b.collectedRevenueCents)}
-                            </TableCell>
-                            <TableCell className="text-right font-mono text-sm">
-                              {usd(b.maintenanceSpendCents)}
-                            </TableCell>
-                            <TableCell
-                              className={`text-right font-mono text-sm font-semibold ${net >= 0 ? "text-emerald-700" : "text-rose-700"}`}
-                            >
-                              {usd(net)}
-                            </TableCell>
-                          </TableRow>
-                        );
-                      })}
-                    </TableBody>
-                  </Table>
-                </div>
-              </CardContent>
-            </Card>
-          )}
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </CardContent>
+          </Card>
 
           <Card className="border-border/60">
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-base">
                 <TrendingUp className="h-4 w-4" /> Last 12 months —
-                revenue vs. maintenance
+                maintenance spend
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -539,8 +541,6 @@ export function Accounting() {
                         fontSize: 12,
                       }}
                     />
-                    <Legend wrapperStyle={{ fontSize: 12 }} />
-                    <Bar dataKey="Revenue" fill={REVENUE_COLOR} radius={[4, 4, 0, 0]} />
                     <Bar dataKey="Maintenance" fill={MAINT_COLOR} radius={[4, 4, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
@@ -558,99 +558,6 @@ export function Accounting() {
             activeDeptId={activeDeptId}
             isScopedToOne={isScopedToOne}
           />
-        </TabsContent>
-
-        {/* ---------- RECEIVABLES ---------- */}
-        <TabsContent value="receivables" className="space-y-4">
-          <div className="grid gap-3 md:grid-cols-5">
-            <KpiCard
-              label="Current"
-              value={usd(scopedAging.currentCents)}
-              sub={pct(scopedAging.currentCents, totalAging)}
-              icon={Hourglass}
-              tone="emerald"
-            />
-            <KpiCard
-              label="1–30 days"
-              value={usd(scopedAging.d1to30Cents)}
-              sub={pct(scopedAging.d1to30Cents, totalAging)}
-              icon={Hourglass}
-              tone={scopedAging.d1to30Cents > 0 ? "neutral" : "neutral"}
-            />
-            <KpiCard
-              label="31–60 days"
-              value={usd(scopedAging.d31to60Cents)}
-              sub={pct(scopedAging.d31to60Cents, totalAging)}
-              icon={Hourglass}
-              tone={scopedAging.d31to60Cents > 0 ? "amber" : "neutral"}
-            />
-            <KpiCard
-              label="61–90 days"
-              value={usd(scopedAging.d61to90Cents)}
-              sub={pct(scopedAging.d61to90Cents, totalAging)}
-              icon={Hourglass}
-              tone={scopedAging.d61to90Cents > 0 ? "amber" : "neutral"}
-            />
-            <KpiCard
-              label="90+ days"
-              value={usd(scopedAging.d90plusCents)}
-              sub={pct(scopedAging.d90plusCents, totalAging)}
-              icon={AlertTriangle}
-              tone={scopedAging.d90plusCents > 0 ? "rose" : "neutral"}
-            />
-          </div>
-
-          {!isScopedToOne && (
-            <Card className="border-border/60">
-              <CardHeader>
-                <CardTitle className="text-base">Aging by branch</CardTitle>
-              </CardHeader>
-              <CardContent className="p-0">
-                <div className="overflow-x-auto">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Branch</TableHead>
-                        <TableHead className="text-right">Current</TableHead>
-                        <TableHead className="text-right">1–30</TableHead>
-                        <TableHead className="text-right">31–60</TableHead>
-                        <TableHead className="text-right">61–90</TableHead>
-                        <TableHead className="text-right">90+</TableHead>
-                        <TableHead className="text-right">Total open</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {scopedBranches.map((b) => (
-                        <TableRow key={b.departmentId ?? "unattributed"}>
-                          <TableCell className="text-sm font-medium">
-                            {b.departmentLabel}
-                          </TableCell>
-                          <TableCell className="text-right font-mono text-sm">
-                            {usd(b.aging.currentCents)}
-                          </TableCell>
-                          <TableCell className="text-right font-mono text-sm">
-                            {usd(b.aging.d1to30Cents)}
-                          </TableCell>
-                          <TableCell className="text-right font-mono text-sm">
-                            {usd(b.aging.d31to60Cents)}
-                          </TableCell>
-                          <TableCell className="text-right font-mono text-sm text-amber-700">
-                            {usd(b.aging.d61to90Cents)}
-                          </TableCell>
-                          <TableCell className="text-right font-mono text-sm text-rose-700">
-                            {usd(b.aging.d90plusCents)}
-                          </TableCell>
-                          <TableCell className="text-right font-mono text-sm font-semibold">
-                            {usd(b.openInvoiceCents)}
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
-              </CardContent>
-            </Card>
-          )}
         </TabsContent>
 
         {/* ---------- EXPENSES ---------- */}
@@ -879,7 +786,6 @@ export function Accounting() {
                               fontSize: 11,
                             }}
                           />
-                          <Bar dataKey="Revenue" fill={REVENUE_COLOR} />
                           <Bar dataKey="Maintenance" fill={MAINT_COLOR} />
                         </BarChart>
                       </ResponsiveContainer>
@@ -909,8 +815,6 @@ export function Accounting() {
                           fontSize: 12,
                         }}
                       />
-                      <Legend wrapperStyle={{ fontSize: 12 }} />
-                      <Bar dataKey="Revenue" fill={REVENUE_COLOR} radius={[4, 4, 0, 0]} />
                       <Bar dataKey="Maintenance" fill={MAINT_COLOR} radius={[4, 4, 0, 0]} />
                     </BarChart>
                   </ResponsiveContainer>
