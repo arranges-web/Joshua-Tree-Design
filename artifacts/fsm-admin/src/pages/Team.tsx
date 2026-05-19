@@ -47,6 +47,7 @@ import {
   ShieldOff,
   UserPlus,
 } from "lucide-react";
+import { PageHeader } from "@/components/layout/PageHeader";
 
 const ROLE_OPTIONS = [
   { key: "ADMIN", label: "Administrator" },
@@ -81,20 +82,13 @@ export function Team() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="flex items-center gap-2 text-2xl font-bold tracking-tight sm:text-3xl">
-            <UserPlus className="h-6 w-6 text-accent-foreground sm:h-7 sm:w-7" />
-            Team
-          </h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Invite teammates to the admin console. Each invite is a one-time
-            link you can copy and send via your preferred channel — Slack,
-            email, SMS, anything.
-          </p>
-        </div>
-        <NewInviteDialog />
-      </div>
+      <PageHeader
+        eyebrow="Fleet & Shop"
+        title="Invite Team"
+        icon={<UserPlus className="h-5 w-5" />}
+        description="Invite teammates to the admin console. Each invite is a one-time link you can copy and send via Slack, email, SMS — whatever your team uses."
+        actions={<NewInviteDialog />}
+      />
 
       <Card className="border-border/60">
         <CardHeader className="pb-3">

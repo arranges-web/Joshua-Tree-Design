@@ -201,5 +201,51 @@
   }
   body {
     @apply font-sans antialiased bg-background text-foreground;
+    /* Slightly tighter letter-spacing on long-form prose gives the
+       admin console a more refined typographic feel without forcing
+       a font swap. */
+    letter-spacing: -0.005em;
+  }
+
+  /* Custom scrollbars — keep the same width but tone them down
+     visually so they read as part of the chrome rather than fighting
+     the content. */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--muted-foreground) / 0.25) transparent;
+  }
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background-color: hsl(var(--muted-foreground) / 0.2);
+    border-radius: 999px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background-color: hsl(var(--muted-foreground) / 0.4);
+  }
+}
+
+@layer utilities {
+  /* Card hover lift — apply alongside Card on tiles that act as
+     navigation entry points (quick-stat cards, asset tiles). */
+  .card-interactive {
+    @apply transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md hover:border-accent/30;
+  }
+
+  /* Polished KPI-tile variant: subtle gradient backing.
+     Use on the headline KPI tiles at the top of each page. */
+  .kpi-tile {
+    background-image: linear-gradient(
+      180deg,
+      hsl(var(--card)) 0%,
+      hsl(var(--muted) / 0.35) 100%
+    );
   }
 }
