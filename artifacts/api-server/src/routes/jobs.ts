@@ -11,6 +11,7 @@ import { requireAuth } from "../middlewares/requireAuth";
 import { requireSection } from "../middlewares/requireSection";
 import { scopeJobs } from "../lib/rbac/scope";
 import { shapeJobForRole } from "../lib/rbac/shape";
+import { requestDelete, sendDeleteOutcome } from "../lib/deleteGuard";
 
 const router: IRouter = Router();
 
@@ -112,15 +113,30 @@ router.delete(
     const where = scope
       ? and(eq(jobsTable.id, params.data.id), scope)
       : eq(jobsTable.id, params.data.id);
-    const deleted = await db
-      .delete(jobsTable)
-      .where(where)
-      .returning({ id: jobsTable.id });
-    if (deleted.length === 0) {
+
+    const [existing] = await db
+      .select({ status: jobsTable.status, totalCents: jobsTable.totalCents })
+      .from(jobsTable)
+      .where(eq(jobsTable.id, params.data.id));
+    if (!existing) {
       res.status(404).json({ error: "not_found" });
       return;
     }
-    res.json({ ok: true });
+
+    const outcome = await requestDelete({
+      req,
+      kind: "job",
+      id: params.data.id,
+      label: `Job #${params.data.id} (${existing.status})`,
+      execute: async () => {
+        const deleted = await db
+          .delete(jobsTable)
+          .where(where)
+          .returning({ id: jobsTable.id });
+        return deleted.length > 0;
+      },
+    });
+    sendDeleteOutcome(res, outcome);
   },
 );
 

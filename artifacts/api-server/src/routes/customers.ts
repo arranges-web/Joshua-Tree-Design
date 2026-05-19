@@ -30,6 +30,7 @@ import {
   scopeServiceRequests,
 } from "../lib/rbac/scope";
 import { shapeCustomerForRole } from "../lib/rbac/shape";
+import { requestDelete, sendDeleteOutcome } from "../lib/deleteGuard";
 
 const router: IRouter = Router();
 
@@ -378,15 +379,32 @@ router.delete(
     const where = scope
       ? and(eq(customersTable.id, params.data.id), scope)
       : eq(customersTable.id, params.data.id);
-    const deleted = await db
-      .delete(customersTable)
-      .where(where)
-      .returning({ id: customersTable.id });
-    if (deleted.length === 0) {
+
+    // Resolve a friendly label up-front so the admin review screen
+    // shows something meaningful even after the row is gone.
+    const [existing] = await db
+      .select({ fullName: customersTable.fullName })
+      .from(customersTable)
+      .where(eq(customersTable.id, params.data.id));
+    if (!existing) {
       res.status(404).json({ error: "not_found" });
       return;
     }
-    res.json({ ok: true });
+
+    const outcome = await requestDelete({
+      req,
+      kind: "customer",
+      id: params.data.id,
+      label: `Customer: ${existing.fullName}`,
+      execute: async () => {
+        const deleted = await db
+          .delete(customersTable)
+          .where(where)
+          .returning({ id: customersTable.id });
+        return deleted.length > 0;
+      },
+    });
+    sendDeleteOutcome(res, outcome);
   },
 );
 

@@ -12,6 +12,8 @@ import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Edit, Trash2, Plus } from "lucide-react";
 import { applySortFilter, Pager, SortHeader, StatusBadge, Toolbar, useDataTable } from "@/lib/data-table";
+import { deleteOutcomeToast } from "@/lib/delete-outcome";
+import { DELETE_REQUESTS_PENDING_COUNT_KEY } from "@/lib/extra-api";
 
 const usd = (cents: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format((cents ?? 0) / 100);
 
@@ -255,9 +257,10 @@ function DeleteInvoice({ id }: { id: number }) {
     deleteMutation.mutate(
       { id },
       {
-        onSuccess: () => {
+        onSuccess: (result) => {
           queryClient.invalidateQueries({ queryKey: getListInvoicesQueryKey() });
-          toast({ title: "Invoice deleted" });
+          queryClient.invalidateQueries({ queryKey: DELETE_REQUESTS_PENDING_COUNT_KEY });
+          toast(deleteOutcomeToast(result, "Invoice deleted"));
         },
         onError: () => toast({ title: "Error deleting invoice", variant: "destructive" })
       }

@@ -57,6 +57,8 @@ import {
   Toolbar,
   useDataTable,
 } from "@/lib/data-table";
+import { deleteOutcomeToast } from "@/lib/delete-outcome";
+import { DELETE_REQUESTS_PENDING_COUNT_KEY } from "@/lib/extra-api";
 
 const usd = (cents: number) =>
   new Intl.NumberFormat("en-US", {
@@ -510,9 +512,10 @@ function DeleteJob({ id }: { id: number }) {
     deleteMutation.mutate(
       { id },
       {
-        onSuccess: () => {
+        onSuccess: (result) => {
           queryClient.invalidateQueries({ queryKey: getListJobsQueryKey() });
-          toast({ title: "Job deleted" });
+          queryClient.invalidateQueries({ queryKey: DELETE_REQUESTS_PENDING_COUNT_KEY });
+          toast(deleteOutcomeToast(result, "Job deleted"));
         },
         onError: () =>
           toast({ title: "Error deleting job", variant: "destructive" }),

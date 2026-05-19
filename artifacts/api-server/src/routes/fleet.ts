@@ -35,6 +35,7 @@ import {
 } from "@workspace/api-zod";
 import { requireAuth } from "../middlewares/requireAuth";
 import { requireSection, hasSectionAccess } from "../middlewares/requireSection";
+import { requestDelete, sendDeleteOutcome } from "../lib/deleteGuard";
 
 const router: IRouter = Router();
 
@@ -225,15 +226,30 @@ router.delete(
       return;
     }
     if (!(await assertAssetInScope(req, res, { truckId: params.data.id }))) return;
-    const deleted = await db
-      .delete(trucksTable)
-      .where(eq(trucksTable.id, params.data.id))
-      .returning({ id: trucksTable.id });
-    if (deleted.length === 0) {
+
+    const [existing] = await db
+      .select({ name: trucksTable.name })
+      .from(trucksTable)
+      .where(eq(trucksTable.id, params.data.id));
+    if (!existing) {
       res.status(404).json({ error: "not_found" });
       return;
     }
-    res.json({ ok: true });
+
+    const outcome = await requestDelete({
+      req,
+      kind: "truck",
+      id: params.data.id,
+      label: `Truck: ${existing.name}`,
+      execute: async () => {
+        const deleted = await db
+          .delete(trucksTable)
+          .where(eq(trucksTable.id, params.data.id))
+          .returning({ id: trucksTable.id });
+        return deleted.length > 0;
+      },
+    });
+    sendDeleteOutcome(res, outcome);
   },
 );
 
@@ -408,15 +424,30 @@ router.delete(
       return;
     }
     if (!(await assertAssetInScope(req, res, { equipmentId: params.data.id }))) return;
-    const deleted = await db
-      .delete(equipmentTable)
-      .where(eq(equipmentTable.id, params.data.id))
-      .returning({ id: equipmentTable.id });
-    if (deleted.length === 0) {
+
+    const [existing] = await db
+      .select({ name: equipmentTable.name })
+      .from(equipmentTable)
+      .where(eq(equipmentTable.id, params.data.id));
+    if (!existing) {
       res.status(404).json({ error: "not_found" });
       return;
     }
-    res.json({ ok: true });
+
+    const outcome = await requestDelete({
+      req,
+      kind: "equipment",
+      id: params.data.id,
+      label: `Equipment: ${existing.name}`,
+      execute: async () => {
+        const deleted = await db
+          .delete(equipmentTable)
+          .where(eq(equipmentTable.id, params.data.id))
+          .returning({ id: equipmentTable.id });
+        return deleted.length > 0;
+      },
+    });
+    sendDeleteOutcome(res, outcome);
   },
 );
 
@@ -484,20 +515,40 @@ router.delete(
       res.status(400).json({ error: "invalid_id" });
       return;
     }
-    const deleted = await db
-      .delete(equipmentItemsTable)
+
+    const [existing] = await db
+      .select({ name: equipmentItemsTable.name })
+      .from(equipmentItemsTable)
       .where(
         and(
           eq(equipmentItemsTable.id, itemId),
           eq(equipmentItemsTable.equipmentId, equipId),
         ),
-      )
-      .returning({ id: equipmentItemsTable.id });
-    if (deleted.length === 0) {
+      );
+    if (!existing) {
       res.status(404).json({ error: "not_found" });
       return;
     }
-    res.json({ ok: true });
+
+    const outcome = await requestDelete({
+      req,
+      kind: "equipment_item",
+      id: itemId,
+      label: `Equipment item: ${existing.name}`,
+      execute: async () => {
+        const deleted = await db
+          .delete(equipmentItemsTable)
+          .where(
+            and(
+              eq(equipmentItemsTable.id, itemId),
+              eq(equipmentItemsTable.equipmentId, equipId),
+            ),
+          )
+          .returning({ id: equipmentItemsTable.id });
+        return deleted.length > 0;
+      },
+    });
+    sendDeleteOutcome(res, outcome);
   },
 );
 
@@ -739,15 +790,34 @@ router.delete(
       return;
     }
     if (!(await assertMaintenanceLogInScope(req, res, params.data.id))) return;
-    const deleted = await db
-      .delete(maintenanceLogsTable)
-      .where(eq(maintenanceLogsTable.id, params.data.id))
-      .returning({ id: maintenanceLogsTable.id });
-    if (deleted.length === 0) {
+
+    const [existing] = await db
+      .select({
+        description: maintenanceLogsTable.description,
+        costCents: maintenanceLogsTable.costCents,
+      })
+      .from(maintenanceLogsTable)
+      .where(eq(maintenanceLogsTable.id, params.data.id));
+    if (!existing) {
       res.status(404).json({ error: "not_found" });
       return;
     }
-    res.json({ ok: true });
+    const usd = `$${((existing.costCents ?? 0) / 100).toFixed(2)}`;
+
+    const outcome = await requestDelete({
+      req,
+      kind: "maintenance_log",
+      id: params.data.id,
+      label: `Maintenance log: ${existing.description} (${usd})`,
+      execute: async () => {
+        const deleted = await db
+          .delete(maintenanceLogsTable)
+          .where(eq(maintenanceLogsTable.id, params.data.id))
+          .returning({ id: maintenanceLogsTable.id });
+        return deleted.length > 0;
+      },
+    });
+    sendDeleteOutcome(res, outcome);
   },
 );
 

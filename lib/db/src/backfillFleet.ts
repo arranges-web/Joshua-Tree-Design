@@ -19,6 +19,7 @@ import { isDemoMode } from "./demoMode";
 export async function backfillFleetData(): Promise<void> {
   await backfillMaintenanceLogColumns();
   await ensureInvitesTable();
+  await ensureDeleteRequestsTable();
   await backfillTruckFixtures();
   await backfillEquipmentFixtures();
   await backfillEquipmentCategories();
@@ -140,6 +141,34 @@ async function backfillMaintenanceLogColumns() {
   );
   await db.execute(
     sql`ALTER TABLE maintenance_logs ADD COLUMN IF NOT EXISTS receipt_data_url TEXT`,
+  );
+}
+
+/**
+ * Idempotent CREATE TABLE for the delete-approval system. Tracks
+ * every destructive action across the console, plus admin-approval
+ * state for when non-admin users exceed the per-hour cap.
+ */
+async function ensureDeleteRequestsTable() {
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS delete_requests (
+      id SERIAL PRIMARY KEY,
+      requested_by_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      resource_kind TEXT NOT NULL,
+      resource_id INTEGER NOT NULL,
+      resource_label TEXT,
+      reason TEXT,
+      status TEXT NOT NULL DEFAULT 'EXECUTED',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      decided_at TIMESTAMPTZ,
+      decided_by_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL
+    )
+  `);
+  await db.execute(
+    sql`CREATE INDEX IF NOT EXISTS delete_requests_user_created_idx ON delete_requests (requested_by_user_id, created_at)`,
+  );
+  await db.execute(
+    sql`CREATE INDEX IF NOT EXISTS delete_requests_status_idx ON delete_requests (status)`,
   );
 }
 

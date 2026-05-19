@@ -17,6 +17,7 @@ import {
   TrendingUp,
   Truck,
   Sparkles,
+  Shield,
 } from "lucide-react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import {
@@ -31,6 +32,7 @@ import { useUrlSearch } from "@/lib/use-url-search";
 import { useQueryClient } from "@tanstack/react-query";
 import { getGetMeQueryKey } from "@workspace/api-client-react";
 import { DepartmentProvider, useDepartmentFilter } from "@/context/DepartmentContext";
+import { usePendingDeleteRequestCount } from "@/lib/extra-api";
 
 type NavItem = {
   href: string;
@@ -38,6 +40,9 @@ type NavItem = {
   icon: typeof Users;
   // Roles permitted to see this nav entry. ADMIN always sees everything.
   roles?: ReadonlyArray<string>;
+  // Opt into a dynamic badge (e.g. "3" pending-delete requests).
+  // The Shell knows how to resolve each kind to a live count.
+  badgeKind?: "pending-deletes";
 };
 
 const NAV_GROUPS: Array<{ label: string; items: NavItem[] }> = [
@@ -54,6 +59,13 @@ const NAV_GROUPS: Array<{ label: string; items: NavItem[] }> = [
         label: "Invite Team",
         icon: UserPlus,
         roles: ["ADMIN"],
+      },
+      {
+        href: "/delete-requests",
+        label: "Delete Approvals",
+        icon: Shield,
+        roles: ["ADMIN"],
+        badgeKind: "pending-deletes",
       },
     ],
   },
@@ -175,6 +187,11 @@ function ShellInner({ children }: { children: React.ReactNode }) {
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
   const logoutMutation = useLogout();
   const queryClient = useQueryClient();
+  // Pending-delete badge powering the "Delete Approvals" nav entry.
+  // The hook is server-gated to ADMIN, so it returns { count: 0 }
+  // for non-admin sessions — harmless to call from everyone here.
+  const { data: pendingDeletes } = usePendingDeleteRequestCount();
+  const pendingDeletesCount = pendingDeletes?.count ?? 0;
 
   const handleLogout = () => {
     logoutMutation.mutate(undefined, {
@@ -241,7 +258,16 @@ function ShellInner({ children }: { children: React.ReactNode }) {
                       : "text-sidebar-foreground/50 group-hover:text-sidebar-accent-foreground"
                   }`}
                 />
-                <span>{item.label}</span>
+                <span className="flex-1">{item.label}</span>
+                {item.badgeKind === "pending-deletes" &&
+                  pendingDeletesCount > 0 && (
+                    <span
+                      className="rounded-full bg-amber-500 px-1.5 py-0.5 text-[10px] font-bold leading-none text-white"
+                      title={`${pendingDeletesCount} deletion${pendingDeletesCount === 1 ? "" : "s"} awaiting approval`}
+                    >
+                      {pendingDeletesCount}
+                    </span>
+                  )}
               </Link>
             );
           })}
