@@ -39,6 +39,8 @@ import {
 } from "lucide-react";
 import { rowsToCsv, downloadCsv } from "@/lib/csv";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { deleteOutcomeToast } from "@/lib/delete-outcome";
+import { DELETE_REQUESTS_PENDING_COUNT_KEY } from "@/lib/extra-api";
 
 const usd = (cents: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format((cents ?? 0) / 100);
 
@@ -955,9 +957,10 @@ function DeleteMaintenance({ id }: { id: number }) {
     deleteMutation.mutate(
       { id },
       {
-        onSuccess: () => {
+        onSuccess: (result) => {
           queryClient.invalidateQueries({ queryKey: getListMaintenanceLogsQueryKey() });
-          toast({ title: "Log deleted" });
+          queryClient.invalidateQueries({ queryKey: DELETE_REQUESTS_PENDING_COUNT_KEY });
+          toast(deleteOutcomeToast(result, "Log deleted"));
         },
         onError: () => toast({ title: "Error deleting log", variant: "destructive" })
       }

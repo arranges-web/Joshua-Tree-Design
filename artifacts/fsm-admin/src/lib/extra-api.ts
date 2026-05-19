@@ -307,6 +307,68 @@ export function useUpdateMaintenanceReceipt(logId: number) {
   });
 }
 
+// ---------- Delete-request approval queue ----------
+
+export type DeleteRequest = {
+  id: number;
+  requestedByUserId: number;
+  requestedByName: string | null;
+  requestedByEmail: string | null;
+  resourceKind: string;
+  resourceId: number;
+  resourceLabel: string | null;
+  reason: string | null;
+  status: "EXECUTED" | "PENDING" | "APPROVED" | "DENIED";
+  createdAt: string;
+  decidedAt: string | null;
+  decidedByUserId: number | null;
+  decidedByName: string | null;
+};
+
+export const DELETE_REQUESTS_KEY = ["delete-requests"] as const;
+export const DELETE_REQUESTS_PENDING_COUNT_KEY = [
+  "delete-requests",
+  "pending-count",
+] as const;
+
+export function useListDeleteRequests() {
+  return useQuery({
+    queryKey: DELETE_REQUESTS_KEY,
+    queryFn: () =>
+      customFetch<{ requests: DeleteRequest[] }>("/api/delete-requests"),
+  });
+}
+
+export function usePendingDeleteRequestCount() {
+  return useQuery({
+    queryKey: DELETE_REQUESTS_PENDING_COUNT_KEY,
+    queryFn: () =>
+      customFetch<{ count: number }>("/api/delete-requests/pending-count"),
+    // Refresh on a slow interval so the sidebar badge feels live
+    // without hammering the server.
+    refetchInterval: 60_000,
+    refetchOnWindowFocus: true,
+  });
+}
+
+export function useApproveDeleteRequest() {
+  return useMutation({
+    mutationFn: (id: number) =>
+      customFetch<{ ok: true }>(`/api/delete-requests/${id}/approve`, {
+        method: "POST",
+      }),
+  });
+}
+
+export function useDenyDeleteRequest() {
+  return useMutation({
+    mutationFn: (id: number) =>
+      customFetch<{ ok: true }>(`/api/delete-requests/${id}/deny`, {
+        method: "POST",
+      }),
+  });
+}
+
 // ---------- Setup + Invites ----------
 
 export const NEEDS_SETUP_KEY = ["setup", "needs-setup"] as const;

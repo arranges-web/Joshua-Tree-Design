@@ -13,6 +13,8 @@ import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Edit, Trash2, Plus } from "lucide-react";
 import { applySortFilter, Pager, SortHeader, Toolbar, useDataTable } from "@/lib/data-table";
+import { deleteOutcomeToast } from "@/lib/delete-outcome";
+import { DELETE_REQUESTS_PENDING_COUNT_KEY } from "@/lib/extra-api";
 
 type CustSortKey = "fullName" | "email" | "phone";
 
@@ -229,9 +231,10 @@ function DeleteCustomer({ id }: { id: number }) {
     deleteMutation.mutate(
       { id },
       {
-        onSuccess: () => {
+        onSuccess: (result) => {
           queryClient.invalidateQueries({ queryKey: getListCustomersQueryKey() });
-          toast({ title: "Customer deleted" });
+          queryClient.invalidateQueries({ queryKey: DELETE_REQUESTS_PENDING_COUNT_KEY });
+          toast(deleteOutcomeToast(result, "Customer deleted"));
         },
         onError: () => toast({ title: "Error deleting customer", variant: "destructive" })
       }

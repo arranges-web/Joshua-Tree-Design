@@ -27,6 +27,7 @@ import { Assistant } from "@/pages/Assistant";
 import { Setup } from "@/pages/Setup";
 import { AcceptInvite } from "@/pages/AcceptInvite";
 import { Team } from "@/pages/Team";
+import { DeleteRequests } from "@/pages/DeleteRequests";
 import { useNeedsSetup } from "@/lib/extra-api";
 
 const queryClient = new QueryClient({
@@ -133,6 +134,7 @@ function AppRouter() {
                 <Route path="/maintenance" component={Maintenance} />
                 <Route path="/crews" component={Crews} />
                 <Route path="/team" component={Team} />
+                <Route path="/delete-requests" component={DeleteRequests} />
                 <Route path="/employees" component={Employees} />
                 <Route path="/permissions" component={Permissions} />
                 <Route path="/accounting" component={Accounting} />
