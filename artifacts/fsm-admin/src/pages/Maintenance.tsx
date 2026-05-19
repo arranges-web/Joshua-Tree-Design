@@ -38,6 +38,7 @@ import {
   Filter,
 } from "lucide-react";
 import { rowsToCsv, downloadCsv } from "@/lib/csv";
+import { PageHeader } from "@/components/layout/PageHeader";
 
 const usd = (cents: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format((cents ?? 0) / 100);
 
@@ -185,37 +186,36 @@ export function Maintenance() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap justify-between items-center gap-3">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Maintenance Logs</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Every wrench-turn, vendor receipt, and dollar spent — searchable
-            and exportable for your accountant.
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleExport}
-            disabled={filteredLogs.length === 0}
-          >
-            <Download className="mr-2 h-4 w-4" /> Export CSV
-          </Button>
-          <MaintenanceFormDialog
-            isOpen={isCreateOpen}
-            setIsOpen={setIsCreateOpen}
-            trigger={
-              <Button>
-                <Plus className="mr-2 h-4 w-4" />
-                New Log
-              </Button>
-            }
-          />
-        </div>
-      </div>
+      <PageHeader
+        eyebrow="Fleet & Shop"
+        title="Maintenance Log"
+        icon={<Wrench className="h-5 w-5" />}
+        description="Every wrench-turn, vendor receipt, and dollar spent — searchable and exportable for your accountant."
+        actions={
+          <>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleExport}
+              disabled={filteredLogs.length === 0}
+            >
+              <Download className="mr-2 h-4 w-4" /> Export CSV
+            </Button>
+            <MaintenanceFormDialog
+              isOpen={isCreateOpen}
+              setIsOpen={setIsCreateOpen}
+              trigger={
+                <Button>
+                  <Plus className="mr-2 h-4 w-4" />
+                  New Log
+                </Button>
+              }
+            />
+          </>
+        }
+      />
 
-      <div className="grid gap-3 md:grid-cols-4">
+      <div className="grid gap-3 grid-cols-2 md:grid-cols-4">
         <SummaryCard
           icon={Wrench}
           label="Logs"
@@ -465,16 +465,18 @@ function SummaryCard({
           ? "text-emerald-700"
           : "text-foreground";
   return (
-    <Card className="border-border/60">
-      <CardContent className="flex items-start justify-between p-5">
-        <div>
-          <div className="text-xs font-mono uppercase tracking-wider text-muted-foreground">
+    <Card className="kpi-tile border-border/60 transition-shadow hover:shadow-md">
+      <CardContent className="flex items-start justify-between gap-3 p-4 sm:p-5">
+        <div className="min-w-0">
+          <div className="text-[10px] font-mono uppercase tracking-[0.18em] text-muted-foreground">
             {label}
           </div>
-          <div className={`mt-2 text-2xl font-bold ${toneClass}`}>{value}</div>
+          <div className={`mt-2 text-2xl font-bold tracking-tight ${toneClass}`}>
+            {value}
+          </div>
           {sub && <div className="mt-1 text-xs text-muted-foreground">{sub}</div>}
         </div>
-        <div className="flex h-10 w-10 items-center justify-center rounded-md bg-muted text-muted-foreground">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-accent/10 text-accent-foreground/80 ring-1 ring-inset ring-accent/15">
           <Icon className="h-5 w-5" />
         </div>
       </CardContent>

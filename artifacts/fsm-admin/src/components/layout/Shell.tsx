@@ -99,17 +99,27 @@ const NAV_GROUPS: Array<{ label: string; items: NavItem[] }> = [
   },
 ];
 
-function Brand() {
+function Brand({ inHeader = false }: { inHeader?: boolean }) {
   return (
     <div className="flex items-center gap-3">
-      <div className="flex h-9 w-9 items-center justify-center rounded-md bg-accent text-accent-foreground shadow-sm">
+      <div className="relative flex h-9 w-9 items-center justify-center rounded-md bg-accent text-accent-foreground shadow-sm ring-1 ring-inset ring-accent/30">
         <TreeDeciduous className="h-5 w-5" />
       </div>
       <div className="leading-tight">
-        <div className="text-lg font-bold tracking-tight text-sidebar-foreground">
+        <div
+          className={`text-lg font-bold tracking-tight ${
+            inHeader ? "text-foreground" : "text-sidebar-foreground"
+          }`}
+        >
           Joshua Tree
         </div>
-        <div className="text-[10px] font-mono uppercase tracking-[0.18em] text-sidebar-foreground/60">
+        <div
+          className={`text-[10px] font-mono uppercase tracking-[0.18em] ${
+            inHeader
+              ? "text-muted-foreground"
+              : "text-sidebar-foreground/55"
+          }`}
+        >
           Operations Console
         </div>
       </div>
@@ -185,10 +195,10 @@ function ShellInner({ children }: { children: React.ReactNode }) {
   })).filter((group) => group.items.length > 0);
 
   const NavLinks = () => (
-    <nav className="flex flex-col gap-5 py-4">
+    <nav className="flex flex-col gap-6 py-5">
       {visibleGroups.map((group) => (
-        <div key={group.label} className="flex flex-col gap-1">
-          <div className="px-3 pb-1 text-[10px] font-mono uppercase tracking-[0.18em] text-sidebar-foreground/50">
+        <div key={group.label} className="flex flex-col gap-0.5">
+          <div className="px-3 pb-2 text-[10px] font-mono font-semibold uppercase tracking-[0.2em] text-sidebar-foreground/40">
             {group.label}
           </div>
           {group.items.map((item) => {
@@ -209,14 +219,28 @@ function ShellInner({ children }: { children: React.ReactNode }) {
               <Link
                 key={item.href}
                 href={item.href}
-                className={`flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors ${
+                className={`group relative flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-all duration-150 ${
                   isActive
-                    ? "bg-sidebar-primary text-sidebar-primary-foreground shadow-sm"
-                    : "text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                    ? "bg-sidebar-primary/95 text-sidebar-primary-foreground shadow-sm"
+                    : "text-sidebar-foreground/75 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground hover:translate-x-0.5"
                 }`}
                 onClick={() => setIsMobileNavOpen(false)}
               >
-                <Icon className="h-4 w-4 shrink-0" />
+                {/* Left accent bar on the active item. Subtle, but
+                    makes the current location pop without shouting. */}
+                {isActive && (
+                  <span
+                    aria-hidden
+                    className="absolute left-0 top-1/2 -translate-y-1/2 h-5 w-0.5 rounded-full bg-accent"
+                  />
+                )}
+                <Icon
+                  className={`h-4 w-4 shrink-0 transition-colors ${
+                    isActive
+                      ? ""
+                      : "text-sidebar-foreground/50 group-hover:text-sidebar-accent-foreground"
+                  }`}
+                />
                 <span>{item.label}</span>
               </Link>
             );
@@ -226,32 +250,50 @@ function ShellInner({ children }: { children: React.ReactNode }) {
     </nav>
   );
 
-  const UserCard = () => (
-    <div className="shrink-0 border-t border-sidebar-border bg-sidebar p-4 shadow-[0_-4px_8px_-4px_rgba(0,0,0,0.15)]">
-      <div className="mb-3">
-        <p className="text-sm font-medium text-sidebar-foreground">
-          {authData?.user?.fullName ?? "—"}
-        </p>
-        <p className="text-[10px] font-mono uppercase tracking-[0.18em] text-sidebar-foreground/60">
-          {authData?.user?.role ?? ""}
-        </p>
-        {authData?.user?.department && (
-          <p className="text-[10px] text-sidebar-foreground/50 mt-0.5">
-            {authData.user.department}
-          </p>
-        )}
+  const UserCard = () => {
+    const fullName = authData?.user?.fullName ?? "—";
+    const initials = fullName
+      .split(" ")
+      .map((n) => n[0])
+      .filter(Boolean)
+      .slice(0, 2)
+      .join("")
+      .toUpperCase();
+    return (
+      <div className="shrink-0 border-t border-sidebar-border bg-sidebar p-4 shadow-[0_-4px_12px_-6px_rgba(0,0,0,0.2)]">
+        <div className="mb-3 flex items-start gap-3">
+          <div
+            aria-hidden
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent/20 text-xs font-semibold text-sidebar-foreground ring-1 ring-inset ring-sidebar-border"
+          >
+            {initials || "—"}
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm font-medium text-sidebar-foreground">
+              {fullName}
+            </p>
+            <p className="text-[10px] font-mono uppercase tracking-[0.18em] text-sidebar-foreground/55">
+              {authData?.user?.role ?? ""}
+            </p>
+            {authData?.user?.department && (
+              <p className="mt-0.5 truncate text-[10px] text-sidebar-foreground/45">
+                {authData.user.department}
+              </p>
+            )}
+          </div>
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          className="w-full justify-start border-sidebar-border/60 bg-transparent text-sidebar-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+          onClick={handleLogout}
+        >
+          <LogOut className="mr-2 h-4 w-4" />
+          Log out
+        </Button>
       </div>
-      <Button
-        variant="outline"
-        size="sm"
-        className="w-full justify-start border-sidebar-border bg-transparent text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-        onClick={handleLogout}
-      >
-        <LogOut className="mr-2 h-4 w-4" />
-        Log out
-      </Button>
-    </div>
-  );
+    );
+  };
 
   return (
     <div className="flex min-h-screen flex-col md:flex-row bg-background">
@@ -263,8 +305,8 @@ function ShellInner({ children }: { children: React.ReactNode }) {
         page extends past the viewport, the sidebar stretches with
         the page and the logout button drifts off-screen.
       */}
-      <aside className="sticky top-0 hidden h-screen w-64 flex-col bg-sidebar text-sidebar-foreground md:flex">
-        <div className="flex h-16 items-center border-b border-sidebar-border px-5">
+      <aside className="sticky top-0 hidden h-screen w-64 flex-col border-r border-sidebar-border bg-gradient-to-b from-sidebar to-sidebar/95 text-sidebar-foreground md:flex">
+        <div className="flex h-16 items-center border-b border-sidebar-border/60 px-5">
           <Brand />
         </div>
         <div className="flex-1 overflow-y-auto px-3">
@@ -274,11 +316,11 @@ function ShellInner({ children }: { children: React.ReactNode }) {
       </aside>
 
       <div className="flex flex-1 flex-col overflow-hidden">
-        <header className="flex h-14 items-center justify-between border-b bg-card px-4">
-          <div className="flex items-center gap-3 md:hidden">
+        <header className="sticky top-0 z-20 flex h-14 items-center justify-between gap-3 border-b border-border/60 bg-card/95 px-4 backdrop-blur supports-[backdrop-filter]:bg-card/80 md:h-16">
+          <div className="flex min-w-0 items-center gap-3">
             <Sheet open={isMobileNavOpen} onOpenChange={setIsMobileNavOpen}>
               <SheetTrigger asChild>
-                <Button variant="ghost" size="icon">
+                <Button variant="ghost" size="icon" className="md:hidden">
                   <Menu className="h-5 w-5" />
                 </Button>
               </SheetTrigger>
@@ -295,16 +337,73 @@ function ShellInner({ children }: { children: React.ReactNode }) {
                 <UserCard />
               </SheetContent>
             </Sheet>
-            <Brand />
+            <div className="md:hidden">
+              <Brand inHeader />
+            </div>
+            <PageTrail visibleGroups={visibleGroups} />
           </div>
-          <div className="hidden md:block" />
           <DepartmentSwitcher />
         </header>
 
-        <main className="flex-1 overflow-y-auto bg-background p-4 md:p-8">
-          <div className="mx-auto max-w-7xl">{children}</div>
+        <main className="flex-1 overflow-y-auto bg-background">
+          <div className="mx-auto max-w-7xl p-4 md:p-8">{children}</div>
         </main>
       </div>
+    </div>
+  );
+}
+
+/**
+ * Tiny breadcrumb-style trail rendered in the desktop header. Looks
+ * up the current location against the navigation groups so the user
+ * always knows where they are even after long scrolls — and never
+ * has to read the URL bar to figure out which section they're in.
+ *
+ * Hidden on mobile because the brand mark already occupies the
+ * available header real estate there.
+ */
+function PageTrail({
+  visibleGroups,
+}: {
+  visibleGroups: Array<{ label: string; items: NavItem[] }>;
+}) {
+  const [location] = useLocation();
+  const currentSearch = useUrlSearch();
+
+  let group: { label: string; items: NavItem[] } | undefined;
+  let item: NavItem | undefined;
+  for (const g of visibleGroups) {
+    for (const i of g.items) {
+      const [itemPath, itemQuery = ""] = i.href.split("?");
+      if (location !== itemPath) continue;
+      if (itemQuery === "") {
+        if (currentSearch === "" || !currentSearch.includes("tab=")) {
+          group = g;
+          item = i;
+          break;
+        }
+      } else if (currentSearch.includes(itemQuery)) {
+        group = g;
+        item = i;
+        break;
+      }
+    }
+    if (item) break;
+  }
+
+  if (!item || !group) return null;
+
+  return (
+    <div className="hidden min-w-0 items-center gap-2 md:flex">
+      <span className="text-[10px] font-mono uppercase tracking-[0.18em] text-muted-foreground">
+        {group.label}
+      </span>
+      <span aria-hidden className="text-muted-foreground/40">
+        /
+      </span>
+      <span className="truncate text-sm font-semibold text-foreground">
+        {item.label}
+      </span>
     </div>
   );
 }
