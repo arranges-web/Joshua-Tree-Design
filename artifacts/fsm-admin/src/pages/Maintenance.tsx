@@ -492,7 +492,7 @@ function ReceiptPreviewDialog({
   const { data, isLoading } = useMaintenanceReceipt(logId);
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="sm:max-w-2xl">
+      <DialogContent className="w-[calc(100vw-2rem)] sm:max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Receipt</DialogTitle>
         </DialogHeader>
@@ -692,7 +692,7 @@ function MaintenanceFormDialog({ log, trigger, isOpen: controlledIsOpen, setIsOp
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
       {trigger && <DialogTrigger asChild>{trigger}</DialogTrigger>}
-      <DialogContent className="sm:max-w-[520px] max-h-[90vh] overflow-y-auto">
+      <DialogContent className="w-[calc(100vw-2rem)] sm:max-w-[520px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{log ? "Edit Log" : "New Maintenance Log"}</DialogTitle>
         </DialogHeader>

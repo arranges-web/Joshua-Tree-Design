@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import {
   LogOut,
   Users,
+  UserPlus,
   Wrench,
   Menu,
   TreeDeciduous,
@@ -12,7 +13,6 @@ import {
   Building2,
   Calculator,
   HardHat,
-  CreditCard,
   Receipt,
   TrendingUp,
   Truck,
@@ -48,7 +48,13 @@ const NAV_GROUPS: Array<{ label: string; items: NavItem[] }> = [
       { href: "/assets", label: "Asset Registry", icon: Package },
       { href: "/maintenance", label: "Maintenance Log", icon: Wrench },
       { href: "/crews", label: "Crews", icon: HardHat },
-      { href: "/team", label: "Team", icon: Users },
+      { href: "/employees", label: "Crew & Members", icon: Users },
+      {
+        href: "/team",
+        label: "Invite Team",
+        icon: UserPlus,
+        roles: ["ADMIN"],
+      },
     ],
   },
   {

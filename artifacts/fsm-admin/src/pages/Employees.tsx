@@ -421,7 +421,7 @@ function EmployeeFormDialog({ employee, trigger, isOpen: controlledIsOpen, setIs
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
       {trigger && <DialogTrigger asChild>{trigger}</DialogTrigger>}
-      <DialogContent className="sm:max-w-[425px]">
+      <DialogContent className="w-[calc(100vw-2rem)] sm:max-w-md">
         <DialogHeader>
           <DialogTitle>{employee ? "Edit Team Member" : "Add Team Member"}</DialogTitle>
         </DialogHeader>

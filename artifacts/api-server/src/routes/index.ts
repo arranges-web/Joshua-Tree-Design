@@ -12,6 +12,8 @@ import leadsRouter from "./leads";
 import portalRouter from "./portal";
 import accountingRouter from "./accounting";
 import aiRouter from "./ai";
+import setupRouter from "./setup";
+import invitesRouter from "./invites";
 
 const router: IRouter = Router();
 
@@ -27,6 +29,8 @@ router.use(adminRouter);
 router.use(leadsRouter);
 router.use(accountingRouter);
 router.use(aiRouter);
+router.use(setupRouter);
+router.use(invitesRouter);
 router.use("/portal", portalRouter);
 
 export default router;

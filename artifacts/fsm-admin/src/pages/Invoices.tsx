@@ -181,7 +181,7 @@ function InvoiceFormDialog({ invoice, trigger, isOpen: controlledIsOpen, setIsOp
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
       {trigger && <DialogTrigger asChild>{trigger}</DialogTrigger>}
-      <DialogContent className="sm:max-w-[425px]">
+      <DialogContent className="w-[calc(100vw-2rem)] sm:max-w-md">
         <DialogHeader>
           <DialogTitle>{invoice ? "Edit Invoice" : "New Invoice"}</DialogTitle>
         </DialogHeader>
