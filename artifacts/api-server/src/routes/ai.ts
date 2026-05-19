@@ -22,14 +22,15 @@ import { logger } from "../lib/logger";
 
 const router: IRouter = Router();
 
-// Lazy-initialize so the rest of the API still boots if the key is missing —
-// only the /chat endpoint will 503 instead of taking down the whole server.
+// Lazy-initialize using Replit AI Integrations proxy — no personal API key
+// required. Falls back gracefully so the rest of the server still boots.
 let openai: OpenAI | null = null;
 function getClient(): OpenAI | null {
   if (openai) return openai;
-  const key = process.env["OPENAI_API_KEY"];
-  if (!key) return null;
-  openai = new OpenAI({ apiKey: key });
+  const baseURL = process.env["AI_INTEGRATIONS_OPENAI_BASE_URL"];
+  const apiKey  = process.env["AI_INTEGRATIONS_OPENAI_API_KEY"];
+  if (!baseURL || !apiKey) return null;
+  openai = new OpenAI({ baseURL, apiKey });
   return openai;
 }
 
@@ -298,8 +299,7 @@ router.post(
     if (!client) {
       res.status(503).json({
         error: "ai_not_configured",
-        message:
-          "OPENAI_API_KEY is not set on the server. Add it as a Replit secret to enable the assistant.",
+        message: "AI integration is not configured on the server.",
       });
       return;
     }
@@ -335,54 +335,62 @@ router.post(
       })),
     ];
 
+    // Open SSE stream — from this point forward all responses go through
+    // the event stream (errors are sent as SSE error events, not HTTP codes).
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("Connection", "keep-alive");
+    res.setHeader("X-Accel-Buffering", "no");
+    res.flushHeaders();
+
+    function sendEvent(payload: Record<string, unknown>): void {
+      res.write(`data: ${JSON.stringify(payload)}\n\n`);
+    }
+
     try {
-      // gpt-4o-mini is cheap, fast, and easily good enough for
-      // chat-style Q&A over a 5–10K-token snapshot. Switch to
-      // gpt-4o or gpt-4.1 if a harder analytical workload is needed.
-      const completion = await client.chat.completions.create({
-        model: "gpt-4o-mini",
-        max_tokens: 1500,
-        temperature: 0.4,
+      const stream = await client.chat.completions.create({
+        model: "gpt-5-mini",
+        max_completion_tokens: 8192,
         messages: apiMessages,
+        stream: true,
       });
-      const reply = completion.choices[0]?.message?.content ?? "";
-      res.json({
-        reply,
-        usage: {
-          inputTokens: completion.usage?.prompt_tokens ?? 0,
-          outputTokens: completion.usage?.completion_tokens ?? 0,
-          cacheReadTokens: 0,
-          cacheWriteTokens: 0,
-        },
-      });
+
+      let totalContent = "";
+      for await (const chunk of stream) {
+        const delta = chunk.choices[0]?.delta?.content;
+        if (delta) {
+          totalContent += delta;
+          sendEvent({ content: delta });
+        }
+      }
+
+      if (!totalContent) {
+        logger.warn("AI model streamed zero content");
+        sendEvent({
+          error: "ai_empty_response",
+          message: "The assistant returned an empty response — please try again.",
+        });
+      } else {
+        logger.info({ contentLength: totalContent.length }, "AI stream complete");
+      }
+
+      res.write("data: [DONE]\n\n");
+      res.end();
     } catch (err) {
-      // Distinguish auth + rate-limit so the UI can render a useful
-      // hint instead of "something went wrong".
+      let message = "The assistant request failed. Please try again.";
       if (err instanceof OpenAI.AuthenticationError) {
         logger.error({ err }, "OpenAI API key auth failed");
-        res.status(503).json({
-          error: "ai_auth_failed",
-          message: "OPENAI_API_KEY is set but rejected by OpenAI.",
-        });
-        return;
-      }
-      if (err instanceof OpenAI.RateLimitError) {
-        res.status(429).json({
-          error: "ai_rate_limited",
-          message: "AI assistant is rate-limited. Try again shortly.",
-        });
-        return;
-      }
-      if (err instanceof OpenAI.APIError) {
+        message = "AI integration authentication failed on the server.";
+      } else if (err instanceof OpenAI.RateLimitError) {
+        message = "The assistant is rate-limited right now. Try again in a minute.";
+      } else if (err instanceof OpenAI.APIError) {
         logger.error({ err, status: err.status }, "OpenAI API error");
-        res.status(502).json({
-          error: "ai_upstream_error",
-          message: "AI assistant request failed. Please try again.",
-        });
-        return;
+      } else {
+        logger.error({ err }, "AI chat unexpected error");
       }
-      logger.error({ err }, "AI chat unexpected error");
-      res.status(500).json({ error: "ai_unexpected_error" });
+      sendEvent({ error: "ai_error", message });
+      res.write("data: [DONE]\n\n");
+      res.end();
     }
   },
 );
