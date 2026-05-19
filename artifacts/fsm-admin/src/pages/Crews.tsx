@@ -251,7 +251,7 @@ function ChangeCrewLeadDialog({
           Change Lead
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-w-sm">
+      <DialogContent className="w-[calc(100vw-2rem)] sm:max-w-sm">
         <DialogHeader>
           <DialogTitle>Change Crew Lead</DialogTitle>
         </DialogHeader>
@@ -327,7 +327,7 @@ function NewCrewDialog({ onCreated }: { onCreated: () => void }) {
           New Crew
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-w-sm">
+      <DialogContent className="w-[calc(100vw-2rem)] sm:max-w-sm">
         <DialogHeader>
           <DialogTitle>Create New Crew</DialogTitle>
         </DialogHeader>

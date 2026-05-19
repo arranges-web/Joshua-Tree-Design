@@ -18,6 +18,7 @@ import { isDemoMode } from "./demoMode";
  */
 export async function backfillFleetData(): Promise<void> {
   await backfillMaintenanceLogColumns();
+  await ensureInvitesTable();
   await backfillTruckFixtures();
   await backfillEquipmentFixtures();
   await backfillEquipmentCategories();
@@ -139,6 +140,40 @@ async function backfillMaintenanceLogColumns() {
   );
   await db.execute(
     sql`ALTER TABLE maintenance_logs ADD COLUMN IF NOT EXISTS receipt_data_url TEXT`,
+  );
+}
+
+/**
+ * Idempotent CREATE TABLE for the team-invite system. Same pattern
+ * as backfillMaintenanceLogColumns above — keep the table creation
+ * inline so the schema deploys without needing a separate
+ * drizzle-kit push step on the live demo.
+ */
+async function ensureInvitesTable() {
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS invites (
+      id SERIAL PRIMARY KEY,
+      token TEXT NOT NULL,
+      email TEXT NOT NULL,
+      full_name TEXT,
+      role_id INTEGER NOT NULL REFERENCES roles(id) ON DELETE RESTRICT,
+      department_id INTEGER NOT NULL REFERENCES departments(id) ON DELETE RESTRICT,
+      created_by_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      expires_at TIMESTAMPTZ NOT NULL,
+      revoked_at TIMESTAMPTZ,
+      accepted_at TIMESTAMPTZ,
+      accepted_by_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL
+    )
+  `);
+  await db.execute(
+    sql`CREATE UNIQUE INDEX IF NOT EXISTS invites_token_uq ON invites (token)`,
+  );
+  await db.execute(
+    sql`CREATE INDEX IF NOT EXISTS invites_email_idx ON invites (email)`,
+  );
+  await db.execute(
+    sql`CREATE INDEX IF NOT EXISTS invites_created_at_idx ON invites (created_at)`,
   );
 }
 

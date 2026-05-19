@@ -90,7 +90,7 @@ export function Login() {
 
   return (
     <div className="min-h-screen bg-background">
-      <div className="mx-auto grid min-h-screen max-w-6xl grid-cols-1 gap-8 p-6 lg:grid-cols-[1fr_1.1fr] lg:items-center lg:p-10">
+      <div className="mx-auto grid min-h-screen max-w-6xl grid-cols-1 gap-6 p-4 sm:gap-8 sm:p-6 lg:grid-cols-[1fr_1.1fr] lg:items-center lg:p-10">
         {/* Left: branding + form */}
         <Card className="w-full">
           <CardHeader className="space-y-3">

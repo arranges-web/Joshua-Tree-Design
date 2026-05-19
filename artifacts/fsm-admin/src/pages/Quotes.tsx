@@ -190,7 +190,7 @@ function QuoteFormDialog({ quote, trigger, isOpen: controlledIsOpen, setIsOpen: 
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
       {trigger && <DialogTrigger asChild>{trigger}</DialogTrigger>}
-      <DialogContent className="sm:max-w-[425px] max-h-[90vh] overflow-y-auto">
+      <DialogContent className="w-[calc(100vw-2rem)] sm:max-w-md max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{quote ? "Edit Quote" : "New Quote"}</DialogTitle>
         </DialogHeader>
