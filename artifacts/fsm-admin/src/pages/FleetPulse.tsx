@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { PageHeader } from "@/components/layout/PageHeader";
 import {
   Activity,
   AlertTriangle,
@@ -124,27 +125,21 @@ export function FleetPulse() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="flex items-center gap-2 text-3xl font-bold tracking-tight">
-            <Activity className="h-7 w-7 text-accent-foreground" />
-            Fleet Pulse
-          </h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            One screen to know if every truck and chainsaw is healthy and where the
-            money is going.
-          </p>
-        </div>
-        <div className="flex gap-2">
+      <PageHeader
+        eyebrow="Fleet & Shop"
+        title="Fleet Pulse"
+        description="One screen to know if every truck and chainsaw is healthy — and where the money is going."
+        icon={<Activity className="h-5 w-5" />}
+        actions={
           <Button asChild variant="outline" size="sm">
             <Link href="/assets">
               <Wrench className="mr-2 h-4 w-4" /> Asset Registry
             </Link>
           </Button>
-        </div>
-      </div>
+        }
+      />
 
-      <div className="grid gap-3 md:grid-cols-5">
+      <div className="grid gap-3 grid-cols-2 md:grid-cols-5">
         <KpiCard
           label="Active"
           value={num(counts.active)}
@@ -406,18 +401,20 @@ function KpiCard({
           ? "text-emerald-700"
           : "text-foreground";
   return (
-    <Card className="border-border/60">
-      <CardContent className="flex items-start justify-between p-5">
-        <div>
-          <div className="text-xs font-mono uppercase tracking-wider text-muted-foreground">
+    <Card className="kpi-tile border-border/60 transition-shadow hover:shadow-md">
+      <CardContent className="flex items-start justify-between gap-3 p-4 sm:p-5">
+        <div className="min-w-0">
+          <div className="text-[10px] font-mono uppercase tracking-[0.18em] text-muted-foreground">
             {label}
           </div>
-          <div className={`mt-2 text-2xl font-bold ${toneClass}`}>{value}</div>
+          <div className={`mt-2 text-2xl font-bold tracking-tight ${toneClass}`}>
+            {value}
+          </div>
           {sub && (
             <div className="mt-1 text-xs text-muted-foreground">{sub}</div>
           )}
         </div>
-        <div className="flex h-10 w-10 items-center justify-center rounded-md bg-muted text-muted-foreground">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-accent/10 text-accent-foreground/80 ring-1 ring-inset ring-accent/15">
           <Icon className="h-5 w-5" />
         </div>
       </CardContent>

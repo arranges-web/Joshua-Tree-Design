@@ -6,3 +6,5 @@ export * from "./fleet";
 export * from "./permissions";
 export * from "./service_requests";
 export * from "./portal";
+export * from "./invites";
+export * from "./deleteRequests";

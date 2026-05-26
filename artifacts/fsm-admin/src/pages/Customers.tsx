@@ -13,6 +13,8 @@ import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Edit, Trash2, Plus } from "lucide-react";
 import { applySortFilter, Pager, SortHeader, Toolbar, useDataTable } from "@/lib/data-table";
+import { deleteOutcomeToast } from "@/lib/delete-outcome";
+import { DELETE_REQUESTS_PENDING_COUNT_KEY } from "@/lib/extra-api";
 
 type CustSortKey = "fullName" | "email" | "phone";
 
@@ -53,8 +55,9 @@ export function Customers() {
         ) : rows.length === 0 ? (
           <div className="p-12 text-center text-sm text-muted-foreground">No customers match the current search.</div>
         ) : (
+          <div className="max-h-[70vh] overflow-auto">
           <Table>
-            <TableHeader>
+            <TableHeader className="sticky top-0 z-10 bg-muted/40 backdrop-blur">
               <TableRow>
                 <TableHead><SortHeader label="Name" sortKey="fullName" state={state} /></TableHead>
                 <TableHead><SortHeader label="Email" sortKey="email" state={state} /></TableHead>
@@ -69,6 +72,7 @@ export function Customers() {
               ))}
             </TableBody>
           </Table>
+          </div>
         )}
         <Pager state={state} totalPages={totalPages} total={total} />
       </div>
@@ -174,7 +178,7 @@ function CustomerFormDialog({ customer, trigger, isOpen: controlledIsOpen, setIs
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
       {trigger && <DialogTrigger asChild>{trigger}</DialogTrigger>}
-      <DialogContent className="sm:max-w-[425px]">
+      <DialogContent className="w-[calc(100vw-2rem)] sm:max-w-md">
         <DialogHeader>
           <DialogTitle>{customer ? "Edit Customer" : "New Customer"}</DialogTitle>
         </DialogHeader>
@@ -227,9 +231,10 @@ function DeleteCustomer({ id }: { id: number }) {
     deleteMutation.mutate(
       { id },
       {
-        onSuccess: () => {
+        onSuccess: (result) => {
           queryClient.invalidateQueries({ queryKey: getListCustomersQueryKey() });
-          toast({ title: "Customer deleted" });
+          queryClient.invalidateQueries({ queryKey: DELETE_REQUESTS_PENDING_COUNT_KEY });
+          toast(deleteOutcomeToast(result, "Customer deleted"));
         },
         onError: () => toast({ title: "Error deleting customer", variant: "destructive" })
       }

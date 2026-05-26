@@ -12,6 +12,8 @@ import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Edit, Trash2, Plus } from "lucide-react";
 import { applySortFilter, Pager, SortHeader, StatusBadge, Toolbar, useDataTable } from "@/lib/data-table";
+import { deleteOutcomeToast } from "@/lib/delete-outcome";
+import { DELETE_REQUESTS_PENDING_COUNT_KEY } from "@/lib/extra-api";
 
 const usd = (cents: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format((cents ?? 0) / 100);
 
@@ -71,8 +73,9 @@ export function Quotes() {
         ) : rows.length === 0 ? (
           <div className="p-12 text-center text-sm text-muted-foreground">No quotes match the current filters.</div>
         ) : (
+          <div className="max-h-[70vh] overflow-auto">
           <Table>
-            <TableHeader>
+            <TableHeader className="sticky top-0 z-10 bg-muted/40 backdrop-blur">
               <TableRow>
                 <TableHead className="w-[80px]"><SortHeader label="ID" sortKey="id" state={state} /></TableHead>
                 <TableHead><SortHeader label="Customer" sortKey="customerId" state={state} /></TableHead>
@@ -86,7 +89,7 @@ export function Quotes() {
             </TableHeader>
             <TableBody>
               {rows.map((quote) => (
-                <TableRow key={quote.id} className="text-sm">
+                <TableRow key={quote.id} className="text-sm hover:bg-muted/40">
                   <TableCell className="font-mono text-xs text-muted-foreground">#{quote.id}</TableCell>
                   <TableCell className="font-mono text-xs">Customer #{quote.customerId}</TableCell>
                   <TableCell><StatusBadge status={quote.status} /></TableCell>
@@ -104,6 +107,7 @@ export function Quotes() {
               ))}
             </TableBody>
           </Table>
+          </div>
         )}
         <Pager state={state} totalPages={totalPages} total={total} />
       </div>
@@ -188,7 +192,7 @@ function QuoteFormDialog({ quote, trigger, isOpen: controlledIsOpen, setIsOpen: 
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
       {trigger && <DialogTrigger asChild>{trigger}</DialogTrigger>}
-      <DialogContent className="sm:max-w-[425px] max-h-[90vh] overflow-y-auto">
+      <DialogContent className="w-[calc(100vw-2rem)] sm:max-w-md max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{quote ? "Edit Quote" : "New Quote"}</DialogTitle>
         </DialogHeader>
@@ -282,9 +286,10 @@ function DeleteQuote({ id }: { id: number }) {
     deleteMutation.mutate(
       { id },
       {
-        onSuccess: () => {
+        onSuccess: (result) => {
           queryClient.invalidateQueries({ queryKey: getListQuotesQueryKey() });
-          toast({ title: "Quote deleted" });
+          queryClient.invalidateQueries({ queryKey: DELETE_REQUESTS_PENDING_COUNT_KEY });
+          toast(deleteOutcomeToast(result, "Quote deleted"));
         },
         onError: () => toast({ title: "Error deleting quote", variant: "destructive" })
       }

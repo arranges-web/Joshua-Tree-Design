@@ -10,6 +10,7 @@ import {
 import { requireAuth } from "../middlewares/requireAuth";
 import { requireSection } from "../middlewares/requireSection";
 import { scopeQuotes } from "../lib/rbac/scope";
+import { requestDelete, sendDeleteOutcome } from "../lib/deleteGuard";
 
 const router: IRouter = Router();
 
@@ -111,15 +112,31 @@ router.delete(
     const where = scope
       ? and(eq(quotesTable.id, params.data.id), scope)
       : eq(quotesTable.id, params.data.id);
-    const deleted = await db
-      .delete(quotesTable)
-      .where(where)
-      .returning({ id: quotesTable.id });
-    if (deleted.length === 0) {
+
+    const [existing] = await db
+      .select({ status: quotesTable.status, totalCents: quotesTable.totalCents })
+      .from(quotesTable)
+      .where(eq(quotesTable.id, params.data.id));
+    if (!existing) {
       res.status(404).json({ error: "not_found" });
       return;
     }
-    res.json({ ok: true });
+    const usd = `$${((existing.totalCents ?? 0) / 100).toFixed(2)}`;
+
+    const outcome = await requestDelete({
+      req,
+      kind: "quote",
+      id: params.data.id,
+      label: `Quote #${params.data.id} (${existing.status} · ${usd})`,
+      execute: async () => {
+        const deleted = await db
+          .delete(quotesTable)
+          .where(where)
+          .returning({ id: quotesTable.id });
+        return deleted.length > 0;
+      },
+    });
+    sendDeleteOutcome(res, outcome);
   },
 );
 

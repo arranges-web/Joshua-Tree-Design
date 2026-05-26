@@ -12,6 +12,8 @@ import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Edit, Trash2, Plus } from "lucide-react";
 import { applySortFilter, Pager, SortHeader, StatusBadge, Toolbar, useDataTable } from "@/lib/data-table";
+import { deleteOutcomeToast } from "@/lib/delete-outcome";
+import { DELETE_REQUESTS_PENDING_COUNT_KEY } from "@/lib/extra-api";
 
 const usd = (cents: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format((cents ?? 0) / 100);
 
@@ -71,8 +73,9 @@ export function Invoices() {
         ) : rows.length === 0 ? (
           <div className="p-12 text-center text-sm text-muted-foreground">No invoices match the current filters.</div>
         ) : (
+          <div className="max-h-[70vh] overflow-auto">
           <Table>
-            <TableHeader>
+            <TableHeader className="sticky top-0 z-10 bg-muted/40 backdrop-blur">
               <TableRow>
                 <TableHead className="w-[80px]"><SortHeader label="ID" sortKey="id" state={state} /></TableHead>
                 <TableHead><SortHeader label="Customer" sortKey="customerId" state={state} /></TableHead>
@@ -86,7 +89,7 @@ export function Invoices() {
             </TableHeader>
             <TableBody>
               {rows.map((invoice) => (
-                <TableRow key={invoice.id} className="text-sm">
+                <TableRow key={invoice.id} className="text-sm hover:bg-muted/40">
                   <TableCell className="font-mono text-xs text-muted-foreground">#{invoice.id}</TableCell>
                   <TableCell className="font-mono text-xs">Customer #{invoice.customerId}</TableCell>
                   <TableCell className="font-mono text-xs">{invoice.jobId ? `Job #${invoice.jobId}` : '—'}</TableCell>
@@ -104,6 +107,7 @@ export function Invoices() {
               ))}
             </TableBody>
           </Table>
+          </div>
         )}
         <Pager state={state} totalPages={totalPages} total={total} />
       </div>
@@ -179,7 +183,7 @@ function InvoiceFormDialog({ invoice, trigger, isOpen: controlledIsOpen, setIsOp
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
       {trigger && <DialogTrigger asChild>{trigger}</DialogTrigger>}
-      <DialogContent className="sm:max-w-[425px]">
+      <DialogContent className="w-[calc(100vw-2rem)] sm:max-w-md">
         <DialogHeader>
           <DialogTitle>{invoice ? "Edit Invoice" : "New Invoice"}</DialogTitle>
         </DialogHeader>
@@ -253,9 +257,10 @@ function DeleteInvoice({ id }: { id: number }) {
     deleteMutation.mutate(
       { id },
       {
-        onSuccess: () => {
+        onSuccess: (result) => {
           queryClient.invalidateQueries({ queryKey: getListInvoicesQueryKey() });
-          toast({ title: "Invoice deleted" });
+          queryClient.invalidateQueries({ queryKey: DELETE_REQUESTS_PENDING_COUNT_KEY });
+          toast(deleteOutcomeToast(result, "Invoice deleted"));
         },
         onError: () => toast({ title: "Error deleting invoice", variant: "destructive" })
       }

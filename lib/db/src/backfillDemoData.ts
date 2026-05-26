@@ -76,13 +76,21 @@ export async function backfillDemoData(): Promise<void> {
   }
 
   // ── Phase 1 guard ─────────────────────────────────────────────────────────
-  // Skip customer/job/fleet seeding when the DB already has 22+ customers.
-  // In this demo application production seeding is intentional — the guard
-  // itself protects any DB that already has real customer data (>= 22 rows).
-  const [{ n }] = await db
-    .select({ n: sql<number>`count(*)::int` })
-    .from(customersTable);
-  if (n >= 22) return;
+  // Phase 1 inserts ~12 demo customers (brandon@example.com, …) plus
+  // their properties, jobs, quotes, invoices, and per-dept crews. We
+  // make it idempotent by checking for the first seeded customer
+  // email — if it already exists, Phase 1 has run and we skip. The
+  // legacy 22-customer count guard was insufficient because the
+  // production demo on Replit was seeded before this file existed,
+  // landed at exactly 22 customers (10 from autoSeed + 12 from this
+  // script's first run on dev), and then permanently blocked any
+  // future enrichment on the live deploy.
+  const seedSentinel = await db
+    .select({ id: customersTable.id })
+    .from(customersTable)
+    .where(eq(customersTable.email, "brandon@example.com"))
+    .limit(1);
+  if (seedSentinel.length > 0) return;
 
   // ── Resolve department & user IDs from live DB ────────────────────────────
   const depts = await db.select().from(departmentsTable);

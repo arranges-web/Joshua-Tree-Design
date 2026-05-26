@@ -399,6 +399,197 @@ export function useUpdateMaintenanceReceipt(logId: number) {
   });
 }
 
+// ---------- Delete-request approval queue ----------
+
+export type DeleteRequest = {
+  id: number;
+  requestedByUserId: number;
+  requestedByName: string | null;
+  requestedByEmail: string | null;
+  resourceKind: string;
+  resourceId: number;
+  resourceLabel: string | null;
+  reason: string | null;
+  status: "EXECUTED" | "PENDING" | "APPROVED" | "DENIED";
+  createdAt: string;
+  decidedAt: string | null;
+  decidedByUserId: number | null;
+  decidedByName: string | null;
+};
+
+export const DELETE_REQUESTS_KEY = ["delete-requests"] as const;
+export const DELETE_REQUESTS_PENDING_COUNT_KEY = [
+  "delete-requests",
+  "pending-count",
+] as const;
+
+export function useListDeleteRequests() {
+  return useQuery({
+    queryKey: DELETE_REQUESTS_KEY,
+    queryFn: () =>
+      customFetch<{ requests: DeleteRequest[] }>("/api/delete-requests"),
+  });
+}
+
+export function usePendingDeleteRequestCount() {
+  return useQuery({
+    queryKey: DELETE_REQUESTS_PENDING_COUNT_KEY,
+    queryFn: () =>
+      customFetch<{ count: number }>("/api/delete-requests/pending-count"),
+    // Refresh on a slow interval so the sidebar badge feels live
+    // without hammering the server.
+    refetchInterval: 60_000,
+    refetchOnWindowFocus: true,
+  });
+}
+
+export function useApproveDeleteRequest() {
+  return useMutation({
+    mutationFn: (id: number) =>
+      customFetch<{ ok: true }>(`/api/delete-requests/${id}/approve`, {
+        method: "POST",
+      }),
+  });
+}
+
+export function useDenyDeleteRequest() {
+  return useMutation({
+    mutationFn: (id: number) =>
+      customFetch<{ ok: true }>(`/api/delete-requests/${id}/deny`, {
+        method: "POST",
+      }),
+  });
+}
+
+// ---------- Setup + Invites ----------
+
+export const NEEDS_SETUP_KEY = ["setup", "needs-setup"] as const;
+
+export function useNeedsSetup() {
+  return useQuery({
+    queryKey: NEEDS_SETUP_KEY,
+    queryFn: () => customFetch<{ needsSetup: boolean }>("/api/setup/needs-setup"),
+    // Refetch only when invalidated; the answer rarely flips.
+    staleTime: Infinity,
+    refetchOnWindowFocus: false,
+  });
+}
+
+export type FounderSetupBody = {
+  fullName: string;
+  email: string;
+  password: string;
+};
+
+export function useSetupFounder() {
+  return useMutation({
+    mutationFn: (body: FounderSetupBody) =>
+      customFetch<{ user: unknown }>("/api/setup/founder", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+      }),
+  });
+}
+
+export type Invite = {
+  id: number;
+  token: string;
+  email: string;
+  fullName: string | null;
+  roleId: number;
+  roleKey: string | null;
+  departmentId: number;
+  departmentKey: string | null;
+  departmentLabel: string | null;
+  createdByUserId: number | null;
+  createdByName: string | null;
+  createdAt: string;
+  expiresAt: string;
+  revokedAt: string | null;
+  acceptedAt: string | null;
+  acceptedByUserId: number | null;
+  status: "pending" | "accepted" | "revoked" | "expired";
+};
+
+export type InviteLookup = Omit<Invite, "token">;
+
+export const INVITES_KEY = ["invites"] as const;
+
+export function useListInvites() {
+  return useQuery({
+    queryKey: INVITES_KEY,
+    queryFn: () => customFetch<{ invites: Invite[] }>("/api/invites"),
+  });
+}
+
+export type CreateInviteBody = {
+  email: string;
+  fullName?: string;
+  roleKey: string;
+  departmentId: number;
+  expiresInDays?: number;
+};
+
+export function useCreateInvite() {
+  return useMutation({
+    mutationFn: (body: CreateInviteBody) =>
+      customFetch<{ invite: Invite }>("/api/invites", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+      }),
+  });
+}
+
+export function useRevokeInvite() {
+  return useMutation({
+    mutationFn: (id: number) =>
+      customFetch<{ ok: true }>(`/api/invites/${id}/revoke`, {
+        method: "POST",
+      }),
+  });
+}
+
+export function useInviteLookup(token: string) {
+  return useQuery({
+    queryKey: ["invite-lookup", token] as const,
+    queryFn: () =>
+      customFetch<{ invite: InviteLookup }>(
+        `/api/invites/lookup/${encodeURIComponent(token)}`,
+      ),
+    enabled: token.length > 0,
+    retry: false,
+  });
+}
+
+export type AcceptInviteBody = {
+  fullName: string;
+  email?: string;
+  password: string;
+};
+
+export function useAcceptInvite(token: string) {
+  return useMutation({
+    mutationFn: (body: AcceptInviteBody) =>
+      customFetch<{ user: unknown }>(
+        `/api/invites/${encodeURIComponent(token)}/accept`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(body),
+        },
+      ),
+  });
+}
+
+// ---------- AI Assistant ----------
+export type AssistantChatMessage = {
+  role: "user" | "assistant";
+  content: string;
+};
+
+
 export function useMaintenanceReceipt(logId: number, enabled = true) {
   return useQuery({
     queryKey: ["maintenance-receipt", logId] as const,
@@ -417,6 +608,33 @@ export type AccountingMonthRow = {
   maintenanceSpendCents: number;
 };
 
+export type AccountingAging = {
+  currentCents: number;
+  d1to30Cents: number;
+  d31to60Cents: number;
+  d61to90Cents: number;
+  d90plusCents: number;
+};
+
+export type AccountingExpenseCategoryKey =
+  | "LABOR"
+  | "PARTS"
+  | "FUEL"
+  | "OUTSOURCED"
+  | "OTHER"
+  | "UNCATEGORIZED";
+
+export type AccountingExpensesByCategory = Record<
+  AccountingExpenseCategoryKey,
+  { count: number; cents: number }
+>;
+
+export type AccountingQuotesByStatus = {
+  draft: { count: number; cents: number };
+  sent: { count: number; cents: number };
+  approved: { count: number; cents: number };
+};
+
 export type AccountingBranch = {
   departmentId: number | null;
   departmentLabel: string;
@@ -425,6 +643,57 @@ export type AccountingBranch = {
   quotePipelineCents: number;
   maintenanceSpendCents: number;
   monthly: AccountingMonthRow[];
+  aging: AccountingAging;
+  expensesByCategory: AccountingExpensesByCategory;
+  quotesByStatus: AccountingQuotesByStatus;
+  maintenanceLogCount: number;
+  maintenanceLogsWithReceipt: number;
+};
+
+export type AccountingTopVendor = {
+  vendor: string;
+  cents: number;
+  logCount: number;
+};
+
+export type AssetCategoryKey = "TRUCK" | "TRAILER" | "HANDHELD" | "CUSTOM";
+
+export type AccountingAssetSpend = {
+  kind: "TRUCK" | "EQUIPMENT";
+  assetCategory: AssetCategoryKey;
+  customCategoryLabel: string | null;
+  id: number;
+  slug: string | null;
+  name: string;
+  status: string;
+  departmentId: number | null;
+  departmentLabel: string;
+  purchasePriceCents: number;
+  lifeToDateSpendCents: number;
+  ytdSpendCents: number;
+  last30DaysSpendCents: number;
+  logCount: number;
+  logsWithReceipt: number;
+};
+
+export type AccountingAssetTypeRollup = Record<
+  AssetCategoryKey,
+  {
+    count: number;
+    lifeToDateSpendCents: number;
+    ytdSpendCents: number;
+    last30DaysSpendCents: number;
+    logCount: number;
+    logsWithReceipt: number;
+    purchasePriceCents: number;
+  }
+>;
+
+export type AccountingDeptAssetMatrixRow = {
+  departmentId: number | null;
+  departmentLabel: string;
+  cells: Record<AssetCategoryKey, { count: number; cents: number }>;
+  totalCents: number;
 };
 
 export type AccountingSummary = {
@@ -436,6 +705,10 @@ export type AccountingSummary = {
   };
   branches: AccountingBranch[];
   orgMonthly: AccountingMonthRow[];
+  topVendors: AccountingTopVendor[];
+  assetSpend: AccountingAssetSpend[];
+  assetTypeRollup: AccountingAssetTypeRollup;
+  deptAssetMatrix: AccountingDeptAssetMatrixRow[];
 };
 
 export const ACCOUNTING_KEY = ["accounting", "summary"] as const;

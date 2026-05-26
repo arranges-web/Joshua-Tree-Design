@@ -35,6 +35,7 @@ import {
 } from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
 import { HardHat, Truck, Wrench, Users, ChevronRight, Plus, UserCog } from "lucide-react";
+import { PageHeader } from "@/components/layout/PageHeader";
 import { cn } from "@/lib/utils";
 
 const STATUS_COLORS: Record<string, string> = {
@@ -251,7 +252,7 @@ function ChangeCrewLeadDialog({
           Change Lead
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-w-sm">
+      <DialogContent className="w-[calc(100vw-2rem)] sm:max-w-sm">
         <DialogHeader>
           <DialogTitle>Change Crew Lead</DialogTitle>
         </DialogHeader>
@@ -327,7 +328,7 @@ function NewCrewDialog({ onCreated }: { onCreated: () => void }) {
           New Crew
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-w-sm">
+      <DialogContent className="w-[calc(100vw-2rem)] sm:max-w-sm">
         <DialogHeader>
           <DialogTitle>Create New Crew</DialogTitle>
         </DialogHeader>
@@ -419,15 +420,13 @@ export function Crews() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Crews</h1>
-          <p className="text-muted-foreground text-sm mt-1">
-            Field crews with their assigned members, trucks, and equipment.
-          </p>
-        </div>
-        {canCreateCrew && <NewCrewDialog onCreated={handleCrewCreated} />}
-      </div>
+      <PageHeader
+        eyebrow="Fleet & Shop"
+        title="Crews"
+        icon={<HardHat className="h-5 w-5" />}
+        description="Field crews with their assigned members, trucks, and equipment."
+        actions={canCreateCrew ? <NewCrewDialog onCreated={handleCrewCreated} /> : undefined}
+      />
 
       <div className="grid gap-6 md:grid-cols-[280px_1fr]">
         <div className="space-y-2">

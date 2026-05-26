@@ -9,6 +9,7 @@ import {
 } from "@workspace/api-zod";
 import { requireAuth } from "../middlewares/requireAuth";
 import { requireSection } from "../middlewares/requireSection";
+import { requestDelete, sendDeleteOutcome } from "../lib/deleteGuard";
 
 const router: IRouter = Router();
 
@@ -97,15 +98,31 @@ router.delete(
       res.status(400).json({ error: "invalid_request" });
       return;
     }
-    const deleted = await db
-      .delete(invoicesTable)
-      .where(eq(invoicesTable.id, params.data.id))
-      .returning({ id: invoicesTable.id });
-    if (deleted.length === 0) {
+
+    const [existing] = await db
+      .select({ status: invoicesTable.status, totalCents: invoicesTable.totalCents })
+      .from(invoicesTable)
+      .where(eq(invoicesTable.id, params.data.id));
+    if (!existing) {
       res.status(404).json({ error: "not_found" });
       return;
     }
-    res.json({ ok: true });
+    const usd = `$${((existing.totalCents ?? 0) / 100).toFixed(2)}`;
+
+    const outcome = await requestDelete({
+      req,
+      kind: "invoice",
+      id: params.data.id,
+      label: `Invoice #${params.data.id} (${existing.status} · ${usd})`,
+      execute: async () => {
+        const deleted = await db
+          .delete(invoicesTable)
+          .where(eq(invoicesTable.id, params.data.id))
+          .returning({ id: invoicesTable.id });
+        return deleted.length > 0;
+      },
+    });
+    sendDeleteOutcome(res, outcome);
   },
 );
 

@@ -22,7 +22,7 @@ import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
-import { Edit, Trash2, Plus, Users, UserCheck, UserX, Search } from "lucide-react";
+import { Edit, Trash2, Plus, Users, UserCheck, UserX, Search, Building2, Mail } from "lucide-react";
 
 interface RoleRow {
   id: number;
@@ -35,19 +35,65 @@ interface DeptRow {
   label?: string | null;
 }
 
-function StatCard({ title, value, icon: Icon }: { title: string; value: number; icon: React.ElementType }) {
+function StatCard({
+  title,
+  value,
+  icon: Icon,
+  tone,
+}: {
+  title: string;
+  value: number;
+  icon: React.ElementType;
+  tone?: "emerald" | "rose" | "neutral";
+}) {
+  const toneClass =
+    tone === "emerald"
+      ? "text-emerald-700"
+      : tone === "rose"
+        ? "text-rose-700"
+        : "text-foreground";
   return (
     <Card className="border-border/60">
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-        <CardTitle className="text-sm font-medium text-muted-foreground">{title}</CardTitle>
+        <CardTitle className="text-xs font-mono uppercase tracking-wider text-muted-foreground">
+          {title}
+        </CardTitle>
         <Icon className="h-4 w-4 text-muted-foreground" />
       </CardHeader>
       <CardContent>
-        <div className="text-2xl font-bold font-mono">{value}</div>
+        <div className={`text-2xl font-bold ${toneClass}`}>{value}</div>
       </CardContent>
     </Card>
   );
 }
+
+// Two-letter initials for the avatar circle. Drops single-word names
+// to a single letter rather than weirdly stretching them.
+function getInitials(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return "?";
+  if (parts.length === 1) return parts[0]!.slice(0, 1).toUpperCase();
+  return (parts[0]![0] + parts[parts.length - 1]![0]).toUpperCase();
+}
+
+// Hash the name to a stable hue so each member has a consistent
+// avatar color across the app — matches the kind of polish you'd see
+// in Linear / Notion.
+function nameHue(name: string): number {
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) {
+    hash = (hash * 31 + name.charCodeAt(i)) | 0;
+  }
+  return ((hash % 360) + 360) % 360;
+}
+
+const ROLE_BADGE_TONE: Record<string, string> = {
+  ADMIN: "border-violet-300 bg-violet-50 text-violet-700",
+  SALES: "border-blue-300 bg-blue-50 text-blue-700",
+  CREW_LEAD: "border-emerald-300 bg-emerald-50 text-emerald-700",
+  MECHANIC: "border-amber-300 bg-amber-50 text-amber-700",
+  ACCOUNTING_MANAGER: "border-rose-300 bg-rose-50 text-rose-700",
+};
 
 export function Employees() {
   const { data, isLoading } = useListEmployees();
@@ -102,8 +148,18 @@ export function Employees() {
 
       <div className="grid gap-4 grid-cols-3">
         <StatCard title="Total Crew" value={employees.length} icon={Users} />
-        <StatCard title="Active" value={totalActive} icon={UserCheck} />
-        <StatCard title="Inactive" value={totalInactive} icon={UserX} />
+        <StatCard
+          title="Active"
+          value={totalActive}
+          icon={UserCheck}
+          tone="emerald"
+        />
+        <StatCard
+          title="Inactive"
+          value={totalInactive}
+          icon={UserX}
+          tone={totalInactive > 0 ? "rose" : "neutral"}
+        />
       </div>
 
       <Card className="border-border/60">
@@ -157,12 +213,11 @@ export function Employees() {
           ))}
         </div>
       ) : filtered.length > 0 ? (
-        <div className="rounded-md border bg-card">
+        <div className="rounded-md border bg-card overflow-hidden">
           <Table>
-            <TableHeader>
+            <TableHeader className="bg-muted/30">
               <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead>Email</TableHead>
+                <TableHead className="w-[32%]">Member</TableHead>
                 <TableHead>Role</TableHead>
                 <TableHead>Department</TableHead>
                 <TableHead>Status</TableHead>
@@ -172,40 +227,92 @@ export function Employees() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filtered.map((emp) => (
-                <TableRow key={emp.id}>
-                  <TableCell className="font-medium">{emp.fullName}</TableCell>
-                  <TableCell className="text-sm text-muted-foreground">{emp.email}</TableCell>
-                  <TableCell>{emp.role}</TableCell>
-                  <TableCell>{emp.department}</TableCell>
-                  <TableCell>
-                    <Badge variant={emp.isActive ? "default" : "secondary"}>
-                      {emp.isActive ? "Active" : "Inactive"}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-right font-mono text-sm">
-                    {(emp.logCount ?? 0) > 0 ? emp.logCount : <span className="text-muted-foreground/40">—</span>}
-                  </TableCell>
-                  <TableCell className="text-sm text-muted-foreground">
-                    {emp.lastLoggedAt
-                      ? new Date(emp.lastLoggedAt).toLocaleDateString()
-                      : <span className="text-muted-foreground/40">—</span>}
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-2">
-                      <EmployeeFormDialog
-                        employee={emp}
-                        trigger={
-                          <Button variant="ghost" size="icon" className="h-8 w-8">
-                            <Edit className="h-4 w-4" />
-                          </Button>
-                        }
-                      />
-                      <DeleteEmployee id={emp.id} />
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
+              {filtered.map((emp) => {
+                const initials = getInitials(emp.fullName);
+                const hue = nameHue(emp.fullName);
+                const roleClass =
+                  ROLE_BADGE_TONE[emp.role] ?? "border-border bg-muted text-foreground";
+                return (
+                  <TableRow key={emp.id} className="hover:bg-muted/40">
+                    <TableCell>
+                      <div className="flex items-center gap-3">
+                        <div
+                          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-semibold text-white shadow-sm"
+                          style={{
+                            backgroundColor: `hsl(${hue} 55% 48%)`,
+                          }}
+                          aria-hidden="true"
+                        >
+                          {initials}
+                        </div>
+                        <div className="min-w-0">
+                          <div className="truncate text-sm font-medium">
+                            {emp.fullName}
+                          </div>
+                          <div className="flex items-center gap-1 truncate text-xs text-muted-foreground">
+                            <Mail className="h-3 w-3 shrink-0" />
+                            <span className="truncate">{emp.email}</span>
+                          </div>
+                        </div>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <Badge
+                        variant="outline"
+                        className={`text-[10px] font-mono uppercase tracking-wider ${roleClass}`}
+                      >
+                        {emp.role.replace("_", " ")}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      <span className="inline-flex items-center gap-1 text-sm">
+                        <Building2 className="h-3 w-3 text-muted-foreground" />
+                        {emp.department}
+                      </span>
+                    </TableCell>
+                    <TableCell>
+                      {emp.isActive ? (
+                        <span className="inline-flex items-center gap-1 text-xs text-emerald-700">
+                          <span className="h-2 w-2 rounded-full bg-emerald-500" />
+                          Active
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+                          <span className="h-2 w-2 rounded-full bg-muted-foreground/40" />
+                          Inactive
+                        </span>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-right font-mono text-sm">
+                      {(emp.logCount ?? 0) > 0 ? (
+                        emp.logCount
+                      ) : (
+                        <span className="text-muted-foreground/40">—</span>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-sm text-muted-foreground">
+                      {emp.lastLoggedAt ? (
+                        new Date(emp.lastLoggedAt).toLocaleDateString()
+                      ) : (
+                        <span className="text-muted-foreground/40">—</span>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        <EmployeeFormDialog
+                          employee={emp}
+                          trigger={
+                            <Button variant="ghost" size="icon" className="h-8 w-8">
+                              <Edit className="h-4 w-4" />
+                            </Button>
+                          }
+                        />
+                        <DeleteEmployee id={emp.id} />
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
             </TableBody>
           </Table>
         </div>
@@ -314,7 +421,7 @@ function EmployeeFormDialog({ employee, trigger, isOpen: controlledIsOpen, setIs
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
       {trigger && <DialogTrigger asChild>{trigger}</DialogTrigger>}
-      <DialogContent className="sm:max-w-[425px]">
+      <DialogContent className="w-[calc(100vw-2rem)] sm:max-w-md">
         <DialogHeader>
           <DialogTitle>{employee ? "Edit Team Member" : "Add Team Member"}</DialogTitle>
         </DialogHeader>

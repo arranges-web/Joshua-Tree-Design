@@ -23,6 +23,12 @@ import { Employees } from "@/pages/Employees";
 import { Permissions } from "@/pages/Permissions";
 import { Accounting } from "@/pages/Accounting";
 import { Crews } from "@/pages/Crews";
+import { Assistant } from "@/pages/Assistant";
+import { Setup } from "@/pages/Setup";
+import { AcceptInvite } from "@/pages/AcceptInvite";
+import { Team } from "@/pages/Team";
+import { DeleteRequests } from "@/pages/DeleteRequests";
+import { useNeedsSetup } from "@/lib/extra-api";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -69,39 +75,77 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+// First-boot gate: when the DB is empty, redirect every unauthed
+// route to /setup so Joshua lands in the founder bootstrap form on
+// the very first visit. Once a user exists, this hook flips and
+// the gate becomes a no-op.
+function SetupGate({ children }: { children: React.ReactNode }) {
+  const { data, isLoading } = useNeedsSetup();
+  const [location, setLocation] = useLocation();
+
+  useEffect(() => {
+    if (isLoading) return;
+    if (!data?.needsSetup) return;
+    // Allow setup + invite-accept pages through; redirect everywhere
+    // else so a brand-new deploy doesn't get stuck on /login with no
+    // accounts to use.
+    if (location === "/setup") return;
+    if (location.startsWith("/invite/")) return;
+    setLocation("/setup");
+  }, [data, isLoading, location, setLocation]);
+
+  if (isLoading) {
+    return (
+      <div className="flex h-screen w-full items-center justify-center bg-background">
+        <Spinner className="h-8 w-8 text-primary" />
+      </div>
+    );
+  }
+  return <>{children}</>;
+}
+
 function AppRouter() {
   return (
-    <Switch>
-      <Route path="/login" component={Login} />
-      
-      <Route path="/(.*)">
-        <AuthGuard>
-          <Shell>
-            <Switch>
-              <Route path="/">
-                <Redirect to="/fleet" />
-              </Route>
-              <Route path="/customers" component={Customers} />
-              <Route path="/customers/:id" component={CustomerProfile} />
-              <Route path="/leads" component={Leads} />
-              <Route path="/jobs" component={Jobs} />
-              <Route path="/quotes" component={Quotes} />
-              <Route path="/invoices" component={Invoices} />
-              <Route path="/fleet" component={FleetPulse} />
-              <Route path="/assets" component={AssetRegistry} />
-              <Route path="/assets/:slug" component={AssetActionPage} />
-              <Route path="/maintenance" component={Maintenance} />
-              <Route path="/crews" component={Crews} />
-              <Route path="/team" component={Employees} />
-              <Route path="/employees" component={Employees} />
-              <Route path="/permissions" component={Permissions} />
-              <Route path="/accounting" component={Accounting} />
-              <Route component={NotFound} />
-            </Switch>
-          </Shell>
-        </AuthGuard>
-      </Route>
-    </Switch>
+    <SetupGate>
+      <Switch>
+        {/* Public routes — outside AuthGuard. /invite/:token lets a
+            new teammate claim their account without an existing
+            session, and /setup is the founder bootstrap. */}
+        <Route path="/setup" component={Setup} />
+        <Route path="/invite/:token" component={AcceptInvite} />
+        <Route path="/login" component={Login} />
+
+        <Route path="/(.*)">
+          <AuthGuard>
+            <Shell>
+              <Switch>
+                <Route path="/">
+                  <Redirect to="/fleet" />
+                </Route>
+                <Route path="/customers" component={Customers} />
+                <Route path="/customers/:id" component={CustomerProfile} />
+                <Route path="/leads" component={Leads} />
+                <Route path="/jobs" component={Jobs} />
+                <Route path="/quotes" component={Quotes} />
+                <Route path="/invoices" component={Invoices} />
+                <Route path="/fleet" component={FleetPulse} />
+                <Route path="/assets" component={AssetRegistry} />
+                <Route path="/assets/:slug" component={AssetActionPage} />
+                <Route path="/maintenance" component={Maintenance} />
+                <Route path="/crews" component={Crews} />
+                <Route path="/team" component={Team} />
+                <Route path="/delete-requests" component={DeleteRequests} />
+                <Route path="/employees" component={Employees} />
+                <Route path="/permissions" component={Permissions} />
+                <Route path="/accounting" component={Accounting} />
+                <Route path="/assistant" component={Assistant} />
+                <Route component={NotFound} />
+              </Switch>
+            </Shell>
+          </AuthGuard>
+        </Route>
+      </Switch>
+    </SetupGate>
   );
 }
 
