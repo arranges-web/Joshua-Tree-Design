@@ -6,6 +6,7 @@ import {
   useListCrews,
   useCreateTruck,
   useCreateEquipment,
+  useAssetImage,
   type AssetExt,
   type Crew,
   type CreateTruckBody,
@@ -400,6 +401,11 @@ export function AssetRegistry() {
     "ALL" | "OVERDUE" | "DUE_SOON" | "OK"
   >("ALL");
   const [sortKey, setSortKey] = useState<SortKey>("SERVICE_DUE");
+  // Cost-period view: drives the rightmost spend column + the spend KPI.
+  // Defaults to YTD since it's the most actionable period for ops.
+  const [costPeriod, setCostPeriod] = useState<
+    "MTD" | "YTD" | "LIFETIME"
+  >("YTD");
 
   const assets = (data?.assets ?? []) as RegistryAsset[];
   const crews = crewsData?.crews ?? [];
@@ -457,8 +463,23 @@ export function AssetRegistry() {
     const overdue = trackedAssets.filter((a) => a.serviceState === "OVERDUE").length;
     const dueSoon = trackedAssets.filter((a) => a.serviceState === "DUE_SOON").length;
     const lifetime = assets.reduce((s, a) => s + a.lifeToDateSpendCents, 0);
-    return { overdue, dueSoon, lifetime, count: assets.length };
+    const ytd = assets.reduce((s, a) => s + (a.ytdSpendCents ?? 0), 0);
+    const mtd = assets.reduce((s, a) => s + (a.mtdSpendCents ?? 0), 0);
+    const checkedOut = assets.filter((a) => a.currentHolderUserId != null).length;
+    return { overdue, dueSoon, lifetime, ytd, mtd, count: assets.length, checkedOut };
   }, [assets]);
+
+  const periodLabel =
+    costPeriod === "MTD" ? "This month" : costPeriod === "YTD" ? "This year" : "All time";
+  const periodTotal =
+    costPeriod === "MTD" ? totals.mtd : costPeriod === "YTD" ? totals.ytd : totals.lifetime;
+
+  const periodValue = (a: RegistryAsset) =>
+    costPeriod === "MTD"
+      ? a.mtdSpendCents ?? 0
+      : costPeriod === "YTD"
+        ? a.ytdSpendCents ?? 0
+        : a.lifeToDateSpendCents;
 
   return (
     <div className="space-y-6">
@@ -472,7 +493,7 @@ export function AssetRegistry() {
         {canEditFleet && <AddAssetDialog onCreated={handleAssetCreated} />}
       </div>
 
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
         <KpiCard label="Total Assets" value={isLoading ? "—" : num(totals.count)} icon={Package} />
         <KpiCard
           label="Overdue Service"
@@ -487,8 +508,14 @@ export function AssetRegistry() {
           icon={Clock}
         />
         <KpiCard
-          label="Lifetime Spend"
-          value={isLoading ? "—" : usd(totals.lifetime)}
+          label="Checked Out"
+          value={isLoading ? "—" : num(totals.checkedOut)}
+          tone={totals.checkedOut > 0 ? "amber" : "neutral"}
+          icon={UsersIcon}
+        />
+        <KpiCard
+          label={`Spend · ${periodLabel}`}
+          value={isLoading ? "—" : usd(periodTotal)}
           icon={DollarSign}
         />
       </div>
@@ -577,6 +604,19 @@ export function AssetRegistry() {
               <SelectItem value="LIFETIME_SPEND">Sort: Lifetime Spend</SelectItem>
             </SelectContent>
           </Select>
+          <Select
+            value={costPeriod}
+            onValueChange={(v) => setCostPeriod(v as "MTD" | "YTD" | "LIFETIME")}
+          >
+            <SelectTrigger className="w-[160px]" data-testid="cost-period-select">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="MTD">Costs: Month</SelectItem>
+              <SelectItem value="YTD">Costs: Year</SelectItem>
+              <SelectItem value="LIFETIME">Costs: All time</SelectItem>
+            </SelectContent>
+          </Select>
           <div className="ml-auto text-xs text-muted-foreground">
             Showing <span className="font-mono">{filtered.length}</span> of{" "}
             <span className="font-mono">{assets.length}</span>
@@ -601,12 +641,14 @@ export function AssetRegistry() {
               <TableRow>
                 <TableHead className="w-[28%]">Asset</TableHead>
                 <TableHead>Category</TableHead>
-                <TableHead>Crew</TableHead>
+                <TableHead>Crew / Holder</TableHead>
                 <TableHead>Status</TableHead>
                 {!activeDeptId && <TableHead>Department</TableHead>}
                 <TableHead>Service</TableHead>
                 <TableHead className="text-right">Usage</TableHead>
-                <TableHead className="text-right">Life-to-date</TableHead>
+                <TableHead className="text-right">
+                  Spend · {periodLabel}
+                </TableHead>
                 <TableHead className="w-[100px]" />
               </TableRow>
             </TableHeader>
@@ -622,9 +664,11 @@ export function AssetRegistry() {
                   >
                     <TableCell>
                       <div className="flex items-start gap-3">
-                        <div className="mt-0.5 flex h-8 w-8 items-center justify-center rounded-md bg-muted text-muted-foreground">
-                          <Icon className="h-4 w-4" />
-                        </div>
+                        <AssetThumb
+                          slug={a.slug}
+                          hasImage={a.hasImage}
+                          Icon={Icon}
+                        />
                         <div>
                           <Link
                             href={`/assets/${a.slug}`}
@@ -655,21 +699,43 @@ export function AssetRegistry() {
                       </div>
                     </TableCell>
                     <TableCell>
-                      {a.assignedCrewName ? (
-                        <div className="flex flex-col gap-0.5">
+                      <div className="flex flex-col gap-0.5">
+                        {a.assignedCrewName ? (
                           <span className="flex items-center gap-1 text-sm">
                             <UsersIcon className="h-3 w-3 shrink-0 text-muted-foreground" />
                             {a.assignedCrewName}
                           </span>
-                          {a.lastAssignedByName && (
-                            <span className="text-[11px] text-muted-foreground">
-                              by {a.lastAssignedByName}
-                            </span>
-                          )}
-                        </div>
-                      ) : (
-                        <span className="text-xs text-muted-foreground/50">Unassigned</span>
-                      )}
+                        ) : (
+                          <span className="text-xs text-muted-foreground/50">
+                            Unassigned crew
+                          </span>
+                        )}
+                        {a.currentHolderName ? (
+                          <span
+                            className="flex items-center gap-1 text-[11px] font-medium text-amber-900"
+                            data-testid={`asset-holder-${a.slug}`}
+                            title={
+                              a.currentCheckoutSince
+                                ? `Out since ${new Date(a.currentCheckoutSince).toLocaleString()}`
+                                : undefined
+                            }
+                          >
+                            <span className="inline-block h-1.5 w-1.5 rounded-full bg-amber-500" />
+                            With {a.currentHolderName}
+                          </span>
+                        ) : a.lastHolderName ? (
+                          <span
+                            className="text-[11px] text-muted-foreground"
+                            title={
+                              a.lastCheckedOutAt
+                                ? `Last out ${new Date(a.lastCheckedOutAt).toLocaleDateString()}`
+                                : undefined
+                            }
+                          >
+                            Last: {a.lastHolderName}
+                          </span>
+                        ) : null}
+                      </div>
                     </TableCell>
                     <TableCell>
                       <Badge variant="outline" className={statusBadgeClass(a.status)}>
@@ -715,7 +781,7 @@ export function AssetRegistry() {
                       )}
                     </TableCell>
                     <TableCell className="text-right font-mono text-sm font-semibold">
-                      {usd(a.lifeToDateSpendCents)}
+                      {usd(periodValue(a))}
                     </TableCell>
                     <TableCell>
                       <Button
@@ -774,5 +840,34 @@ function KpiCard({
         </div>
       </CardContent>
     </Card>
+  );
+}
+
+// Tiny thumbnail used in the registry table. Lazily fetches the full
+// data-URL only when `hasImage` is true so rows without photos cost
+// nothing extra.
+function AssetThumb({
+  slug,
+  hasImage,
+  Icon,
+}: {
+  slug: string;
+  hasImage: boolean;
+  Icon: React.ComponentType<{ className?: string }>;
+}) {
+  const { data } = useAssetImage(slug, hasImage);
+  return (
+    <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-md border bg-muted text-muted-foreground">
+      {hasImage && data?.imageDataUrl ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={data.imageDataUrl}
+          alt=""
+          className="h-full w-full object-cover"
+        />
+      ) : (
+        <Icon className="h-4 w-4" />
+      )}
+    </div>
   );
 }

@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Link } from "wouter";
 import { useGetFleetPulse } from "@workspace/api-client-react";
 import { useDepartmentFilter } from "@/context/DepartmentContext";
@@ -15,6 +16,7 @@ import {
   TrendingUp,
   DollarSign,
   ArrowRight,
+  UserCheck,
 } from "lucide-react";
 import {
   Bar,
@@ -43,9 +45,14 @@ function monthLabel(key: string) {
   return d.toLocaleString("en-US", { month: "short" });
 }
 
+type ChartView = "MONTHLY" | "YEARLY";
+type PeriodKey = "MTD" | "YTD" | "LIFETIME";
+
 export function FleetPulse() {
   const { activeDeptId } = useDepartmentFilter();
   const { data, isLoading } = useGetFleetPulse(activeDeptId != null ? { departmentId: activeDeptId } : {});
+  const [chartView, setChartView] = useState<ChartView>("MONTHLY");
+  const [period, setPeriod] = useState<PeriodKey>("MTD");
 
   if (isLoading) {
     return (
@@ -61,17 +68,30 @@ export function FleetPulse() {
     );
   }
 
-  const counts = data?.counts ?? {
+  const counts = (data?.counts ?? {
     active: 0,
     inShop: 0,
     outOfService: 0,
     down: 0,
     openRepairs: 0,
+    checkedOut: 0,
+    withImage: 0,
     total: 0,
+  }) as {
+    active: number;
+    inShop: number;
+    outOfService: number;
+    down: number;
+    openRepairs: number;
+    checkedOut?: number;
+    withImage?: number;
+    total: number;
   };
   const overdue = data?.overdue ?? [];
   const dueSoon = data?.dueSoon ?? [];
   const monthly = data?.monthlySpend ?? [];
+  // yearlySpend is a v2 addition — orval types may not include it yet.
+  const yearly = ((data as { yearlySpend?: Array<{ year: string; totalCents: number; laborCents: number; partsCents: number }> })?.yearlySpend ?? []);
   const moneyPits = data?.topMoneyPits ?? [];
   const recent = data?.recentMaintenance ?? [];
   const totals = data?.totals ?? {
@@ -81,12 +101,27 @@ export function FleetPulse() {
     lifetimeCents: 0,
   };
 
-  const chartData = monthly.map((m) => ({
-    month: monthLabel(m.month),
+  const monthlyChart = monthly.map((m) => ({
+    label: monthLabel(m.month),
     total: (m.totalCents ?? 0) / 100,
     labor: (m.laborCents ?? 0) / 100,
     parts: (m.partsCents ?? 0) / 100,
   }));
+  const yearlyChart = yearly.map((y) => ({
+    label: y.year,
+    total: (y.totalCents ?? 0) / 100,
+    labor: (y.laborCents ?? 0) / 100,
+    parts: (y.partsCents ?? 0) / 100,
+  }));
+  const chartData = chartView === "MONTHLY" ? monthlyChart : yearlyChart;
+  const periodValue =
+    period === "MTD"
+      ? totals.mtdCents
+      : period === "YTD"
+        ? totals.ytdCents
+        : totals.lifetimeCents;
+  const periodLabel =
+    period === "MTD" ? "This month" : period === "YTD" ? "This year" : "All time";
 
   return (
     <div className="space-y-6">
@@ -104,7 +139,7 @@ export function FleetPulse() {
         }
       />
 
-      <div className="grid gap-3 grid-cols-2 md:grid-cols-4">
+      <div className="grid gap-3 grid-cols-2 md:grid-cols-5">
         <KpiCard
           label="Active"
           value={num(counts.active)}
@@ -127,21 +162,52 @@ export function FleetPulse() {
           tone={counts.openRepairs > 0 ? "amber" : "neutral"}
         />
         <KpiCard
-          label="Spend MTD"
-          value={usd(totals.mtdCents)}
-          sub={`YTD ${usd(totals.ytdCents)}`}
-          icon={DollarSign}
+          label="Checked Out"
+          value={num(counts.checkedOut ?? 0)}
+          sub="currently with a person"
+          icon={UserCheck}
+          tone={(counts.checkedOut ?? 0) > 0 ? "amber" : "neutral"}
+        />
+        <PeriodKpiCard
+          period={period}
+          onPeriodChange={setPeriod}
+          value={usd(periodValue)}
+          label={periodLabel}
+          totals={totals}
         />
       </div>
 
       <Card className="border-border/60">
-        <CardHeader>
+        <CardHeader className="flex flex-row items-center justify-between gap-3 space-y-0">
           <CardTitle className="flex items-center gap-2 text-base">
-            <TrendingUp className="h-4 w-4" /> Monthly Maintenance Spend
+            <TrendingUp className="h-4 w-4" />
+            {chartView === "MONTHLY" ? "Monthly" : "Yearly"} Maintenance Spend
             <span className="ml-2 text-xs font-normal text-muted-foreground">
-              Last 12 months
+              {chartView === "MONTHLY" ? "Last 12 months" : "Last 5 years"}
             </span>
           </CardTitle>
+          <div className="inline-flex overflow-hidden rounded-md border" role="tablist">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={chartView === "MONTHLY"}
+              data-testid="chart-view-monthly"
+              className={`px-3 py-1.5 text-xs font-medium ${chartView === "MONTHLY" ? "bg-accent text-accent-foreground" : "text-muted-foreground hover:bg-muted/50"}`}
+              onClick={() => setChartView("MONTHLY")}
+            >
+              Monthly
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={chartView === "YEARLY"}
+              data-testid="chart-view-yearly"
+              className={`px-3 py-1.5 text-xs font-medium ${chartView === "YEARLY" ? "bg-accent text-accent-foreground" : "text-muted-foreground hover:bg-muted/50"}`}
+              onClick={() => setChartView("YEARLY")}
+            >
+              Yearly
+            </button>
+          </div>
         </CardHeader>
         <CardContent>
           <div className="h-72 w-full" data-testid="monthly-spend-chart">
@@ -152,7 +218,7 @@ export function FleetPulse() {
               >
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
                 <XAxis
-                  dataKey="month"
+                  dataKey="label"
                   stroke="hsl(var(--muted-foreground))"
                   fontSize={12}
                   tickLine={false}
@@ -417,6 +483,65 @@ function ServiceList({
             ))}
           </ul>
         )}
+      </CardContent>
+    </Card>
+  );
+}
+
+// Compact KPI tile that doubles as a period selector — clicking a chip
+// swaps the headline figure to MTD / YTD / All-time without leaving the
+// dashboard. The three subtotals stay visible underneath so the
+// comparison is always one glance away.
+function PeriodKpiCard({
+  period,
+  onPeriodChange,
+  value,
+  label,
+  totals,
+}: {
+  period: PeriodKey;
+  onPeriodChange: (p: PeriodKey) => void;
+  value: string;
+  label: string;
+  totals: { mtdCents: number; ytdCents: number; lifetimeCents: number };
+}) {
+  return (
+    <Card className="border-border/60" data-testid="period-kpi">
+      <CardContent className="p-4">
+        <div className="flex items-center justify-between">
+          <div className="text-xs font-mono uppercase tracking-wider text-muted-foreground">
+            Spend · {label}
+          </div>
+          <DollarSign className="h-4 w-4 text-muted-foreground" />
+        </div>
+        <div className="mt-1 text-2xl font-bold">{value}</div>
+        <div className="mt-2 inline-flex overflow-hidden rounded-md border">
+          {(["MTD", "YTD", "LIFETIME"] as const).map((p) => (
+            <button
+              key={p}
+              type="button"
+              className={`px-2 py-0.5 text-[10px] font-semibold ${period === p ? "bg-accent text-accent-foreground" : "text-muted-foreground hover:bg-muted/50"}`}
+              onClick={() => onPeriodChange(p)}
+              data-testid={`period-${p.toLowerCase()}`}
+            >
+              {p === "MTD" ? "Month" : p === "YTD" ? "Year" : "All time"}
+            </button>
+          ))}
+        </div>
+        <div className="mt-2 grid grid-cols-3 gap-1 text-[10px] text-muted-foreground">
+          <div>
+            <div className="font-mono">{usd(totals.mtdCents)}</div>
+            <div>month</div>
+          </div>
+          <div>
+            <div className="font-mono">{usd(totals.ytdCents)}</div>
+            <div>year</div>
+          </div>
+          <div>
+            <div className="font-mono">{usd(totals.lifetimeCents)}</div>
+            <div>all-time</div>
+          </div>
+        </div>
       </CardContent>
     </Card>
   );

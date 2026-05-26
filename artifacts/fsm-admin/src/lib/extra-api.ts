@@ -25,7 +25,99 @@ export type AssetExt = {
   // a sentinel `usageUntilDue` value. UIs gate on usageUnit before
   // formatting the "X miles until due" string.
   usageUnit: "MILES" | "HOURS" | "NONE";
+  // Period rollups for the cost-period selector.
+  mtdSpendCents: number;
+  last30SpendCents: number;
+  // Hero image + holder fields (added in the v2 fleet pass).
+  hasImage: boolean;
+  imageDataUrl: string | null;
+  currentHolderUserId: number | null;
+  currentHolderName: string | null;
+  currentCheckoutId: number | null;
+  currentCheckoutSince: string | null;
+  lastHolderUserId: number | null;
+  lastHolderName: string | null;
+  lastCheckedOutAt: string | null;
 };
+
+// ---------- Asset image ----------
+export function useAssetImage(slug: string, enabled = true) {
+  return useQuery({
+    queryKey: ["asset-image", slug] as const,
+    queryFn: () =>
+      customFetch<{ imageDataUrl: string | null }>(
+        `/api/assets/${encodeURIComponent(slug)}/image`,
+      ),
+    enabled: enabled && slug.length > 0,
+  });
+}
+
+export function useUpdateAssetImage(slug: string) {
+  return useMutation({
+    mutationFn: (imageDataUrl: string | null) =>
+      customFetch<{ ok: boolean; hasImage: boolean }>(
+        `/api/assets/${encodeURIComponent(slug)}/image`,
+        {
+          method: "PUT",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ imageDataUrl }),
+        },
+      ),
+  });
+}
+
+// ---------- Asset checkout / check-in ----------
+export type AssetCheckout = {
+  id: number;
+  userId: number;
+  userName: string | null;
+  checkedOutByUserId: number | null;
+  checkedOutByName: string | null;
+  checkedOutAt: string;
+  checkedInAt: string | null;
+  checkedInByUserId: number | null;
+  checkedInByName: string | null;
+  notes: string | null;
+};
+
+export function useCheckoutHistory(slug: string) {
+  return useQuery({
+    queryKey: ["asset-checkouts", slug] as const,
+    queryFn: () =>
+      customFetch<{ history: AssetCheckout[] }>(
+        `/api/assets/${encodeURIComponent(slug)}/checkouts`,
+      ),
+    enabled: slug.length > 0,
+  });
+}
+
+export function useCheckOutAsset(slug: string) {
+  return useMutation({
+    mutationFn: (body: { userId: number; notes?: string | null }) =>
+      customFetch<{ checkout: { id: number } }>(
+        `/api/assets/${encodeURIComponent(slug)}/checkout`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(body),
+        },
+      ),
+  });
+}
+
+export function useCheckInAsset(slug: string) {
+  return useMutation({
+    mutationFn: (body: { notes?: string | null }) =>
+      customFetch<{ checkout: { id: number } }>(
+        `/api/assets/${encodeURIComponent(slug)}/checkin`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(body),
+        },
+      ),
+  });
+}
 
 // ---------- Crews ----------
 export type Crew = { id: number; name: string };

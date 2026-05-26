@@ -22,6 +22,12 @@ import {
   useAssignAsset,
   useAssignmentHistory,
   getAssignmentHistoryKey,
+  useAssetImage,
+  useUpdateAssetImage,
+  useCheckoutHistory,
+  useCheckOutAsset,
+  useCheckInAsset,
+  useListCrewLeadCandidates,
   type AssetExt,
 } from "@/lib/extra-api";
 import { useDepartmentFilter } from "@/context/DepartmentContext";
@@ -69,6 +75,12 @@ import {
   Hammer,
   Boxes,
   Hash,
+  Camera,
+  Upload,
+  LogIn,
+  LogOut,
+  UserCheck,
+  X,
 } from "lucide-react";
 
 const usd = (cents: number | null | undefined) =>
@@ -197,10 +209,11 @@ export function AssetActionPage() {
       </div>
 
       <Card className="border-border/60">
-        <CardContent className="grid gap-6 p-6 md:grid-cols-[1fr_auto]">
+        <CardContent className="grid gap-6 p-6 md:grid-cols-[auto_1fr_auto]">
+          <AssetImageHero slug={asset.slug} hasImage={asset.hasImage} CategoryIcon={CategoryIcon} />
           <div className="space-y-3">
             <div className="flex items-center gap-3">
-              <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-accent text-accent-foreground">
+              <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-accent text-accent-foreground md:hidden">
                 <CategoryIcon className="h-6 w-6" />
               </div>
               <div>
@@ -274,6 +287,7 @@ export function AssetActionPage() {
                 <span>Not assigned to any crew</span>
               </div>
             )}
+            <HolderRibbon asset={asset} />
             <div className="grid grid-cols-2 gap-3 pt-2 sm:grid-cols-5">
               <Stat label="Status" value={statusLabel(asset.status)} icon={Tag} />
               {tracksUsage ? (
@@ -336,6 +350,11 @@ export function AssetActionPage() {
                 )}
               </div>
             )}
+            <PeriodSpendStrip
+              mtdCents={asset.mtdSpendCents ?? 0}
+              ytdCents={asset.ytdSpendCents ?? 0}
+              lifetimeCents={asset.lifeToDateSpendCents}
+            />
           </div>
 
           <div className="flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed bg-muted/40 p-4">
@@ -365,6 +384,12 @@ export function AssetActionPage() {
       <Tabs defaultValue="actions" className="space-y-4">
         <TabsList>
           <TabsTrigger value="actions">Quick Actions</TabsTrigger>
+          <TabsTrigger value="checkout" data-testid="tab-checkout">
+            Checkout
+          </TabsTrigger>
+          <TabsTrigger value="photo" data-testid="tab-photo">
+            Photo
+          </TabsTrigger>
           <TabsTrigger value="ledger">
             Maintenance Ledger ({logs.length})
           </TabsTrigger>
@@ -393,6 +418,15 @@ export function AssetActionPage() {
           <ChangeStatusCard asset={asset} />
           <ChangeDepartmentCard asset={asset} />
           <StatusHistoryCard slug={asset.slug} />
+        </TabsContent>
+
+        <TabsContent value="checkout" className="space-y-4">
+          <CheckoutPanel asset={asset} />
+          <CheckoutHistoryCard slug={asset.slug} />
+        </TabsContent>
+
+        <TabsContent value="photo">
+          <PhotoUploadCard slug={asset.slug} hasImage={asset.hasImage} />
         </TabsContent>
 
         <TabsContent value="assignments">
@@ -1160,6 +1194,465 @@ function ChangeStatusCard({
             or unsafe to operate.
           </p>
         </form>
+      </CardContent>
+    </Card>
+  );
+}
+
+// ----------------------------------------------------------------------
+// New components — hero photo, holder badge, period rollups,
+// checkout panel + history, photo upload.
+// ----------------------------------------------------------------------
+
+function AssetImageHero({
+  slug,
+  hasImage,
+  CategoryIcon,
+}: {
+  slug: string;
+  hasImage: boolean;
+  CategoryIcon: React.ComponentType<{ className?: string }>;
+}) {
+  const { data } = useAssetImage(slug, hasImage);
+  return (
+    <div
+      className="hidden h-32 w-32 shrink-0 items-center justify-center overflow-hidden rounded-lg border bg-muted/40 md:flex"
+      data-testid="asset-hero-image"
+    >
+      {hasImage && data?.imageDataUrl ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={data.imageDataUrl}
+          alt="Asset"
+          className="h-full w-full object-cover"
+        />
+      ) : (
+        <CategoryIcon className="h-12 w-12 text-muted-foreground/60" />
+      )}
+    </div>
+  );
+}
+
+function HolderRibbon({ asset }: { asset: AssetExt & { slug: string } }) {
+  if (asset.currentHolderName) {
+    return (
+      <div
+        className="flex items-center gap-1.5 rounded-md border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-xs text-amber-900"
+        data-testid="asset-current-holder"
+      >
+        <UserCheck className="h-3.5 w-3.5 shrink-0" />
+        <span>
+          Currently checked out to{" "}
+          <span className="font-semibold">{asset.currentHolderName}</span>
+          {asset.currentCheckoutSince && (
+            <>
+              {" "}
+              <span className="text-amber-700/80">
+                · since {new Date(asset.currentCheckoutSince).toLocaleString()}
+              </span>
+            </>
+          )}
+        </span>
+      </div>
+    );
+  }
+  if (asset.lastHolderName) {
+    return (
+      <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+        <LogIn className="h-3.5 w-3.5 shrink-0" />
+        <span>
+          Last out with{" "}
+          <span className="font-semibold text-foreground">
+            {asset.lastHolderName}
+          </span>
+          {asset.lastCheckedOutAt && (
+            <>
+              {" "}
+              <span className="text-muted-foreground">
+                · {new Date(asset.lastCheckedOutAt).toLocaleDateString()}
+              </span>
+            </>
+          )}
+        </span>
+      </div>
+    );
+  }
+  return (
+    <div className="flex items-center gap-1.5 text-xs text-muted-foreground/60">
+      <LogIn className="h-3.5 w-3.5 shrink-0" />
+      <span>Available — no checkout history yet</span>
+    </div>
+  );
+}
+
+function PeriodSpendStrip({
+  mtdCents,
+  ytdCents,
+  lifetimeCents,
+}: {
+  mtdCents: number;
+  ytdCents: number;
+  lifetimeCents: number;
+}) {
+  return (
+    <div className="grid grid-cols-3 gap-2 pt-1">
+      <PeriodCell label="This month" value={usd(mtdCents)} />
+      <PeriodCell label="This year" value={usd(ytdCents)} />
+      <PeriodCell label="All time" value={usd(lifetimeCents)} />
+    </div>
+  );
+}
+
+function PeriodCell({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-md border bg-card/60 p-2.5">
+      <div className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground">
+        {label}
+      </div>
+      <div className="mt-0.5 text-sm font-semibold">{value}</div>
+    </div>
+  );
+}
+
+function CheckoutPanel({ asset }: { asset: AssetExt & { slug: string } }) {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const checkOut = useCheckOutAsset(asset.slug);
+  const checkIn = useCheckInAsset(asset.slug);
+  const { data: candidates } = useListCrewLeadCandidates();
+  const [userId, setUserId] = useState<string>("");
+  const [notes, setNotes] = useState("");
+
+  const invalidate = () => {
+    queryClient.invalidateQueries({
+      queryKey: getGetAssetBySlugQueryKey(asset.slug),
+    });
+    queryClient.invalidateQueries({ queryKey: getListAssetsQueryKey() });
+    queryClient.invalidateQueries({ queryKey: getGetFleetPulseQueryKey() });
+    queryClient.invalidateQueries({ queryKey: ["asset-checkouts", asset.slug] });
+  };
+
+  const isOut = asset.currentHolderUserId != null;
+
+  return (
+    <Card className="border-border/60">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-base">
+          <UserCheck className="h-4 w-4" />
+          {isOut ? "Currently checked out" : "Check out this asset"}
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {isOut ? (
+          <div className="space-y-3">
+            <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm">
+              <div className="font-semibold text-amber-900">
+                {asset.currentHolderName ?? "Unknown user"}
+              </div>
+              {asset.currentCheckoutSince && (
+                <div className="text-xs text-amber-800/80">
+                  Out since{" "}
+                  {new Date(asset.currentCheckoutSince).toLocaleString()}
+                </div>
+              )}
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="checkin-notes">Check-in notes (optional)</Label>
+              <Textarea
+                id="checkin-notes"
+                placeholder="Any damage, fuel level, etc."
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                rows={2}
+                data-testid="checkin-notes"
+              />
+            </div>
+            <Button
+              type="button"
+              variant="default"
+              disabled={checkIn.isPending}
+              onClick={() => {
+                checkIn.mutate(
+                  { notes: notes || null },
+                  {
+                    onSuccess: () => {
+                      toast({ title: "Checked in" });
+                      setNotes("");
+                      invalidate();
+                    },
+                    onError: () =>
+                      toast({
+                        title: "Could not check in",
+                        variant: "destructive",
+                      }),
+                  },
+                );
+              }}
+              data-testid="checkin-submit"
+            >
+              <LogIn className="mr-1.5 h-4 w-4" /> Check in
+            </Button>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <div className="space-y-2">
+              <Label htmlFor="checkout-user">Hand off to</Label>
+              <Select value={userId} onValueChange={setUserId}>
+                <SelectTrigger id="checkout-user" data-testid="checkout-user-select">
+                  <SelectValue placeholder="Pick a person…" />
+                </SelectTrigger>
+                <SelectContent>
+                  {(candidates?.users ?? []).map((u) => (
+                    <SelectItem key={u.id} value={String(u.id)}>
+                      {u.fullName}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="checkout-notes">Notes (optional)</Label>
+              <Textarea
+                id="checkout-notes"
+                placeholder="Job site, expected return, etc."
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                rows={2}
+                data-testid="checkout-notes"
+              />
+            </div>
+            <Button
+              type="button"
+              disabled={!userId || checkOut.isPending}
+              onClick={() => {
+                const id = parseInt(userId, 10);
+                if (!Number.isFinite(id)) return;
+                checkOut.mutate(
+                  { userId: id, notes: notes || null },
+                  {
+                    onSuccess: () => {
+                      toast({ title: "Checked out" });
+                      setNotes("");
+                      setUserId("");
+                      invalidate();
+                    },
+                    onError: (err) =>
+                      toast({
+                        title: "Could not check out",
+                        description: (err as Error)?.message,
+                        variant: "destructive",
+                      }),
+                  },
+                );
+              }}
+              data-testid="checkout-submit"
+            >
+              <LogOut className="mr-1.5 h-4 w-4" /> Check out
+            </Button>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function CheckoutHistoryCard({ slug }: { slug: string }) {
+  const { data, isLoading } = useCheckoutHistory(slug);
+  if (isLoading) {
+    return <Skeleton className="h-24 w-full" />;
+  }
+  const history = data?.history ?? [];
+  return (
+    <Card className="border-border/60">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-base">
+          <History className="h-4 w-4" />
+          Checkout history
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="p-0">
+        {history.length === 0 ? (
+          <div className="py-10 text-center text-sm text-muted-foreground">
+            No one has checked this asset out yet.
+          </div>
+        ) : (
+          <ul className="divide-y" data-testid="checkout-history-list">
+            {history.map((row) => {
+              const out = new Date(row.checkedOutAt);
+              const inAt = row.checkedInAt ? new Date(row.checkedInAt) : null;
+              const open = !inAt;
+              return (
+                <li key={row.id} className="grid gap-1 p-4 sm:grid-cols-[1fr_auto]">
+                  <div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="font-semibold">
+                        {row.userName ?? `User #${row.userId}`}
+                      </span>
+                      {open && (
+                        <Badge variant="outline" className="text-[10px]">
+                          OPEN
+                        </Badge>
+                      )}
+                      {row.checkedOutByName && (
+                        <span className="text-[11px] text-muted-foreground">
+                          (handed off by {row.checkedOutByName})
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      {out.toLocaleString()}
+                      {inAt && <> → {inAt.toLocaleString()}</>}
+                    </div>
+                    {row.notes && (
+                      <div className="mt-1 text-xs text-muted-foreground">
+                        {row.notes}
+                      </div>
+                    )}
+                  </div>
+                  {inAt ? (
+                    <div className="text-right text-xs text-muted-foreground">
+                      <div>{Math.max(1, Math.round((inAt.getTime() - out.getTime()) / 3600000))} hrs out</div>
+                      {row.checkedInByName && (
+                        <div className="text-[11px]">
+                          checked in by {row.checkedInByName}
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <Badge
+                      variant="outline"
+                      className="ml-auto text-[10px] text-amber-900"
+                    >
+                      OUT
+                    </Badge>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function PhotoUploadCard({
+  slug,
+  hasImage,
+}: {
+  slug: string;
+  hasImage: boolean;
+}) {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const { data, isLoading } = useAssetImage(slug, hasImage);
+  const upload = useUpdateAssetImage(slug);
+  const fileInputId = `asset-photo-${slug}`;
+  const MAX_BYTES = 5 * 1024 * 1024;
+
+  const invalidate = () => {
+    queryClient.invalidateQueries({
+      queryKey: getGetAssetBySlugQueryKey(slug),
+    });
+    queryClient.invalidateQueries({ queryKey: getListAssetsQueryKey() });
+    queryClient.invalidateQueries({ queryKey: ["asset-image", slug] });
+  };
+
+  const onPick = (file: File | null) => {
+    if (!file) return;
+    if (!/^image\/(png|jpe?g|gif|webp)$/.test(file.type)) {
+      toast({ title: "Only PNG, JPG, GIF, or WEBP images", variant: "destructive" });
+      return;
+    }
+    if (file.size > MAX_BYTES) {
+      toast({ title: "Image must be under 5 MB", variant: "destructive" });
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = String(reader.result ?? "");
+      upload.mutate(dataUrl, {
+        onSuccess: () => {
+          toast({ title: "Photo saved" });
+          invalidate();
+        },
+        onError: () =>
+          toast({ title: "Upload failed", variant: "destructive" }),
+      });
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const onRemove = () => {
+    upload.mutate(null, {
+      onSuccess: () => {
+        toast({ title: "Photo removed" });
+        invalidate();
+      },
+      onError: () =>
+        toast({ title: "Could not remove photo", variant: "destructive" }),
+    });
+  };
+
+  return (
+    <Card className="border-border/60">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-base">
+          <Camera className="h-4 w-4" />
+          Asset photo
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <div className="flex items-center justify-center overflow-hidden rounded-lg border bg-muted/30">
+          {hasImage && data?.imageDataUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={data.imageDataUrl}
+              alt="Asset photo"
+              className="max-h-80 w-auto object-contain"
+              data-testid="asset-photo-preview"
+            />
+          ) : (
+            <div className="flex h-48 w-full flex-col items-center justify-center gap-2 text-muted-foreground">
+              <Camera className="h-10 w-10 opacity-50" />
+              <span className="text-sm">No photo yet</span>
+            </div>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          <input
+            id={fileInputId}
+            type="file"
+            accept="image/png,image/jpeg,image/gif,image/webp"
+            className="sr-only"
+            onChange={(e) => onPick(e.target.files?.[0] ?? null)}
+            data-testid="asset-photo-input"
+          />
+          <Button asChild variant="default" disabled={upload.isPending}>
+            <label htmlFor={fileInputId} className="cursor-pointer">
+              <Upload className="mr-1.5 h-4 w-4" />
+              {hasImage ? "Replace photo" : "Upload photo"}
+            </label>
+          </Button>
+          {hasImage && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              disabled={upload.isPending}
+              onClick={onRemove}
+              data-testid="asset-photo-remove"
+            >
+              <X className="mr-1.5 h-4 w-4" /> Remove
+            </Button>
+          )}
+          {isLoading && <span className="text-xs text-muted-foreground">Loading…</span>}
+        </div>
+        <p className="text-xs text-muted-foreground">
+          PNG, JPG, GIF, or WEBP. Max 5 MB. The photo helps the team
+          identify the asset visually from the registry, QR scan, and
+          checkout flow.
+        </p>
       </CardContent>
     </Card>
   );

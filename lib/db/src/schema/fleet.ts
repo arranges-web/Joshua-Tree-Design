@@ -69,6 +69,17 @@ export const trucksTable = pgTable(
       .notNull()
       .default(5000),
     slug: text("slug"),
+    // Hero photo of the asset, stored as a base64 data URL (image/png|jpeg|webp).
+    // Mirrors the maintenance receipt approach — no separate file store needed.
+    imageDataUrl: text("image_data_url"),
+    // Cached "currently held by" pointer. Source of truth is asset_checkouts
+    // (the open row where checked_in_at is null), but caching here keeps the
+    // /assets list query a single round-trip.
+    currentHolderUserId: integer("current_holder_user_id").references(
+      () => usersTable.id,
+      { onDelete: "set null" },
+    ),
+    lastCheckedOutAt: timestamp("last_checked_out_at", { withTimezone: true }),
   },
   (t) => [
     index("trucks_status_idx").on(t.status),
@@ -123,6 +134,12 @@ export const equipmentTable = pgTable(
       .notNull()
       .default(100),
     slug: text("slug"),
+    imageDataUrl: text("image_data_url"),
+    currentHolderUserId: integer("current_holder_user_id").references(
+      () => usersTable.id,
+      { onDelete: "set null" },
+    ),
+    lastCheckedOutAt: timestamp("last_checked_out_at", { withTimezone: true }),
   },
   (t) => [
     index("equipment_status_idx").on(t.status),
@@ -284,7 +301,42 @@ export const equipmentItemsTable = pgTable(
   (t) => [index("equipment_items_equipment_id_idx").on(t.equipmentId)],
 );
 
+// Per-user checkout / check-in log for any asset (truck or equipment).
+// One row per checkout event; the open row (checked_in_at IS NULL) is
+// the current holder. Closing a checkout updates checked_in_at and
+// clears the cached current_holder_user_id on the parent asset.
+export const assetCheckoutsTable = pgTable(
+  "asset_checkouts",
+  {
+    id: serial("id").primaryKey(),
+    assetType: text("asset_type").notNull(), // "TRUCK" | "EQUIPMENT"
+    assetId: integer("asset_id").notNull(),
+    userId: integer("user_id")
+      .notNull()
+      .references(() => usersTable.id, { onDelete: "restrict" }),
+    checkedOutByUserId: integer("checked_out_by_user_id").references(
+      () => usersTable.id,
+      { onDelete: "set null" },
+    ),
+    checkedOutAt: timestamp("checked_out_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    checkedInAt: timestamp("checked_in_at", { withTimezone: true }),
+    checkedInByUserId: integer("checked_in_by_user_id").references(
+      () => usersTable.id,
+      { onDelete: "set null" },
+    ),
+    notes: text("notes"),
+  },
+  (t) => [
+    index("asset_checkouts_asset_idx").on(t.assetType, t.assetId),
+    index("asset_checkouts_open_idx").on(t.assetType, t.assetId, t.checkedInAt),
+    index("asset_checkouts_user_idx").on(t.userId),
+  ],
+);
+
 export type Truck = typeof trucksTable.$inferSelect;
+export type AssetCheckout = typeof assetCheckoutsTable.$inferSelect;
 export type Equipment = typeof equipmentTable.$inferSelect;
 export type EquipmentItem = typeof equipmentItemsTable.$inferSelect;
 export type MaintenanceLog = typeof maintenanceLogsTable.$inferSelect;
@@ -303,3 +355,5 @@ export const insertUsageReadingSchema = createInsertSchema(usageReadingsTable);
 export const selectUsageReadingSchema = createSelectSchema(usageReadingsTable);
 export const insertEquipmentItemSchema = createInsertSchema(equipmentItemsTable);
 export const selectEquipmentItemSchema = createSelectSchema(equipmentItemsTable);
+export const insertAssetCheckoutSchema = createInsertSchema(assetCheckoutsTable);
+export const selectAssetCheckoutSchema = createSelectSchema(assetCheckoutsTable);

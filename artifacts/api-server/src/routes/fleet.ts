@@ -10,6 +10,7 @@ import {
   usageReadingsTable,
   assetStatusLogTable,
   assetAssignmentLogTable,
+  assetCheckoutsTable,
   crewsTable,
   crewMembersTable,
   usersTable,
@@ -17,6 +18,7 @@ import {
   rolesTable,
   type MaintenanceLog,
 } from "@workspace/db";
+import { isNull } from "drizzle-orm";
 import {
   CreateTruckBody,
   UpdateTruckBody,
@@ -962,8 +964,23 @@ type AssetSummary = {
   serviceState: "OK" | "DUE_SOON" | "OVERDUE";
   lifeToDateSpendCents: number;
   ytdSpendCents: number;
+  mtdSpendCents: number;
+  last30SpendCents: number;
   costPerUsageCents: number | null;
   lastServicePerformedAt: string | null;
+  // Photo (base64 data URL — image/png|jpeg|webp).
+  hasImage: boolean;
+  imageDataUrl: string | null;
+  // Checkout status: who currently holds the asset, and the last person
+  // who took it out if it's currently checked in. Both names resolved
+  // server-side so the UI can render without a second round-trip.
+  currentHolderUserId: number | null;
+  currentHolderName: string | null;
+  currentCheckoutId: number | null;
+  currentCheckoutSince: string | null;
+  lastHolderUserId: number | null;
+  lastHolderName: string | null;
+  lastCheckedOutAt: string | null;
 };
 
 const DUE_SOON_FRACTION = 0.1; // within 10% of interval
@@ -985,7 +1002,7 @@ function deriveServiceState(
 }
 
 async function buildAssetList(departmentId?: number): Promise<AssetSummary[]> {
-  const [trucks, equipment, logs, deptRows, crewRows] = await Promise.all([
+  const [trucks, equipment, logs, deptRows, crewRows, openCheckouts] = await Promise.all([
     departmentId != null
       ? db.select().from(trucksTable).where(eq(trucksTable.departmentId, departmentId))
       : db.select().from(trucksTable),
@@ -995,26 +1012,90 @@ async function buildAssetList(departmentId?: number): Promise<AssetSummary[]> {
     db.select().from(maintenanceLogsTable),
     db.select({ id: departmentsTable.id, label: departmentsTable.label }).from(departmentsTable),
     db.select({ id: crewsTable.id, name: crewsTable.name }).from(crewsTable),
+    // Open checkouts (one per asset, by uniqueness convention enforced at
+    // the route layer) drive the "currently held by" badge.
+    db
+      .select()
+      .from(assetCheckoutsTable)
+      .where(isNull(assetCheckoutsTable.checkedInAt)),
   ]);
 
   const deptMap = new Map(deptRows.map((d) => [d.id, d.label]));
   const crewMap = new Map(crewRows.map((c) => [c.id, c.name]));
 
-  // Resolve any "last assigned by" user names in a single batched query so
-  // every row carries a printable actor without N+1 lookups.
-  const lastAssignedUserIds = Array.from(
-    new Set([
-      ...trucks.map((t) => t.lastAssignedByUserId).filter((n): n is number => n != null),
-      ...equipment.map((e) => e.lastAssignedByUserId).filter((n): n is number => n != null),
-    ]),
-  );
-  const userNameRows = lastAssignedUserIds.length
+  // Resolve any "last assigned by" / holder / last-holder names in one
+  // batched query so every row carries printable actors without N+1
+  // lookups.
+  const userIdSet = new Set<number>();
+  for (const t of trucks) {
+    if (t.lastAssignedByUserId != null) userIdSet.add(t.lastAssignedByUserId);
+    if (t.currentHolderUserId != null) userIdSet.add(t.currentHolderUserId);
+  }
+  for (const e of equipment) {
+    if (e.lastAssignedByUserId != null) userIdSet.add(e.lastAssignedByUserId);
+    if (e.currentHolderUserId != null) userIdSet.add(e.currentHolderUserId);
+  }
+  for (const c of openCheckouts) {
+    if (c.userId != null) userIdSet.add(c.userId);
+  }
+  const userNameRows = userIdSet.size
     ? await db
         .select({ id: usersTable.id, fullName: usersTable.fullName })
         .from(usersTable)
-        .where(inArray(usersTable.id, lastAssignedUserIds))
+        .where(inArray(usersTable.id, Array.from(userIdSet)))
     : [];
   const userNameMap = new Map(userNameRows.map((u) => [u.id, u.fullName]));
+
+  // Resolve last-completed checkout per asset for the "last out" tooltip
+  // shown when an asset is currently checked in. One query, then bucketed
+  // in memory.
+  const closedCheckouts = await db
+    .select({
+      assetType: assetCheckoutsTable.assetType,
+      assetId: assetCheckoutsTable.assetId,
+      userId: assetCheckoutsTable.userId,
+      checkedOutAt: assetCheckoutsTable.checkedOutAt,
+      checkedInAt: assetCheckoutsTable.checkedInAt,
+    })
+    .from(assetCheckoutsTable)
+    .orderBy(desc(assetCheckoutsTable.checkedOutAt));
+  const lastClosedHolder = new Map<
+    string,
+    { userId: number; checkedOutAt: Date }
+  >();
+  for (const c of closedCheckouts) {
+    if (c.checkedInAt == null) continue;
+    const key = `${c.assetType}-${c.assetId}`;
+    if (!lastClosedHolder.has(key)) {
+      lastClosedHolder.set(key, { userId: c.userId, checkedOutAt: c.checkedOutAt });
+    }
+  }
+  const openByAsset = new Map<
+    string,
+    { id: number; userId: number; checkedOutAt: Date }
+  >();
+  for (const c of openCheckouts) {
+    const key = `${c.assetType}-${c.assetId}`;
+    if (!openByAsset.has(key)) {
+      openByAsset.set(key, { id: c.id, userId: c.userId, checkedOutAt: c.checkedOutAt });
+    }
+  }
+  for (const id of Array.from(userIdSet).concat(
+    Array.from(lastClosedHolder.values()).map((v) => v.userId),
+  )) {
+    userIdSet.add(id);
+  }
+  // Second pass for any holders we missed from closed-checkout history.
+  const extraIds = Array.from(lastClosedHolder.values())
+    .map((v) => v.userId)
+    .filter((id) => !userNameMap.has(id));
+  if (extraIds.length) {
+    const more = await db
+      .select({ id: usersTable.id, fullName: usersTable.fullName })
+      .from(usersTable)
+      .where(inArray(usersTable.id, extraIds));
+    for (const u of more) userNameMap.set(u.id, u.fullName);
+  }
 
   const truckLogs = new Map<number, typeof logs>();
   const equipLogs = new Map<number, typeof logs>();
@@ -1031,7 +1112,26 @@ async function buildAssetList(departmentId?: number): Promise<AssetSummary[]> {
   }
 
   const assets: AssetSummary[] = [];
-  const yearStartTs = new Date(new Date().getFullYear(), 0, 1).getTime();
+  const now = new Date();
+  const yearStartTs = new Date(now.getFullYear(), 0, 1).getTime();
+  const monthStartTs = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+  const since30Ts = Date.now() - 30 * 86_400_000;
+
+  const sumPeriods = (rows: MaintenanceLog[]) => {
+    let lifetime = 0;
+    let ytd = 0;
+    let mtd = 0;
+    let last30 = 0;
+    for (const l of rows) {
+      const c = l.costCents ?? 0;
+      const t = new Date(l.performedAt).getTime();
+      lifetime += c;
+      if (t >= yearStartTs) ytd += c;
+      if (t >= monthStartTs) mtd += c;
+      if (t >= since30Ts) last30 += c;
+    }
+    return { lifetime, ytd, mtd, last30 };
+  };
 
   for (const t of trucks) {
     const myLogs = (truckLogs.get(t.id) ?? []).slice().sort((a, b) => {
@@ -1039,12 +1139,7 @@ async function buildAssetList(departmentId?: number): Promise<AssetSummary[]> {
         new Date(b.performedAt).getTime() - new Date(a.performedAt).getTime()
       );
     });
-    const lifetime = myLogs.reduce((sum, l) => sum + (l.costCents ?? 0), 0);
-    const ytd = myLogs.reduce(
-      (sum, l) =>
-        new Date(l.performedAt).getTime() >= yearStartTs ? sum + (l.costCents ?? 0) : sum,
-      0,
-    );
+    const { lifetime, ytd, mtd, last30 } = sumPeriods(myLogs);
     // Service interval is anchored on the most recent SCHEDULED service that
     // captured a usage reading — that defines the next-due baseline.
     const lastScheduled = myLogs.find(
@@ -1060,6 +1155,9 @@ async function buildAssetList(departmentId?: number): Promise<AssetSummary[]> {
     // the odometer column for them, and we report serviceState=OK so they
     // don't pollute the "due soon / overdue" rollups.
     const isTrailer = t.vehicleType === "TRAILER";
+    const truckKey = `TRUCK-${t.id}`;
+    const open = openByAsset.get(truckKey);
+    const lastClosed = lastClosedHolder.get(truckKey);
     assets.push({
       kind: "TRUCK",
       category: isTrailer ? "TRAILER" : "TRUCK",
@@ -1097,6 +1195,8 @@ async function buildAssetList(departmentId?: number): Promise<AssetSummary[]> {
         : deriveServiceState(usageUntilDue, t.serviceIntervalMiles),
       lifeToDateSpendCents: lifetime,
       ytdSpendCents: ytd,
+      mtdSpendCents: mtd,
+      last30SpendCents: last30,
       costPerUsageCents:
         !isTrailer && t.currentMileage > 0
           ? Math.round(lifetime / t.currentMileage)
@@ -1104,6 +1204,26 @@ async function buildAssetList(departmentId?: number): Promise<AssetSummary[]> {
       lastServicePerformedAt: lastService
         ? new Date(lastService.performedAt).toISOString()
         : null,
+      hasImage: t.imageDataUrl != null && t.imageDataUrl.length > 0,
+      imageDataUrl: null,
+      currentHolderUserId: open?.userId ?? null,
+      currentHolderName: open ? (userNameMap.get(open.userId) ?? null) : null,
+      currentCheckoutId: open?.id ?? null,
+      currentCheckoutSince: open ? new Date(open.checkedOutAt).toISOString() : null,
+      lastHolderUserId: open ? null : (lastClosed?.userId ?? null),
+      lastHolderName:
+        open
+          ? null
+          : lastClosed
+            ? (userNameMap.get(lastClosed.userId) ?? null)
+            : null,
+      lastCheckedOutAt: t.lastCheckedOutAt
+        ? new Date(t.lastCheckedOutAt).toISOString()
+        : open
+          ? new Date(open.checkedOutAt).toISOString()
+          : lastClosed
+            ? new Date(lastClosed.checkedOutAt).toISOString()
+            : null,
     });
   }
 
@@ -1113,12 +1233,7 @@ async function buildAssetList(departmentId?: number): Promise<AssetSummary[]> {
         new Date(b.performedAt).getTime() - new Date(a.performedAt).getTime()
       );
     });
-    const lifetime = myLogs.reduce((sum, l) => sum + (l.costCents ?? 0), 0);
-    const ytd = myLogs.reduce(
-      (sum, l) =>
-        new Date(l.performedAt).getTime() >= yearStartTs ? sum + (l.costCents ?? 0) : sum,
-      0,
-    );
+    const { lifetime, ytd, mtd, last30 } = sumPeriods(myLogs);
     const lastScheduled = myLogs.find(
       (l) => l.kind === "SCHEDULED" && l.hoursAtService != null,
     );
@@ -1131,6 +1246,9 @@ async function buildAssetList(departmentId?: number): Promise<AssetSummary[]> {
     // Quantity-tracked items (typically zero or a single fixed run-time
     // engine) don't drive a service-due cadence — surface them as OK.
     const tracksHours = e.serviceIntervalHours > 0 && e.currentHours > 0;
+    const equipKey = `EQUIPMENT-${e.id}`;
+    const open = openByAsset.get(equipKey);
+    const lastClosed = lastClosedHolder.get(equipKey);
     assets.push({
       kind: "EQUIPMENT",
       category: e.category,
@@ -1168,11 +1286,33 @@ async function buildAssetList(departmentId?: number): Promise<AssetSummary[]> {
         : "OK",
       lifeToDateSpendCents: lifetime,
       ytdSpendCents: ytd,
+      mtdSpendCents: mtd,
+      last30SpendCents: last30,
       costPerUsageCents:
         tracksHours ? Math.round(lifetime / e.currentHours) : null,
       lastServicePerformedAt: lastService
         ? new Date(lastService.performedAt).toISOString()
         : null,
+      hasImage: e.imageDataUrl != null && e.imageDataUrl.length > 0,
+      imageDataUrl: null,
+      currentHolderUserId: open?.userId ?? null,
+      currentHolderName: open ? (userNameMap.get(open.userId) ?? null) : null,
+      currentCheckoutId: open?.id ?? null,
+      currentCheckoutSince: open ? new Date(open.checkedOutAt).toISOString() : null,
+      lastHolderUserId: open ? null : (lastClosed?.userId ?? null),
+      lastHolderName:
+        open
+          ? null
+          : lastClosed
+            ? (userNameMap.get(lastClosed.userId) ?? null)
+            : null,
+      lastCheckedOutAt: e.lastCheckedOutAt
+        ? new Date(e.lastCheckedOutAt).toISOString()
+        : open
+          ? new Date(open.checkedOutAt).toISOString()
+          : lastClosed
+            ? new Date(lastClosed.checkedOutAt).toISOString()
+            : null,
     });
   }
 
@@ -1467,6 +1607,306 @@ router.get(
       changedByName: h.changedByUserId
         ? (userNameMap.get(h.changedByUserId) ?? null)
         : null,
+    }));
+    res.json({ history });
+  },
+);
+
+// ---------- Asset photo (hero image) ----------
+// Stored on the trucks/equipment row as a base64 data URL. Mirrors the
+// maintenance-receipt approach so we don't need an object store. 5MB
+// upper bound; image-mime guard. Returned on demand to keep the registry
+// list response small (the list payload only carries `hasImage`).
+const MAX_ASSET_IMAGE_BYTES = 5 * 1024 * 1024;
+const updateAssetImageSchema = z
+  .object({
+    imageDataUrl: z.string().max(MAX_ASSET_IMAGE_BYTES).nullable(),
+  })
+  .strict();
+
+async function resolveAssetSlug(
+  req: import("express").Request,
+  res: import("express").Response,
+  slug: string,
+): Promise<AssetSummary | null> {
+  const allowedKinds = viewableKinds(req.user!);
+  const assets = (await buildAssetList()).filter((a) => allowedKinds.has(a.kind));
+  const asset = assets.find((a) => a.slug === slug) ?? null;
+  if (!asset) {
+    res.status(404).json({ error: "not_found" });
+    return null;
+  }
+  return asset;
+}
+
+router.put(
+  "/assets/:slug/image",
+  requireAuth,
+  requireSection("fleet.maintenance", "edit"),
+  async (req, res) => {
+    const slug = String(req.params.slug ?? "");
+    const parsed = updateAssetImageSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: "invalid_body" });
+      return;
+    }
+    const dataUrl = parsed.data.imageDataUrl;
+    if (dataUrl && !/^data:image\/(png|jpe?g|gif|webp);base64,/.test(dataUrl)) {
+      res.status(400).json({ error: "image_must_be_image_data_url" });
+      return;
+    }
+    const asset = await resolveAssetSlug(req, res, slug);
+    if (!asset) return;
+    if (
+      !(await assertAssetInScope(req, res, {
+        truckId: asset.kind === "TRUCK" ? asset.id : null,
+        equipmentId: asset.kind === "EQUIPMENT" ? asset.id : null,
+      }))
+    ) {
+      return;
+    }
+    if (asset.kind === "TRUCK") {
+      await db
+        .update(trucksTable)
+        .set({ imageDataUrl: dataUrl ?? null })
+        .where(eq(trucksTable.id, asset.id));
+    } else {
+      await db
+        .update(equipmentTable)
+        .set({ imageDataUrl: dataUrl ?? null })
+        .where(eq(equipmentTable.id, asset.id));
+    }
+    res.json({ ok: true, hasImage: dataUrl != null && dataUrl.length > 0 });
+  },
+);
+
+router.get(
+  "/assets/:slug/image",
+  requireAuth,
+  requireFleetView(),
+  async (req, res) => {
+    const slug = String(req.params.slug ?? "");
+    const asset = await resolveAssetSlug(req, res, slug);
+    if (!asset) return;
+    let dataUrl: string | null = null;
+    if (asset.kind === "TRUCK") {
+      const [row] = await db
+        .select({ imageDataUrl: trucksTable.imageDataUrl })
+        .from(trucksTable)
+        .where(eq(trucksTable.id, asset.id));
+      dataUrl = row?.imageDataUrl ?? null;
+    } else {
+      const [row] = await db
+        .select({ imageDataUrl: equipmentTable.imageDataUrl })
+        .from(equipmentTable)
+        .where(eq(equipmentTable.id, asset.id));
+      dataUrl = row?.imageDataUrl ?? null;
+    }
+    res.json({ imageDataUrl: dataUrl });
+  },
+);
+
+// ---------- Asset checkout / check-in ----------
+// One open row per asset (assetType + assetId) is invariant: the
+// checkout route refuses to open a new one while another is open.
+// Closing a checkout updates checked_in_at and clears the cached
+// currentHolderUserId pointer on the parent asset.
+const checkoutSchema = z
+  .object({
+    userId: z.number().int().positive(),
+    notes: z.string().max(500).nullable().optional(),
+  })
+  .strict();
+
+const checkinSchema = z
+  .object({
+    notes: z.string().max(500).nullable().optional(),
+  })
+  .strict();
+
+router.post(
+  "/assets/:slug/checkout",
+  requireAuth,
+  requireSection("fleet.maintenance", "edit"),
+  async (req, res) => {
+    const slug = String(req.params.slug ?? "");
+    const parsed = checkoutSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: "invalid_body" });
+      return;
+    }
+    const asset = await resolveAssetSlug(req, res, slug);
+    if (!asset) return;
+    if (
+      !(await assertAssetInScope(req, res, {
+        truckId: asset.kind === "TRUCK" ? asset.id : null,
+        equipmentId: asset.kind === "EQUIPMENT" ? asset.id : null,
+      }))
+    ) {
+      return;
+    }
+    // Verify the target user exists; otherwise a typo creates an orphan row.
+    const [targetUser] = await db
+      .select({ id: usersTable.id })
+      .from(usersTable)
+      .where(eq(usersTable.id, parsed.data.userId));
+    if (!targetUser) {
+      res.status(400).json({ error: "user_not_found" });
+      return;
+    }
+    // Refuse if there's already an open checkout — caller must check in first.
+    const [existing] = await db
+      .select({ id: assetCheckoutsTable.id })
+      .from(assetCheckoutsTable)
+      .where(
+        and(
+          eq(assetCheckoutsTable.assetType, asset.kind),
+          eq(assetCheckoutsTable.assetId, asset.id),
+          isNull(assetCheckoutsTable.checkedInAt),
+        ),
+      )
+      .limit(1);
+    if (existing) {
+      res.status(409).json({ error: "already_checked_out", checkoutId: existing.id });
+      return;
+    }
+    const [row] = await db
+      .insert(assetCheckoutsTable)
+      .values({
+        assetType: asset.kind,
+        assetId: asset.id,
+        userId: parsed.data.userId,
+        checkedOutByUserId: req.user?.id ?? null,
+        notes: parsed.data.notes ?? null,
+      })
+      .returning();
+    const now = new Date();
+    if (asset.kind === "TRUCK") {
+      await db
+        .update(trucksTable)
+        .set({ currentHolderUserId: parsed.data.userId, lastCheckedOutAt: now })
+        .where(eq(trucksTable.id, asset.id));
+    } else {
+      await db
+        .update(equipmentTable)
+        .set({ currentHolderUserId: parsed.data.userId, lastCheckedOutAt: now })
+        .where(eq(equipmentTable.id, asset.id));
+    }
+    res.status(201).json({ checkout: row });
+  },
+);
+
+router.post(
+  "/assets/:slug/checkin",
+  requireAuth,
+  requireSection("fleet.maintenance", "edit"),
+  async (req, res) => {
+    const slug = String(req.params.slug ?? "");
+    const parsed = checkinSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: "invalid_body" });
+      return;
+    }
+    const asset = await resolveAssetSlug(req, res, slug);
+    if (!asset) return;
+    if (
+      !(await assertAssetInScope(req, res, {
+        truckId: asset.kind === "TRUCK" ? asset.id : null,
+        equipmentId: asset.kind === "EQUIPMENT" ? asset.id : null,
+      }))
+    ) {
+      return;
+    }
+    const [open] = await db
+      .select()
+      .from(assetCheckoutsTable)
+      .where(
+        and(
+          eq(assetCheckoutsTable.assetType, asset.kind),
+          eq(assetCheckoutsTable.assetId, asset.id),
+          isNull(assetCheckoutsTable.checkedInAt),
+        ),
+      )
+      .limit(1);
+    if (!open) {
+      res.status(404).json({ error: "not_checked_out" });
+      return;
+    }
+    const now = new Date();
+    const trimmedNotes = parsed.data.notes?.trim();
+    // Append the check-in note onto whatever was already on the row so we
+    // don't lose the checkout-time note.
+    const mergedNotes = [open.notes ?? null, trimmedNotes ? `[checked in] ${trimmedNotes}` : null]
+      .filter((x): x is string => !!x && x.length > 0)
+      .join(" \n");
+    const [closed] = await db
+      .update(assetCheckoutsTable)
+      .set({
+        checkedInAt: now,
+        checkedInByUserId: req.user?.id ?? null,
+        notes: mergedNotes || null,
+      })
+      .where(eq(assetCheckoutsTable.id, open.id))
+      .returning();
+    if (asset.kind === "TRUCK") {
+      await db
+        .update(trucksTable)
+        .set({ currentHolderUserId: null })
+        .where(eq(trucksTable.id, asset.id));
+    } else {
+      await db
+        .update(equipmentTable)
+        .set({ currentHolderUserId: null })
+        .where(eq(equipmentTable.id, asset.id));
+    }
+    res.json({ checkout: closed });
+  },
+);
+
+router.get(
+  "/assets/:slug/checkouts",
+  requireAuth,
+  requireFleetView(),
+  async (req, res) => {
+    const slug = String(req.params.slug ?? "");
+    const asset = await resolveAssetSlug(req, res, slug);
+    if (!asset) return;
+    const rows = await db
+      .select()
+      .from(assetCheckoutsTable)
+      .where(
+        and(
+          eq(assetCheckoutsTable.assetType, asset.kind),
+          eq(assetCheckoutsTable.assetId, asset.id),
+        ),
+      )
+      .orderBy(desc(assetCheckoutsTable.checkedOutAt))
+      .limit(100);
+    const userIds = Array.from(
+      new Set(
+        rows
+          .flatMap((r) => [r.userId, r.checkedOutByUserId, r.checkedInByUserId])
+          .filter((n): n is number => n != null),
+      ),
+    );
+    const users = userIds.length
+      ? await db
+          .select({ id: usersTable.id, fullName: usersTable.fullName })
+          .from(usersTable)
+          .where(inArray(usersTable.id, userIds))
+      : [];
+    const userMap = new Map(users.map((u) => [u.id, u.fullName]));
+    const history = rows.map((r) => ({
+      id: r.id,
+      userId: r.userId,
+      userName: userMap.get(r.userId) ?? null,
+      checkedOutByUserId: r.checkedOutByUserId,
+      checkedOutByName: r.checkedOutByUserId ? (userMap.get(r.checkedOutByUserId) ?? null) : null,
+      checkedOutAt: new Date(r.checkedOutAt).toISOString(),
+      checkedInAt: r.checkedInAt ? new Date(r.checkedInAt).toISOString() : null,
+      checkedInByUserId: r.checkedInByUserId,
+      checkedInByName: r.checkedInByUserId ? (userMap.get(r.checkedInByUserId) ?? null) : null,
+      notes: r.notes,
     }));
     res.json({ history });
   },
@@ -1961,6 +2401,8 @@ router.get("/fleet-pulse", requireAuth, requireFleetView(), async (req, res) => 
     openRepairs: 0,
     inShop: 0,
     outOfService: 0,
+    checkedOut: 0,
+    withImage: 0,
     total: assets.length,
   };
   for (const a of assets) {
@@ -1972,6 +2414,8 @@ router.get("/fleet-pulse", requireAuth, requireFleetView(), async (req, res) => 
       counts.outOfService++;
       counts.down++;
     }
+    if (a.currentHolderUserId != null) counts.checkedOut++;
+    if (a.hasImage) counts.withImage++;
   }
 
   const overdue = assets
@@ -2072,11 +2516,37 @@ router.get("/fleet-pulse", requireAuth, requireFleetView(), async (req, res) => 
     ...v,
   }));
 
+  // Per-year totals for the "Yearly" view in the UI. Includes the current
+  // year + up to 4 prior years so the all-time chart isn't unbounded but
+  // captures enough history to be useful.
+  const yearMap = new Map<
+    string,
+    { totalCents: number; laborCents: number; partsCents: number }
+  >();
+  const currentYear = now.getFullYear();
+  for (let y = currentYear - 4; y <= currentYear; y++) {
+    yearMap.set(String(y), { totalCents: 0, laborCents: 0, partsCents: 0 });
+  }
+  for (const log of logs) {
+    const yearKey = String(new Date(log.performedAt).getFullYear());
+    if (yearMap.has(yearKey)) {
+      const cur = yearMap.get(yearKey)!;
+      cur.totalCents += log.costCents ?? 0;
+      cur.laborCents += log.laborCostCents ?? 0;
+      cur.partsCents += log.partsCostCents ?? 0;
+    }
+  }
+  const yearlySpend = Array.from(yearMap.entries()).map(([year, v]) => ({
+    year,
+    ...v,
+  }));
+
   res.json({
     counts,
     overdue,
     dueSoon,
     monthlySpend,
+    yearlySpend,
     topMoneyPits,
     totals: {
       mtdCents: mtd,
@@ -2100,6 +2570,11 @@ function toPulseSummary(a: AssetSummary) {
     serviceState: a.serviceState,
     lifeToDateSpendCents: a.lifeToDateSpendCents,
     ytdSpendCents: a.ytdSpendCents,
+    mtdSpendCents: a.mtdSpendCents,
+    last30SpendCents: a.last30SpendCents,
+    hasImage: a.hasImage,
+    currentHolderName: a.currentHolderName,
+    lastHolderName: a.lastHolderName,
   };
 }
 
