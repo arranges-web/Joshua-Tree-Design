@@ -6,6 +6,7 @@ import {
   backfillFleetData,
   backfillDemoData,
   backfillDepartments,
+  importRealCrews,
 } from "@workspace/db";
 
 const rawPort = process.env["PORT"];
@@ -70,6 +71,16 @@ async function startup() {
     await backfillDemoData();
   } catch (err) {
     logger.error({ err }, "Failed to backfill demo data on boot");
+  }
+
+  // Import real Joshua Tree crews + equipment assignments from the
+  // asset inventory spreadsheet. Idempotent — no-op once the data
+  // is present. Runs after demo backfills so the demo-crew cleanup
+  // step can remove any placeholders they inserted.
+  try {
+    await importRealCrews();
+  } catch (err) {
+    logger.error({ err }, "Failed to import real crews on boot");
   }
 }
 

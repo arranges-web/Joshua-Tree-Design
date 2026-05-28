@@ -1,0 +1,2 @@
+- [Real crew import](real-crew-import.md) — DEMO_MODE=false in dev; importRealCrews() is the idempotent startup guard for real data.
+- [Demo backfill guards](demo-backfill-guards.md) — both ensureDepartmentCrew() and isDemoMode() must be false to prevent placeholder crews on restart.
