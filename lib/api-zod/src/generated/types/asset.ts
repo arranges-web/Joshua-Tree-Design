@@ -40,4 +40,12 @@ export interface Asset {
   /** Lifetime spend / current usage. cents per mile (trucks) or cents per hour (equipment). null when usage is 0. */
   costPerUsageCents?: number | null;
   lastServicePerformedAt?: Date | null;
+  /** Insurance schedule fields — trucks/trailers only; null for equipment. */
+  year?: number | null;
+  statedValueCents?: number | null;
+  gvwGcwLbs?: number | null;
+  garagingState?: string | null;
+  operatingRadiusMiles?: number | null;
+  insuranceVehNumber?: number | null;
+  bodyTypeCode?: string | null;
 }

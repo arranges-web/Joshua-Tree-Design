@@ -20,4 +20,12 @@ export interface Truck {
   currentMileage: number;
   serviceIntervalMiles: number;
   slug?: string | null;
+  /** Insurance schedule fields. */
+  year?: number | null;
+  statedValueCents?: number | null;
+  gvwGcwLbs?: number | null;
+  garagingState?: string | null;
+  operatingRadiusMiles?: number | null;
+  insuranceVehNumber?: number | null;
+  bodyTypeCode?: string | null;
 }

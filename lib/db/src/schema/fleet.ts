@@ -90,7 +90,7 @@ export const trucksTable = pgTable(
     year: integer("year"),
     statedValueCents: integer("stated_value_cents"),
     gvwGcwLbs: integer("gvw_gcw_lbs"),
-    garagingState: text("garaging_state"),
+    garagingState: text("garaging_state").default("FL"),
     operatingRadiusMiles: integer("operating_radius_miles"),
     insuranceVehNumber: integer("insurance_veh_number"),
     bodyTypeCode: text("body_type_code"),
