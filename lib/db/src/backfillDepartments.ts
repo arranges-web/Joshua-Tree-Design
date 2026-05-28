@@ -14,7 +14,7 @@
  *     data on screen. Skipped in production, since real customers add
  *     their own assets via the UI.
  */
-import { eq, isNull, notInArray, or, sql, and, inArray } from "drizzle-orm";
+import { eq, isNull, isNotNull, notInArray, or, sql, and, inArray } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 import { db } from "./client";
 import {
@@ -80,24 +80,28 @@ export async function backfillDepartments(): Promise<void> {
       ),
     );
 
-  // 2b. Re-home trucks.
+  // 2b. Re-home trucks that point at a deleted/orphan department.
+  // Null department_id is a valid "unassigned" state for real databases
+  // — do not force-assign those to a fallback department.
   await db
     .update(trucksTable)
     .set({ departmentId: fallbackAssetDeptId })
     .where(
-      or(
-        isNull(trucksTable.departmentId),
+      and(
+        isNotNull(trucksTable.departmentId),
         notInArray(trucksTable.departmentId, canonicalIds),
       ),
     );
 
-  // 2c. Re-home equipment.
+  // 2c. Re-home equipment that points at a deleted/orphan department.
+  // Same as above — leave null department_id alone so operators can
+  // assign equipment to departments themselves.
   await db
     .update(equipmentTable)
     .set({ departmentId: fallbackAssetDeptId })
     .where(
-      or(
-        isNull(equipmentTable.departmentId),
+      and(
+        isNotNull(equipmentTable.departmentId),
         notInArray(equipmentTable.departmentId, canonicalIds),
       ),
     );
