@@ -122,13 +122,12 @@ export async function backfillDepartments(): Promise<void> {
     await ensureDepartmentFleet();
   }
 
-  // 5. Per-dept demo crew — runs in all environments because the live
-  // demo deploy was seeded before the Sales / Fertilization depts
-  // existed and the customer-count guard in backfillDemoData skips
-  // them. This adds one crew per visible dept that doesn't already
-  // have one, led by the highest-priority user already in that dept
-  // (CREW_LEAD > MECHANIC > ADMIN > anyone else).
-  await ensureDepartmentCrew();
+  // 5. Per-dept demo crew — only in demo mode. Real databases import
+  // their own crews and should not have placeholder department crews
+  // injected on every boot.
+  if (isDemoMode()) {
+    await ensureDepartmentCrew();
+  }
 
   // 6. Enrich existing maintenance logs with vendor / category /
   // notes / receipt so the accounting dashboards have something to
