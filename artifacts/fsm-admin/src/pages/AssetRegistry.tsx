@@ -1,7 +1,16 @@
 import { useMemo, useState } from "react";
 import { Link } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
-import { useListAssets, useListDepartments, useGetMe, type Asset } from "@workspace/api-client-react";
+import {
+  useListAssets,
+  useListDepartments,
+  useGetMe,
+  useUpdateTruck,
+  useUpdateEquipment,
+  getListAssetsQueryKey,
+  getGetFleetPulseQueryKey,
+  type Asset,
+} from "@workspace/api-client-react";
 import {
   useListCrews,
   useCreateTruck,
@@ -12,6 +21,8 @@ import {
   type CreateTruckBody,
   type CreateEquipmentBody,
 } from "@/lib/extra-api";
+import { Checkbox } from "@/components/ui/checkbox";
+import { useToast } from "@/hooks/use-toast";
 import { useDepartmentFilter } from "@/context/DepartmentContext";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -387,7 +398,9 @@ export function AssetRegistry() {
   const { data, isLoading, refetch } = useListAssets(activeDeptId != null ? { departmentId: activeDeptId } : {});
   const { data: crewsData } = useListCrews();
   const { data: meData } = useGetMe();
+  const { data: deptsData } = useListDepartments();
   const queryClient = useQueryClient();
+  const { toast } = useToast();
   const canEditFleet =
     (meData?.user?.permissions?.["fleet.trucks"]?.canEdit ?? false) ||
     (meData?.user?.permissions?.["fleet.equipment"]?.canEdit ?? false);
@@ -406,6 +419,14 @@ export function AssetRegistry() {
   const [costPeriod, setCostPeriod] = useState<
     "MTD" | "YTD" | "LIFETIME"
   >("YTD");
+  // Department filter: "ALL" | "UNASSIGNED" | "<deptId>". Driven by
+  // the in-page filter, not the org-level activeDeptId (which scopes
+  // the entire console).
+  const [deptFilterValue, setDeptFilterValue] = useState<string>("ALL");
+  // Row selection for bulk assign. Keyed by `${kind}-${id}` to match
+  // the table row keys.
+  const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
+  const [bulkOpen, setBulkOpen] = useState(false);
 
   const assets = (data?.assets ?? []) as RegistryAsset[];
   const crews = crewsData?.crews ?? [];
@@ -420,6 +441,13 @@ export function AssetRegistry() {
       if (categoryFilter !== "ALL" && a.category !== categoryFilter) return false;
       if (statusFilter !== "ALL" && a.status !== statusFilter) return false;
       if (dueFilter !== "ALL" && a.serviceState !== dueFilter) return false;
+      if (deptFilterValue !== "ALL") {
+        if (deptFilterValue === "UNASSIGNED") {
+          if (a.departmentId != null) return false;
+        } else if (String(a.departmentId ?? "") !== deptFilterValue) {
+          return false;
+        }
+      }
       if (crewFilter !== "ALL") {
         if (crewFilter === "UNASSIGNED") {
           if (a.assignedCrewId != null) return false;
@@ -456,7 +484,7 @@ export function AssetRegistry() {
       return 0;
     });
     return list;
-  }, [assets, query, categoryFilter, crewFilter, statusFilter, dueFilter, sortKey]);
+  }, [assets, query, categoryFilter, crewFilter, deptFilterValue, statusFilter, dueFilter, sortKey]);
 
   const totals = useMemo(() => {
     const trackedAssets = assets.filter((a) => a.usageUnit !== "NONE");
@@ -466,7 +494,8 @@ export function AssetRegistry() {
     const ytd = assets.reduce((s, a) => s + (a.ytdSpendCents ?? 0), 0);
     const mtd = assets.reduce((s, a) => s + (a.mtdSpendCents ?? 0), 0);
     const checkedOut = assets.filter((a) => a.currentHolderUserId != null).length;
-    return { overdue, dueSoon, lifetime, ytd, mtd, count: assets.length, checkedOut };
+    const unassigned = assets.filter((a) => a.departmentId == null).length;
+    return { overdue, dueSoon, lifetime, ytd, mtd, count: assets.length, checkedOut, unassigned };
   }, [assets]);
 
   const periodLabel =
@@ -493,8 +522,22 @@ export function AssetRegistry() {
         {canEditFleet && <AddAssetDialog onCreated={handleAssetCreated} />}
       </div>
 
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-6">
         <KpiCard label="Total Assets" value={isLoading ? "—" : num(totals.count)} icon={Package} />
+        <button
+          type="button"
+          className="text-left transition focus:outline-none focus:ring-2 focus:ring-ring rounded-md"
+          onClick={() => setDeptFilterValue("UNASSIGNED")}
+          data-testid="kpi-unassigned"
+          title="Click to filter to unassigned assets"
+        >
+          <KpiCard
+            label="Needs Department"
+            value={isLoading ? "—" : num(totals.unassigned)}
+            tone={totals.unassigned > 0 ? "amber" : "neutral"}
+            icon={Building2}
+          />
+        </button>
         <KpiCard
           label="Overdue Service"
           value={isLoading ? "—" : num(totals.overdue)}
@@ -553,6 +596,22 @@ export function AssetRegistry() {
               {crews.map((c: Crew) => (
                 <SelectItem key={c.id} value={String(c.id)}>
                   {c.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select value={deptFilterValue} onValueChange={setDeptFilterValue}>
+            <SelectTrigger className="w-[200px]" data-testid="dept-filter">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="ALL">All departments</SelectItem>
+              <SelectItem value="UNASSIGNED">
+                Needs Department ({totals.unassigned})
+              </SelectItem>
+              {(deptsData?.departments ?? []).map((d) => (
+                <SelectItem key={d.id} value={String(d.id)}>
+                  {d.label}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -617,12 +676,43 @@ export function AssetRegistry() {
               <SelectItem value="LIFETIME">Costs: All time</SelectItem>
             </SelectContent>
           </Select>
-          <div className="ml-auto text-xs text-muted-foreground">
-            Showing <span className="font-mono">{filtered.length}</span> of{" "}
-            <span className="font-mono">{assets.length}</span>
+          <div className="ml-auto flex items-center gap-3">
+            {selectedKeys.size > 0 && canEditFleet && (
+              <Button
+                size="sm"
+                variant="default"
+                onClick={() => setBulkOpen(true)}
+                data-testid="bulk-assign-trigger"
+              >
+                <Building2 className="mr-1.5 h-3.5 w-3.5" />
+                Assign department ({selectedKeys.size})
+              </Button>
+            )}
+            <div className="text-xs text-muted-foreground">
+              Showing <span className="font-mono">{filtered.length}</span> of{" "}
+              <span className="font-mono">{assets.length}</span>
+            </div>
           </div>
         </CardContent>
       </Card>
+
+      {bulkOpen && (
+        <BulkAssignDepartmentDialog
+          open={bulkOpen}
+          onClose={() => setBulkOpen(false)}
+          selected={Array.from(selectedKeys)
+            .map((k) => assets.find((a) => `${a.kind}-${a.id}` === k))
+            .filter((a): a is RegistryAsset => !!a)}
+          departments={deptsData?.departments ?? []}
+          onDone={() => {
+            setSelectedKeys(new Set());
+            setBulkOpen(false);
+            queryClient.invalidateQueries({ queryKey: getListAssetsQueryKey() });
+            queryClient.invalidateQueries({ queryKey: getGetFleetPulseQueryKey() });
+            toast({ title: "Departments updated" });
+          }}
+        />
+      )}
 
       {isLoading ? (
         <div className="space-y-2">
@@ -639,6 +729,29 @@ export function AssetRegistry() {
           <Table>
             <TableHeader>
               <TableRow>
+                {canEditFleet && (
+                  <TableHead className="w-[40px]">
+                    <Checkbox
+                      checked={
+                        filtered.length > 0 &&
+                        filtered.every((a) => selectedKeys.has(`${a.kind}-${a.id}`))
+                      }
+                      onCheckedChange={(v) => {
+                        setSelectedKeys((prev) => {
+                          const next = new Set(prev);
+                          if (v) {
+                            for (const a of filtered) next.add(`${a.kind}-${a.id}`);
+                          } else {
+                            for (const a of filtered) next.delete(`${a.kind}-${a.id}`);
+                          }
+                          return next;
+                        });
+                      }}
+                      aria-label="Select all visible"
+                      data-testid="select-all"
+                    />
+                  </TableHead>
+                )}
                 <TableHead className="w-[28%]">Asset</TableHead>
                 <TableHead>Category</TableHead>
                 <TableHead>Crew / Holder</TableHead>
@@ -661,7 +774,26 @@ export function AssetRegistry() {
                   <TableRow
                     key={`${a.kind}-${a.id}`}
                     data-testid={`asset-row-${a.slug}`}
+                    className={a.departmentId == null ? "bg-amber-50/40" : undefined}
                   >
+                    {canEditFleet && (
+                      <TableCell>
+                        <Checkbox
+                          checked={selectedKeys.has(`${a.kind}-${a.id}`)}
+                          onCheckedChange={(v) => {
+                            const key = `${a.kind}-${a.id}`;
+                            setSelectedKeys((prev) => {
+                              const next = new Set(prev);
+                              if (v) next.add(key);
+                              else next.delete(key);
+                              return next;
+                            });
+                          }}
+                          aria-label={`Select ${a.name}`}
+                          data-testid={`select-${a.slug}`}
+                        />
+                      </TableCell>
+                    )}
                     <TableCell>
                       <div className="flex items-start gap-3">
                         <AssetThumb
@@ -750,7 +882,12 @@ export function AssetRegistry() {
                             {a.departmentName}
                           </span>
                         ) : (
-                          <span className="text-xs text-muted-foreground/50">—</span>
+                          <Badge
+                            variant="outline"
+                            className="border-amber-300 bg-amber-100 text-amber-900 text-[10px]"
+                          >
+                            Needs Department
+                          </Badge>
                         )}
                       </TableCell>
                     )}
@@ -869,5 +1006,113 @@ function AssetThumb({
         <Icon className="h-4 w-4" />
       )}
     </div>
+  );
+}
+
+// Bulk-assign-department dialog: takes the selected rows and PATCHes
+// each truck/equipment with the chosen departmentId. Falls back to a
+// per-row mutation loop because the existing PATCH endpoints only take
+// one id at a time — for the 250-row asset-3.xlsx import this is still
+// fast enough (one request per row, completes in a few seconds).
+function BulkAssignDepartmentDialog({
+  open,
+  onClose,
+  selected,
+  departments,
+  onDone,
+}: {
+  open: boolean;
+  onClose: () => void;
+  selected: RegistryAsset[];
+  departments: Array<{ id: number; label: string }>;
+  onDone: () => void;
+}) {
+  const [target, setTarget] = useState<string>("");
+  const [running, setRunning] = useState(false);
+  const updateTruck = useUpdateTruck();
+  const updateEquipment = useUpdateEquipment();
+
+  const onSubmit = async () => {
+    const deptId = target === "UNASSIGN" ? null : Number(target);
+    if (target !== "UNASSIGN" && !Number.isFinite(deptId as number)) return;
+    setRunning(true);
+    try {
+      // Run sequentially to keep request volume bounded and so a single
+      // failed row doesn't take down the whole batch silently.
+      for (const a of selected) {
+        if (a.kind === "TRUCK") {
+          await updateTruck.mutateAsync({
+            id: a.id,
+            data: { departmentId: deptId as number | null },
+          });
+        } else {
+          await updateEquipment.mutateAsync({
+            id: a.id,
+            data: { departmentId: deptId as number | null },
+          });
+        }
+      }
+      onDone();
+    } finally {
+      setRunning(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Assign department to {selected.length} asset{selected.length === 1 ? "" : "s"}</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-3">
+          <p className="text-sm text-muted-foreground">
+            Pick a department to assign every selected asset to. Use{" "}
+            <strong>Unassign</strong> to send them back to the Needs
+            Department bucket.
+          </p>
+          <div className="space-y-2">
+            <Label htmlFor="bulk-dept-select">Department</Label>
+            <Select value={target} onValueChange={setTarget}>
+              <SelectTrigger id="bulk-dept-select" data-testid="bulk-dept-select">
+                <SelectValue placeholder="Pick a department…" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="UNASSIGN">— Unassign (clear) —</SelectItem>
+                {departments.map((d) => (
+                  <SelectItem key={d.id} value={String(d.id)}>
+                    {d.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="max-h-48 overflow-y-auto rounded-md border bg-muted/30 px-3 py-2 text-xs">
+            {selected.slice(0, 25).map((a) => (
+              <div key={`${a.kind}-${a.id}`} className="truncate text-muted-foreground">
+                · {a.name}
+              </div>
+            ))}
+            {selected.length > 25 && (
+              <div className="mt-1 text-muted-foreground/70">
+                …and {selected.length - 25} more
+              </div>
+            )}
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button type="button" variant="ghost" onClick={onClose} disabled={running}>
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              onClick={onSubmit}
+              disabled={!target || running}
+              data-testid="bulk-dept-submit"
+            >
+              {running ? `Updating ${selected.length}…` : "Apply"}
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }

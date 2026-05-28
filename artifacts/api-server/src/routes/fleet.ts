@@ -102,6 +102,9 @@ router.post(
     }
     const d = parsed.data;
     // Non-admins can only create assets within their own department.
+    // Admins may create with no department — the asset shows up under
+    // "Unassigned" until someone uses Bulk Assign or the asset detail
+    // page to set one.
     let effectiveDeptId: number | null = d.departmentId ?? null;
     if (req.user!.role !== "ADMIN") {
       const userDept = req.user!.departmentId ?? null;
@@ -110,11 +113,10 @@ router.post(
         return;
       }
       effectiveDeptId = userDept;
-    }
-    // Every asset must be assigned to a department going forward.
-    if (effectiveDeptId == null) {
-      res.status(400).json({ error: "department_required", detail: "departmentId is required when creating a fleet asset" });
-      return;
+      if (effectiveDeptId == null) {
+        res.status(400).json({ error: "department_required", detail: "non-admin users must belong to a department to create assets" });
+        return;
+      }
     }
     const truckExt = truckExtensionSchema.safeParse(req.body);
     const vehicleType =
@@ -184,12 +186,10 @@ router.patch(
     if (d.assignedCrewId !== undefined)
       patch.assignedCrewId = d.assignedCrewId ?? null;
     if (d.departmentId !== undefined) {
-      // Admins may reassign but may not un-assign (departmentId must remain non-null).
-      if (d.departmentId == null) {
-        res.status(400).json({ error: "department_required", detail: "departmentId cannot be removed from an asset" });
-        return;
-      }
-      patch.departmentId = d.departmentId;
+      // Admins may now clear departmentId (set to null) so an asset
+      // can land back in the "Unassigned" bucket — the team uses this
+      // when reorganizing crews. Re-assignment still requires admin.
+      patch.departmentId = d.departmentId ?? null;
     }
     if (d.purchasePriceCents !== undefined)
       patch.purchasePriceCents = d.purchasePriceCents ?? null;
@@ -281,6 +281,7 @@ router.post(
     }
     const d = parsed.data;
     // Non-admins can only create assets within their own department.
+    // Admins may create with no department (asset lands in "Unassigned").
     let effectiveDeptId: number | null = d.departmentId ?? null;
     if (req.user!.role !== "ADMIN") {
       const userDept = req.user!.departmentId ?? null;
@@ -289,11 +290,10 @@ router.post(
         return;
       }
       effectiveDeptId = userDept;
-    }
-    // Every asset must be assigned to a department going forward.
-    if (effectiveDeptId == null) {
-      res.status(400).json({ error: "department_required", detail: "departmentId is required when creating a fleet asset" });
-      return;
+      if (effectiveDeptId == null) {
+        res.status(400).json({ error: "department_required", detail: "non-admin users must belong to a department to create assets" });
+        return;
+      }
     }
     const equipExt = equipmentExtensionSchema.safeParse(req.body);
     const category =
@@ -378,12 +378,10 @@ router.patch(
     if (d.assignedTruckId !== undefined)
       patch.assignedTruckId = d.assignedTruckId ?? null;
     if (d.departmentId !== undefined) {
-      // Admins may reassign but may not un-assign (departmentId must remain non-null).
-      if (d.departmentId == null) {
-        res.status(400).json({ error: "department_required", detail: "departmentId cannot be removed from an asset" });
-        return;
-      }
-      patch.departmentId = d.departmentId;
+      // Admins may now clear departmentId (set to null) so an asset
+      // can land back in the "Unassigned" bucket — the team uses this
+      // when reorganizing crews. Re-assignment still requires admin.
+      patch.departmentId = d.departmentId ?? null;
     }
     if (d.purchasePriceCents !== undefined)
       patch.purchasePriceCents = d.purchasePriceCents ?? null;

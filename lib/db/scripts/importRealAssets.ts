@@ -60,28 +60,12 @@ type HandheldRow = {
   notes?: string;
 };
 
-// Body-type to vehicle/department heuristics. The insurance schedule
-// uses TK / PU / DMPTK / OT / SUV / CRGVN / OTHB for vehicles and
-// SRVT / T for trailers. We default everything to TRUCK unless the
-// body type is clearly a trailer.
+// Body-type to vehicle classification. The insurance schedule uses
+// TK / PU / DMPTK / OT / SUV / CRGVN / OTHB for vehicles and SRVT / T
+// for trailers. Everything else defaults to TRUCK.
 function classify(body: string): { vehicleType: "TRUCK" | "TRAILER" } {
   if (body === "SRVT" || body === "T") return { vehicleType: "TRAILER" };
   return { vehicleType: "TRUCK" };
-}
-
-// Department assignment for trucks is harder to infer from a VIN
-// alone, so we default to TreeService (the biggest user of heavy
-// trucks). Bigfoot trailers + PJ trailers are shared across crews
-// but we pin them to TreeService too for now — the team can re-home
-// individual rows via the admin UI once they log in.
-function deptForTruck(brand: string, model: string | null): "TreeService" | "Lawn" {
-  const m = `${brand} ${model ?? ""}`.toLowerCase();
-  // Smaller pickups + SUVs typically ride with the lawn crews;
-  // anything CDL-class stays with tree.
-  if (/(silverado|tacoma|colorado|blazer|expedition|sierra|ram 2500|f250|econoline)/i.test(m)) {
-    return "Lawn";
-  }
-  return "TreeService";
 }
 
 function slugify(name: string): string {
@@ -114,16 +98,18 @@ async function main() {
     `Loaded: ${trucks.length} trucks/trailers · ${heavy.length} heavy equipment · ${handhelds.length} handheld`,
   );
 
-  // Resolve departments by key so we never depend on a brittle id.
+  // Real source data (insurance schedule + asset-3.xlsx) doesn't carry
+  // a department per row, so we import everything with departmentId=null.
+  // The user assigns departments later via the registry's Bulk Assign
+  // action or the per-asset detail page.
+  // We still load the departments table just to verify it has rows so
+  // the user has something to assign TO once the import completes.
   const depts = await db
     .select({ id: departmentsTable.id, key: departmentsTable.key })
     .from(departmentsTable);
-  const deptByKey = new Map(depts.map((d) => [d.key, d.id]));
-  const dTree = deptByKey.get("TreeService");
-  const dLawn = deptByKey.get("Lawn");
-  if (!dTree || !dLawn) {
+  if (depts.length === 0) {
     throw new Error(
-      `Missing required departments (need TreeService + Lawn). Run backfillDepartments first. Got: ${[...deptByKey.keys()].join(", ")}`,
+      "No departments found. Run backfillDepartments first so there's something to assign assets to after import.",
     );
   }
 
@@ -146,8 +132,6 @@ async function main() {
   let truckCount = 0;
   for (const t of trucks) {
     const { vehicleType } = classify(t.bodyType);
-    const deptKey = deptForTruck(t.brand, t.model);
-    const departmentId = deptKey === "Lawn" ? dLawn : dTree;
     const namePieces = [
       `#${t.vehNum}`,
       `${t.year}`,
@@ -164,7 +148,7 @@ async function main() {
         model: t.model ?? null,
         vin: t.vin,
         status: "ACTIVE",
-        departmentId,
+        departmentId: null,
         purchasePriceCents: t.statedValueCents,
         // Insurance schedules don't track a purchase date — store
         // year-only as Jan 1 of the model year so the per-asset
@@ -188,7 +172,6 @@ async function main() {
   console.log("Inserting heavy equipment…");
   let heavyCount = 0;
   for (const e of heavy) {
-    const departmentId = e.department === "Lawn" ? dLawn : dTree;
     const [row] = await db
       .insert(equipmentTable)
       .values({
@@ -201,7 +184,7 @@ async function main() {
         model: e.model,
         serial: e.serial,
         status: "ACTIVE",
-        departmentId,
+        departmentId: null,
         purchasePriceCents: e.purchasePriceCents,
         purchaseDate: new Date(e.year, 0, 1),
         currentHours: 0,
@@ -227,8 +210,11 @@ async function main() {
   console.log("Inserting handheld equipment…");
   let handheldCount = 0;
   for (const h of handhelds) {
-    const departmentId = h.department === "Lawn" ? dLawn : dTree;
     const noteBits: string[] = [];
+    // Surface the source-spreadsheet Site as a hint so whoever does
+    // the Bulk Assign pass can route Tree Yard → TreeService and
+    // Lawn Yard → Lawn quickly.
+    if (h.site) noteBits.push(`Site: ${h.site}`);
     if (h.holderName) noteBits.push(`Held by: ${h.holderName}`);
     if (h.purchasedFrom) noteBits.push(`Bought from: ${h.purchasedFrom}`);
     if (h.notes) noteBits.push(h.notes);
@@ -246,7 +232,11 @@ async function main() {
         model: h.model,
         serial: h.serial,
         status: status as "ACTIVE" | "IN_SHOP" | "RETIRED",
-        departmentId,
+        // Source spreadsheet has no Department column — leave null so
+        // the team assigns via the Bulk Assign action. The Site column
+        // ("Tree Yard" / "Lawn Yard") is preserved in the equipment
+        // notes-by-name suffix below for the human in the loop.
+        departmentId: null,
         purchasePriceCents: h.purchasePriceCents,
         purchaseDate: h.purchaseDate ? new Date(h.purchaseDate) : null,
         currentHours: 0,
