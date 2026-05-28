@@ -85,6 +85,15 @@ export const trucksTable = pgTable(
       { onDelete: "set null" },
     ),
     lastCheckedOutAt: timestamp("last_checked_out_at", { withTimezone: true }),
+    // Insurance schedule fields — imported from the annual coverage document.
+    // All nullable so existing rows and future manual-entry rows are unaffected.
+    year: integer("year"),
+    statedValueCents: integer("stated_value_cents"),
+    gvwGcwLbs: integer("gvw_gcw_lbs"),
+    garagingState: text("garaging_state"),
+    operatingRadiusMiles: integer("operating_radius_miles"),
+    insuranceVehNumber: integer("insurance_veh_number"),
+    bodyTypeCode: text("body_type_code"),
   },
   (t) => [
     index("trucks_status_idx").on(t.status),

@@ -156,6 +156,13 @@ async function main() {
         purchaseDate: new Date(t.year, 0, 1),
         currentMileage: 0,
         serviceIntervalMiles: 5000,
+        year: t.year,
+        statedValueCents: t.statedValueCents,
+        gvwGcwLbs: t.gvwLbs,
+        garagingState: "FL",
+        operatingRadiusMiles: 50,
+        insuranceVehNumber: t.vehNum,
+        bodyTypeCode: t.bodyType,
       })
       .returning({ id: trucksTable.id });
     if (row) {

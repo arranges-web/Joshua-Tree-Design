@@ -984,6 +984,14 @@ type AssetSummary = {
   lastHolderUserId: number | null;
   lastHolderName: string | null;
   lastCheckedOutAt: string | null;
+  // Insurance schedule fields (trucks only; null for equipment)
+  year: number | null;
+  statedValueCents: number | null;
+  gvwGcwLbs: number | null;
+  garagingState: string | null;
+  operatingRadiusMiles: number | null;
+  insuranceVehNumber: number | null;
+  bodyTypeCode: string | null;
 };
 
 const DUE_SOON_FRACTION = 0.1; // within 10% of interval
@@ -1228,6 +1236,13 @@ async function buildAssetList(departmentId?: number): Promise<AssetSummary[]> {
           : lastClosed
             ? new Date(lastClosed.checkedOutAt).toISOString()
             : null,
+      year: t.year ?? null,
+      statedValueCents: t.statedValueCents ?? null,
+      gvwGcwLbs: t.gvwGcwLbs ?? null,
+      garagingState: t.garagingState ?? null,
+      operatingRadiusMiles: t.operatingRadiusMiles ?? null,
+      insuranceVehNumber: t.insuranceVehNumber ?? null,
+      bodyTypeCode: t.bodyTypeCode ?? null,
     });
   }
 
@@ -1318,6 +1333,13 @@ async function buildAssetList(departmentId?: number): Promise<AssetSummary[]> {
           : lastClosed
             ? new Date(lastClosed.checkedOutAt).toISOString()
             : null,
+      year: null,
+      statedValueCents: null,
+      gvwGcwLbs: null,
+      garagingState: null,
+      operatingRadiusMiles: null,
+      insuranceVehNumber: null,
+      bodyTypeCode: null,
     });
   }
 

@@ -44,6 +44,14 @@ export type AssetExt = {
   // Purchase price in cents — surfaced here so the UI can display and
   // edit it even though the orval-generated Asset type may not include it.
   purchasePriceCents: number | null;
+  // Insurance schedule fields (trucks/trailers only; null for equipment)
+  year: number | null;
+  statedValueCents: number | null;
+  gvwGcwLbs: number | null;
+  garagingState: string | null;
+  operatingRadiusMiles: number | null;
+  insuranceVehNumber: number | null;
+  bodyTypeCode: string | null;
 };
 
 // ---------- Asset image ----------

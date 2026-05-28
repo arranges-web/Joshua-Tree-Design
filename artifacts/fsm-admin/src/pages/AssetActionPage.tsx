@@ -342,6 +342,7 @@ export function AssetActionPage() {
             <EditablePurchasePrice asset={asset} />
             <EditableIdentifier asset={asset} />
             {asset.kind === "EQUIPMENT" && <EditableLocation asset={asset} />}
+            {asset.kind === "TRUCK" && <InsuranceInfoStrip asset={asset} />}
             <PeriodSpendStrip
               mtdCents={asset.mtdSpendCents ?? 0}
               ytdCents={asset.ytdSpendCents ?? 0}
@@ -1534,6 +1535,83 @@ function HolderRibbon({ asset }: { asset: AssetExt & { slug: string } }) {
     <div className="flex items-center gap-1.5 text-xs text-muted-foreground/60">
       <LogIn className="h-3.5 w-3.5 shrink-0" />
       <span>Available — no checkout history yet</span>
+    </div>
+  );
+}
+
+const BODY_TYPE_LABELS: Record<string, string> = {
+  TK: "Truck",
+  PU: "Pickup",
+  CRGVN: "Cargo Van",
+  SRVT: "Service Trailer",
+  OT: "Other",
+  SUV: "SUV",
+  DMPTK: "Dump Truck",
+  OTHB: "Other Bus/Van",
+  T: "Flatbed Trailer",
+};
+
+function InsuranceInfoStrip({
+  asset,
+}: {
+  asset: {
+    year: number | null;
+    insuranceVehNumber: number | null;
+    bodyTypeCode: string | null;
+    statedValueCents: number | null;
+    gvwGcwLbs: number | null;
+    garagingState: string | null;
+    operatingRadiusMiles: number | null;
+  };
+}) {
+  const hasAny =
+    asset.year != null ||
+    asset.insuranceVehNumber != null ||
+    asset.statedValueCents != null ||
+    asset.gvwGcwLbs != null;
+  if (!hasAny) return null;
+
+  const rows: { label: string; value: string }[] = [];
+  if (asset.year != null) rows.push({ label: "Year", value: String(asset.year) });
+  if (asset.insuranceVehNumber != null)
+    rows.push({ label: "Ins. Veh #", value: String(asset.insuranceVehNumber) });
+  if (asset.bodyTypeCode != null)
+    rows.push({
+      label: "Body type",
+      value: BODY_TYPE_LABELS[asset.bodyTypeCode] ?? asset.bodyTypeCode,
+    });
+  if (asset.statedValueCents != null)
+    rows.push({
+      label: "Stated value",
+      value: new Intl.NumberFormat("en-US", {
+        style: "currency",
+        currency: "USD",
+        maximumFractionDigits: 0,
+      }).format(asset.statedValueCents / 100),
+    });
+  if (asset.gvwGcwLbs != null)
+    rows.push({
+      label: "GVW/GCW",
+      value: `${new Intl.NumberFormat("en-US").format(asset.gvwGcwLbs)} lbs`,
+    });
+  if (asset.garagingState != null)
+    rows.push({ label: "Garaged", value: asset.garagingState });
+  if (asset.operatingRadiusMiles != null)
+    rows.push({ label: "Radius", value: `${asset.operatingRadiusMiles} mi` });
+
+  return (
+    <div className="rounded-md border border-dashed bg-muted/30 p-2.5">
+      <div className="mb-1.5 text-[10px] font-mono uppercase tracking-wider text-muted-foreground">
+        Insurance Schedule
+      </div>
+      <div className="flex flex-wrap gap-x-4 gap-y-1">
+        {rows.map((r) => (
+          <div key={r.label} className="flex items-baseline gap-1 text-xs">
+            <span className="text-muted-foreground">{r.label}:</span>
+            <span className="font-medium text-foreground">{r.value}</span>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
