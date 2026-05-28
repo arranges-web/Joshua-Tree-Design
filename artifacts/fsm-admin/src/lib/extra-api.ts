@@ -38,6 +38,12 @@ export type AssetExt = {
   lastHolderUserId: number | null;
   lastHolderName: string | null;
   lastCheckedOutAt: string | null;
+  // Storage location for equipment (e.g. "Lawn Yard", "Tree Yard").
+  // Null for trucks — they move between sites.
+  location: string | null;
+  // Purchase price in cents — surfaced here so the UI can display and
+  // edit it even though the orval-generated Asset type may not include it.
+  purchasePriceCents: number | null;
 };
 
 // ---------- Asset image ----------
@@ -302,6 +308,20 @@ export function useCreateEquipment() {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ ...body, status: body.status ?? "ACTIVE" }),
+      }),
+  });
+}
+
+// ---------- Update Equipment Extension Fields ----------
+// Handles fields not yet in the OpenAPI spec (location, etc.) by sending
+// them via the server's equipmentExtensionSchema path.
+export function useUpdateEquipmentExt() {
+  return useMutation({
+    mutationFn: ({ id, data }: { id: number; data: { location?: string | null; purchasePriceCents?: number | null } }) =>
+      customFetch<{ equipment: unknown }>(`/api/equipment/${id}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(data),
       }),
   });
 }

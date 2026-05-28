@@ -115,6 +115,7 @@ export const equipmentTable = pgTable(
     brand: text("brand"),
     model: text("model"),
     serial: text("serial"),
+    location: text("location"),
     status: equipmentStatusEnum("status").notNull().default("ACTIVE"),
     // Nullable — see trucks.departmentId comment.
     departmentId: integer("department_id").references(

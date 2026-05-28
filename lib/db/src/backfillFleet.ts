@@ -22,6 +22,7 @@ export async function backfillFleetData(): Promise<void> {
   // business data, so we run them in every environment regardless of
   // DEMO_MODE so a real-data DB still gets new columns on deploy.
   await backfillMaintenanceLogColumns();
+  await backfillEquipmentColumns();
   await ensureInvitesTable();
   await ensureDeleteRequestsTable();
   await backfillSlugs();
@@ -39,11 +40,12 @@ export async function backfillFleetData(): Promise<void> {
     await ensureExtraAssets();
     await ensureExtraTrailersAndHandhelds();
   } else {
-    // Real-data mode: remove any demo trucks and demo equipment that may
-    // have been seeded before DEMO_MODE was disabled. Both functions are
-    // idempotent no-ops once the rows are gone.
+    // Real-data mode: remove any demo trucks, equipment, and maintenance
+    // logs that may have been seeded before DEMO_MODE was disabled.
+    // All three functions are idempotent no-ops once the rows are gone.
     await cleanupDemoTrucks();
     await cleanupDemoEquipment();
+    await cleanupDemoMaintenanceLogs();
   }
 }
 
@@ -153,6 +155,17 @@ async function backfillMaintenanceLogColumns() {
   );
   await db.execute(
     sql`ALTER TABLE maintenance_logs ADD COLUMN IF NOT EXISTS receipt_data_url TEXT`,
+  );
+}
+
+/**
+ * Idempotent ALTER TABLE that adds the location column to equipment.
+ * Runs in every environment so fresh deploys and DB resets pick it up
+ * without a separate migration step.
+ */
+async function backfillEquipmentColumns() {
+  await db.execute(
+    sql`ALTER TABLE equipment ADD COLUMN IF NOT EXISTS location TEXT`,
   );
 }
 
@@ -296,6 +309,30 @@ async function cleanupDemoEquipment() {
   );
   await db.execute(
     sql`DELETE FROM equipment WHERE id = ANY(${sql.raw(`ARRAY[${demoIds.join(",")}]::int[]`)})`,
+  );
+}
+
+/**
+ * In real-data mode the maintenance log starts empty and is filled by
+ * the actual mechanic workflow. This function wipes any synthetic rows
+ * (identifiable by their copy-pasted descriptions) that may have been
+ * seeded by backfillMaintenanceLogs() before DEMO_MODE was disabled.
+ * Idempotent — deletes 0 rows if already clean.
+ */
+const DEMO_MAINTENANCE_DESCRIPTIONS = new Set([
+  "Oil & filter change, lube fittings, fluid top-off",
+  "Replaced front brake pads & rotors — pulsing complaint",
+]);
+
+async function cleanupDemoMaintenanceLogs() {
+  // Delete any row whose description matches a known synthetic description.
+  // Idempotent — deletes 0 rows once the table is clean.
+  await db.execute(
+    sql`DELETE FROM maintenance_logs WHERE description = ANY(ARRAY[${sql.raw(
+      Array.from(DEMO_MAINTENANCE_DESCRIPTIONS)
+        .map((d) => `'${d.replace(/'/g, "''")}'`)
+        .join(","),
+    )}]::text[])`,
   );
 }
 

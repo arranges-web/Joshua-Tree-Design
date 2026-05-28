@@ -1,2 +1,1 @@
-- [Real crew import](real-crew-import.md) — DEMO_MODE=false in dev; importRealCrews() is the idempotent startup guard for real data.
-- [Demo backfill guards](demo-backfill-guards.md) — both ensureDepartmentCrew() and isDemoMode() must be false to prevent placeholder crews on restart.
+- [Real-data boot guards](real-data-boot-guards.md) — cleanupDemo* functions run in the non-demo else-branch; db.execute SELECT results are NOT directly destructurable as arrays.

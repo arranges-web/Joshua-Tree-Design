@@ -59,6 +59,7 @@ const equipmentExtensionSchema = z
     category: z.enum(["HANDHELD", "CUSTOM"]).optional(),
     quantity: z.number().int().min(1).optional(),
     customCategoryLabel: z.string().min(1).max(60).nullable().optional(),
+    location: z.string().max(200).nullable().optional(),
   })
   .passthrough();
 
@@ -397,6 +398,9 @@ router.patch(
       if (equipExt.data.quantity !== undefined) patch.quantity = equipExt.data.quantity;
       if (equipExt.data.customCategoryLabel !== undefined) {
         patch.customCategoryLabel = equipExt.data.customCategoryLabel;
+      }
+      if (equipExt.data.location !== undefined) {
+        patch.location = equipExt.data.location ?? null;
       }
     }
 
@@ -952,6 +956,7 @@ type AssetSummary = {
   lastAssignedByName: string | null;
   purchasePriceCents: number | null;
   purchaseDate: string | null;
+  location: string | null;
   currentUsage: number;
   usageUnit: "MILES" | "HOURS" | "NONE";
   serviceIntervalUsage: number;
@@ -1181,6 +1186,7 @@ async function buildAssetList(departmentId?: number): Promise<AssetSummary[]> {
           : null,
       purchasePriceCents: t.purchasePriceCents,
       purchaseDate: t.purchaseDate ? t.purchaseDate.toISOString() : null,
+      location: null,
       currentUsage: isTrailer ? 0 : t.currentMileage,
       usageUnit: isTrailer ? "NONE" : "MILES",
       serviceIntervalUsage: t.serviceIntervalMiles,
@@ -1272,6 +1278,7 @@ async function buildAssetList(departmentId?: number): Promise<AssetSummary[]> {
           : null,
       purchasePriceCents: e.purchasePriceCents,
       purchaseDate: e.purchaseDate ? e.purchaseDate.toISOString() : null,
+      location: e.location ?? null,
       currentUsage: tracksHours ? e.currentHours : 0,
       usageUnit: tracksHours ? "HOURS" : "NONE",
       serviceIntervalUsage: e.serviceIntervalHours,

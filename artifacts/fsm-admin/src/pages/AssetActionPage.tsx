@@ -28,6 +28,7 @@ import {
   useCheckOutAsset,
   useCheckInAsset,
   useListCrewLeadCandidates,
+  useUpdateEquipmentExt,
   type AssetExt,
 } from "@/lib/extra-api";
 import { useDepartmentFilter } from "@/context/DepartmentContext";
@@ -338,13 +339,9 @@ export function AssetActionPage() {
                 icon={Calendar}
               />
             </div>
-            {asset.purchasePriceCents != null && (
-              <div className="text-xs text-muted-foreground">
-                Original purchase price{" "}
-                <span className="font-mono">{usd(asset.purchasePriceCents)}</span>
-              </div>
-            )}
+            <EditablePurchasePrice asset={asset} />
             <EditableIdentifier asset={asset} />
+            {asset.kind === "EQUIPMENT" && <EditableLocation asset={asset} />}
             <PeriodSpendStrip
               mtdCents={asset.mtdSpendCents ?? 0}
               ytdCents={asset.ytdSpendCents ?? 0}
@@ -621,6 +618,174 @@ function EditableIdentifier({
         onClick={startEdit}
         className="ml-0.5 inline-flex h-4 w-4 items-center justify-center rounded opacity-0 transition-opacity hover:bg-accent hover:text-foreground group-hover:opacity-100"
         title={`Edit ${label}`}
+      >
+        <Pencil className="h-2.5 w-2.5" />
+      </button>
+    </div>
+  );
+}
+
+function EditablePurchasePrice({
+  asset,
+}: {
+  asset: { kind: "TRUCK" | "EQUIPMENT"; id: number; slug: string; purchasePriceCents?: number | null };
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState("");
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const updateTruck = useUpdateTruck();
+  const updateEquipment = useUpdateEquipment();
+  const isPending = updateTruck.isPending || updateEquipment.isPending;
+  const priceCents = asset.purchasePriceCents ?? null;
+
+  function startEdit() {
+    setDraft(priceCents != null ? (priceCents / 100).toFixed(2) : "");
+    setEditing(true);
+  }
+  function cancel() { setEditing(false); }
+  function save() {
+    const raw = draft.trim().replace(/[$,]/g, "");
+    const dollars = parseFloat(raw);
+    const val = raw === "" ? null : Number.isFinite(dollars) ? Math.round(dollars * 100) : null;
+    const opts = {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: getGetAssetBySlugQueryKey(asset.slug) });
+        queryClient.invalidateQueries({ queryKey: getListAssetsQueryKey() });
+        toast({ title: "Purchase price updated" });
+        setEditing(false);
+      },
+      onError: () => toast({ title: "Could not update purchase price", variant: "destructive" }),
+    };
+    if (asset.kind === "TRUCK") {
+      updateTruck.mutate({ id: asset.id, data: { purchasePriceCents: val } }, opts);
+    } else {
+      updateEquipment.mutate({ id: asset.id, data: { purchasePriceCents: val } }, opts);
+    }
+  }
+
+  if (editing) {
+    return (
+      <div className="flex items-center gap-2 text-xs">
+        <span className="w-10 shrink-0 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+          Price
+        </span>
+        <Input
+          className="h-7 w-36 font-mono text-xs"
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          placeholder="0.00"
+          autoFocus
+          onKeyDown={(e) => {
+            if (e.key === "Enter") save();
+            if (e.key === "Escape") cancel();
+          }}
+        />
+        <Button size="sm" className="h-7 px-2 text-xs" onClick={save} disabled={isPending}>
+          {isPending ? "…" : "Save"}
+        </Button>
+        <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={cancel} disabled={isPending}>
+          Cancel
+        </Button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="group flex items-center gap-1.5 text-xs text-muted-foreground">
+      <span className="font-mono text-[10px] uppercase tracking-wider">Price</span>
+      {priceCents != null ? (
+        <span className="font-mono text-foreground">{usd(priceCents)}</span>
+      ) : (
+        <span className="italic opacity-50">not set</span>
+      )}
+      <button
+        type="button"
+        onClick={startEdit}
+        className="ml-0.5 inline-flex h-4 w-4 items-center justify-center rounded opacity-0 transition-opacity hover:bg-accent hover:text-foreground group-hover:opacity-100"
+        title="Edit purchase price"
+      >
+        <Pencil className="h-2.5 w-2.5" />
+      </button>
+    </div>
+  );
+}
+
+function EditableLocation({
+  asset,
+}: {
+  asset: { id: number; slug: string; location?: string | null };
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(asset.location ?? "");
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const update = useUpdateEquipmentExt();
+
+  function startEdit() {
+    setDraft(asset.location ?? "");
+    setEditing(true);
+  }
+  function cancel() {
+    setEditing(false);
+    setDraft(asset.location ?? "");
+  }
+  function save() {
+    const val: string | null = draft.trim() || null;
+    update.mutate(
+      { id: asset.id, data: { location: val } },
+      {
+        onSuccess: () => {
+          queryClient.invalidateQueries({ queryKey: getGetAssetBySlugQueryKey(asset.slug) });
+          queryClient.invalidateQueries({ queryKey: getListAssetsQueryKey() });
+          toast({ title: "Location updated" });
+          setEditing(false);
+        },
+        onError: () => toast({ title: "Could not update location", variant: "destructive" }),
+      },
+    );
+  }
+
+  if (editing) {
+    return (
+      <div className="flex items-center gap-2 text-xs">
+        <span className="w-10 shrink-0 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+          Loc
+        </span>
+        <Input
+          className="h-7 w-40 text-xs"
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          placeholder="e.g. Tree Yard"
+          autoFocus
+          onKeyDown={(e) => {
+            if (e.key === "Enter") save();
+            if (e.key === "Escape") cancel();
+          }}
+        />
+        <Button size="sm" className="h-7 px-2 text-xs" onClick={save} disabled={update.isPending}>
+          {update.isPending ? "…" : "Save"}
+        </Button>
+        <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={cancel} disabled={update.isPending}>
+          Cancel
+        </Button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="group flex items-center gap-1.5 text-xs text-muted-foreground">
+      <span className="font-mono text-[10px] uppercase tracking-wider">Loc</span>
+      {asset.location ? (
+        <span className="text-foreground">{asset.location}</span>
+      ) : (
+        <span className="italic opacity-50">not set</span>
+      )}
+      <button
+        type="button"
+        onClick={startEdit}
+        className="ml-0.5 inline-flex h-4 w-4 items-center justify-center rounded opacity-0 transition-opacity hover:bg-accent hover:text-foreground group-hover:opacity-100"
+        title="Edit location"
       >
         <Pencil className="h-2.5 w-2.5" />
       </button>
