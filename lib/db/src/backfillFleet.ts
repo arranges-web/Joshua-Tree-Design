@@ -39,10 +39,11 @@ export async function backfillFleetData(): Promise<void> {
     await ensureExtraAssets();
     await ensureExtraTrailersAndHandhelds();
   } else {
-    // Real-data mode: remove any demo trucks that may have been seeded
-    // before DEMO_MODE was disabled. Runs on every boot but is a no-op
-    // once the trucks table is clean.
+    // Real-data mode: remove any demo trucks and demo equipment that may
+    // have been seeded before DEMO_MODE was disabled. Both functions are
+    // idempotent no-ops once the rows are gone.
     await cleanupDemoTrucks();
+    await cleanupDemoEquipment();
   }
 }
 
@@ -261,6 +262,40 @@ async function cleanupDemoTrucks() {
   );
   await db.execute(
     sql`DELETE FROM trucks WHERE id = ANY(${sql.raw(`ARRAY[${demoIds.join(",")}]::int[]`)})`,
+  );
+}
+
+/**
+ * Equipment names seeded by demo backfill scripts (ensureExtraAssets +
+ * ensureExtraTrailersAndHandhelds). Removed when DEMO_MODE is false.
+ */
+const DEMO_EQUIPMENT_NAMES = new Set([
+  // ensureExtraAssets()
+  "Bandit 21XP Chipper",
+  "Toro STX-38 Stump Grinder",
+  // ensureExtraTrailersAndHandhelds()
+  "Pole Saws",
+  "Shovels",
+  "Hedge Trimmers",
+  "Climbing Helmets",
+  "Climbing Harnesses",
+  "Battery Drills",
+]);
+
+async function cleanupDemoEquipment() {
+  const rows = await db
+    .select({ id: equipmentTable.id, name: equipmentTable.name })
+    .from(equipmentTable);
+  const demoIds = rows
+    .filter((e) => DEMO_EQUIPMENT_NAMES.has(e.name))
+    .map((e) => e.id);
+  if (demoIds.length === 0) return;
+
+  await db.execute(
+    sql`DELETE FROM maintenance_logs WHERE equipment_id = ANY(${sql.raw(`ARRAY[${demoIds.join(",")}]::int[]`)})`,
+  );
+  await db.execute(
+    sql`DELETE FROM equipment WHERE id = ANY(${sql.raw(`ARRAY[${demoIds.join(",")}]::int[]`)})`,
   );
 }
 
