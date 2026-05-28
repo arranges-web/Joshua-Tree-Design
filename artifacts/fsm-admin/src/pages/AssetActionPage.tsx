@@ -81,6 +81,7 @@ import {
   LogOut,
   UserCheck,
   X,
+  Pencil,
 } from "lucide-react";
 
 const usd = (cents: number | null | undefined) =>
@@ -341,15 +342,9 @@ export function AssetActionPage() {
               <div className="text-xs text-muted-foreground">
                 Original purchase price{" "}
                 <span className="font-mono">{usd(asset.purchasePriceCents)}</span>
-                {asset.identifier && (
-                  <>
-                    {" · "}
-                    {asset.kind === "TRUCK" ? "VIN" : "Serial"}{" "}
-                    <span className="font-mono">{asset.identifier}</span>
-                  </>
-                )}
               </div>
             )}
+            <EditableIdentifier asset={asset} />
             <PeriodSpendStrip
               mtdCents={asset.mtdSpendCents ?? 0}
               ytdCents={asset.ytdSpendCents ?? 0}
@@ -540,6 +535,95 @@ function Stat({
         {label}
       </div>
       <div className="mt-1 text-base font-semibold">{value}</div>
+    </div>
+  );
+}
+
+function EditableIdentifier({
+  asset,
+}: {
+  asset: { kind: "TRUCK" | "EQUIPMENT"; id: number; slug: string; identifier?: string | null };
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(asset.identifier ?? "");
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const updateTruck = useUpdateTruck();
+  const updateEquipment = useUpdateEquipment();
+  const label = asset.kind === "TRUCK" ? "VIN" : "Serial";
+  const isPending = updateTruck.isPending || updateEquipment.isPending;
+
+  function startEdit() {
+    setDraft(asset.identifier ?? "");
+    setEditing(true);
+  }
+
+  function cancel() {
+    setEditing(false);
+    setDraft(asset.identifier ?? "");
+  }
+
+  function save() {
+    const val: string | null = draft.trim() || null;
+    const opts = {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: getGetAssetBySlugQueryKey(asset.slug) });
+        queryClient.invalidateQueries({ queryKey: getListAssetsQueryKey() });
+        toast({ title: `${label} updated` });
+        setEditing(false);
+      },
+      onError: () => toast({ title: `Could not update ${label}`, variant: "destructive" }),
+    };
+    if (asset.kind === "TRUCK") {
+      updateTruck.mutate({ id: asset.id, data: { vin: val } as any }, opts);
+    } else {
+      updateEquipment.mutate({ id: asset.id, data: { serial: val } as any }, opts);
+    }
+  }
+
+  if (editing) {
+    return (
+      <div className="flex items-center gap-2 text-xs">
+        <span className="w-10 shrink-0 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+          {label}
+        </span>
+        <Input
+          className="h-7 w-52 font-mono text-xs"
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          placeholder={label === "VIN" ? "1FDXX…" : "SN-123456"}
+          autoFocus
+          onKeyDown={(e) => {
+            if (e.key === "Enter") save();
+            if (e.key === "Escape") cancel();
+          }}
+        />
+        <Button size="sm" className="h-7 px-2 text-xs" onClick={save} disabled={isPending}>
+          {isPending ? "…" : "Save"}
+        </Button>
+        <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={cancel} disabled={isPending}>
+          Cancel
+        </Button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="group flex items-center gap-1.5 text-xs text-muted-foreground">
+      <span className="font-mono text-[10px] uppercase tracking-wider">{label}</span>
+      {asset.identifier ? (
+        <span className="font-mono text-foreground">{asset.identifier}</span>
+      ) : (
+        <span className="italic opacity-50">not set</span>
+      )}
+      <button
+        type="button"
+        onClick={startEdit}
+        className="ml-0.5 inline-flex h-4 w-4 items-center justify-center rounded opacity-0 transition-opacity hover:bg-accent hover:text-foreground group-hover:opacity-100"
+        title={`Edit ${label}`}
+      >
+        <Pencil className="h-2.5 w-2.5" />
+      </button>
     </div>
   );
 }
