@@ -31,6 +31,7 @@ import {
   departmentsTable,
   usersTable,
 } from "./schema";
+import { isDemoMode } from "./demoMode";
 
 function daysAgo(d: number) {
   return new Date(Date.now() - d * 86_400_000);
@@ -91,6 +92,11 @@ export async function backfillDemoData(): Promise<void> {
     .where(eq(customersTable.email, "brandon@example.com"))
     .limit(1);
   if (seedSentinel.length > 0) return;
+
+  // Hard kill switch: a real customer DB never wants demo customers/
+  // jobs/quotes/trucks overlaid on first boot. Operators flip this off
+  // before pointing the codebase at their database.
+  if (!isDemoMode()) return;
 
   // ── Resolve department & user IDs from live DB ────────────────────────────
   const depts = await db.select().from(departmentsTable);

@@ -17,19 +17,25 @@ import { isDemoMode } from "./demoMode";
  * already present.
  */
 export async function backfillFleetData(): Promise<void> {
+  // Schema-evolution and slug backfills are always safe — they only add
+  // missing columns / fill in null slugs / never touch existing rows'
+  // business data, so we run them in every environment regardless of
+  // DEMO_MODE so a real-data DB still gets new columns on deploy.
   await backfillMaintenanceLogColumns();
   await ensureInvitesTable();
   await ensureDeleteRequestsTable();
-  await backfillTruckFixtures();
-  await backfillEquipmentFixtures();
-  await backfillEquipmentCategories();
-  await backfillMaintenanceLogs();
   await backfillSlugs();
-  // Demo enrichment (extra synthetic assets) is gated by DEMO_MODE so
-  // the published Joshua Tree demo on Replit can ship with a fully
-  // populated fleet. Set DEMO_MODE=false to opt out before pointing
-  // this codebase at a real customer DB.
+
+  // Demo-only enrichments — synthetic T-01/T-02/T-03 trucks, chainsaws,
+  // backfilled maintenance logs, extra trailers/handhelds. These are
+  // gated behind DEMO_MODE so a real customer DB (where assets were
+  // imported via importRealAssets.ts) doesn't get demo fixtures
+  // overlaid on every boot.
   if (isDemoMode()) {
+    await backfillTruckFixtures();
+    await backfillEquipmentFixtures();
+    await backfillEquipmentCategories();
+    await backfillMaintenanceLogs();
     await ensureExtraAssets();
     await ensureExtraTrailersAndHandhelds();
   }
