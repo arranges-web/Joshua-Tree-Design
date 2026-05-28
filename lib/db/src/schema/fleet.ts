@@ -50,9 +50,14 @@ export const trucksTable = pgTable(
     vin: text("vin"),
     plate: text("plate"),
     status: truckStatusEnum("status").notNull().default("ACTIVE"),
-    departmentId: integer("department_id")
-      .notNull()
-      .references(() => departmentsTable.id, { onDelete: "restrict" }),
+    // Nullable so freshly-imported assets can land without a department —
+    // the team assigns one later via the registry's "Bulk assign" action
+    // or the asset detail page. The FK is set-null on delete so removing
+    // a department unassigns its assets instead of blocking the delete.
+    departmentId: integer("department_id").references(
+      () => departmentsTable.id,
+      { onDelete: "set null" },
+    ),
     assignedCrewId: integer("assigned_crew_id").references(
       () => crewsTable.id,
       { onDelete: "set null" },
@@ -111,9 +116,11 @@ export const equipmentTable = pgTable(
     model: text("model"),
     serial: text("serial"),
     status: equipmentStatusEnum("status").notNull().default("ACTIVE"),
-    departmentId: integer("department_id")
-      .notNull()
-      .references(() => departmentsTable.id, { onDelete: "restrict" }),
+    // Nullable — see trucks.departmentId comment.
+    departmentId: integer("department_id").references(
+      () => departmentsTable.id,
+      { onDelete: "set null" },
+    ),
     assignedTruckId: integer("assigned_truck_id").references(
       () => trucksTable.id,
       { onDelete: "set null" },

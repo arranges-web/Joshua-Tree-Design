@@ -826,25 +826,28 @@ function ChangeDepartmentCardInner({
   const updateEquipment = useUpdateEquipment();
 
   const [selectedDeptId, setSelectedDeptId] = useState<string>(
-    asset.departmentId != null ? String(asset.departmentId) : "",
+    asset.departmentId != null ? String(asset.departmentId) : "UNASSIGN",
   );
   const [touched, setTouched] = useState(false);
 
   if (departments.length === 0) return null;
 
-  const currentVal = asset.departmentId != null ? String(asset.departmentId) : "";
+  const currentVal = asset.departmentId != null ? String(asset.departmentId) : "UNASSIGN";
   const dirty = touched && selectedDeptId !== currentVal && selectedDeptId !== "";
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!dirty || selectedDeptId === "") return;
-    const deptId = Number(selectedDeptId);
+    // "UNASSIGN" sentinel clears departmentId back to null so the
+    // asset returns to the "Needs Department" bucket on the registry.
+    const deptId: number | null =
+      selectedDeptId === "UNASSIGN" ? null : Number(selectedDeptId);
     const opts = {
       onSuccess: () => {
         queryClient.invalidateQueries({ queryKey: getGetAssetBySlugQueryKey(asset.slug) });
         queryClient.invalidateQueries({ queryKey: getListAssetsQueryKey() });
         queryClient.invalidateQueries({ queryKey: getGetFleetPulseQueryKey() });
-        toast({ title: "Department updated" });
+        toast({ title: deptId == null ? "Department cleared" : "Department updated" });
         setTouched(false);
       },
       onError: () => toast({ title: "Could not update department", variant: "destructive" }),
@@ -880,6 +883,7 @@ function ChangeDepartmentCardInner({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
+                <SelectItem value="UNASSIGN">— Unassigned —</SelectItem>
                 {departments.map((d) => (
                   <SelectItem key={d.id} value={String(d.id)}>
                     {d.label}

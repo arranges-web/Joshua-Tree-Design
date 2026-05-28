@@ -135,11 +135,15 @@ async function buildOperationalContext(): Promise<string> {
   }
   for (const t of trucks) {
     if (t.status !== "ACTIVE") continue;
+    // departmentId is nullable since the real-asset import — skip
+    // unassigned rows in the per-department rollup.
+    if (t.departmentId == null) continue;
     const label = deptById.get(t.departmentId);
     if (label && deptStats.has(label)) deptStats.get(label)!.activeTrucks += 1;
   }
   for (const e of equipment) {
     if (e.status !== "ACTIVE") continue;
+    if (e.departmentId == null) continue;
     const label = deptById.get(e.departmentId);
     if (label && deptStats.has(label)) deptStats.get(label)!.activeEquipment += 1;
   }
