@@ -119,6 +119,29 @@ export async function backfillDepartments(): Promise<void> {
     }
   }
 
+  // 3b. One-time idempotent migration (real-data only): if >95 % of all
+  // equipment items are assigned to the single fallback Landscaping
+  // department, they were bulk-seeded by an earlier demo boot before the
+  // re-homing predicate was narrowed. Clear all assignments so operators
+  // can assign equipment to departments themselves via the UI.
+  // After the migration runs the first time, the count stays at 0 and
+  // this block becomes a cheap no-op on every subsequent boot.
+  if (!isDemoMode()) {
+    const [totRow] = await db
+      .select({ n: sql<number>`count(*)::int` })
+      .from(equipmentTable);
+    const [fbRow] = await db
+      .select({ n: sql<number>`count(*)::int` })
+      .from(equipmentTable)
+      .where(eq(equipmentTable.departmentId, fallbackAssetDeptId));
+    const total = totRow?.n ?? 0;
+    const inFallback = fbRow?.n ?? 0;
+    if (total > 0 && inFallback / total > 0.95) {
+      await db.update(equipmentTable).set({ departmentId: null });
+      await db.update(trucksTable).set({ departmentId: null });
+    }
+  }
+
   // 4. Per-dept demo fleet. Gated by DEMO_MODE so the live published
   // demo also seeds a starter truck + equipment for any visible dept
   // that lacks one.
