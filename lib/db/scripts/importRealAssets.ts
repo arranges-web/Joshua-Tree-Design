@@ -185,7 +185,7 @@ async function main() {
         name: e.name,
         type: e.description,
         category: "CUSTOM",
-        customCategoryLabel: "Heavy Equipment",
+        customCategoryLabel: "Compact Equipment",
         quantity: 1,
         brand: e.brand,
         model: e.model,

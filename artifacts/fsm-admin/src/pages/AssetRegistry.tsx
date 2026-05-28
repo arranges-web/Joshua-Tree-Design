@@ -67,6 +67,7 @@ import {
   Hammer,
   Boxes,
   Plus,
+  Construction,
 } from "lucide-react";
 
 const usd = (cents: number | null | undefined) =>
@@ -116,16 +117,17 @@ function ServiceBadge({ state }: { state: "OK" | "DUE_SOON" | "OVERDUE" }) {
 }
 
 type SortKey = "NAME" | "STATUS" | "SERVICE_DUE" | "YTD_SPEND" | "LIFETIME_SPEND";
-type CategoryFilter = "ALL" | "TRUCK" | "TRAILER" | "HANDHELD" | "CUSTOM";
+type CategoryFilter = "ALL" | "TRUCK" | "TRAILER" | "HANDHELD" | "COMPACT" | "CUSTOM";
 
 const SERVICE_RANK = { OVERDUE: 0, DUE_SOON: 1, OK: 2 };
 
 type RegistryAsset = Omit<Asset, "usageUnit"> & AssetExt;
 
-function categoryIcon(c: AssetExt["category"]) {
-  if (c === "TRUCK") return Truck;
-  if (c === "TRAILER") return Caravan;
-  if (c === "HANDHELD") return Hammer;
+function categoryIcon(a: Pick<RegistryAsset, "category" | "customCategoryLabel">) {
+  if (a.category === "TRUCK") return Truck;
+  if (a.category === "TRAILER") return Caravan;
+  if (a.category === "HANDHELD") return Hammer;
+  if (a.category === "CUSTOM" && a.customCategoryLabel === "Compact Equipment") return Construction;
   return Boxes;
 }
 
@@ -438,7 +440,9 @@ export function AssetRegistry() {
 
   const filtered = useMemo(() => {
     const list = assets.filter((a) => {
-      if (categoryFilter !== "ALL" && a.category !== categoryFilter) return false;
+      if (categoryFilter === "COMPACT") {
+        if (!(a.category === "CUSTOM" && a.customCategoryLabel === "Compact Equipment")) return false;
+      } else if (categoryFilter !== "ALL" && a.category !== categoryFilter) return false;
       if (statusFilter !== "ALL" && a.status !== statusFilter) return false;
       if (dueFilter !== "ALL" && a.serviceState !== dueFilter) return false;
       if (deptFilterValue !== "ALL") {
@@ -583,6 +587,7 @@ export function AssetRegistry() {
               <SelectItem value="TRUCK">Trucks</SelectItem>
               <SelectItem value="TRAILER">Trailers</SelectItem>
               <SelectItem value="HANDHELD">Handheld</SelectItem>
+              <SelectItem value="COMPACT">Compact Equipment</SelectItem>
               <SelectItem value="CUSTOM">Custom</SelectItem>
             </SelectContent>
           </Select>
@@ -767,7 +772,7 @@ export function AssetRegistry() {
             </TableHeader>
             <TableBody>
               {filtered.map((a) => {
-                const Icon = categoryIcon(a.category);
+                const Icon = categoryIcon(a);
                 const tracksUsage = a.usageUnit !== "NONE";
                 const usageWord = a.usageUnit === "MILES" ? "miles" : "hours";
                 return (
