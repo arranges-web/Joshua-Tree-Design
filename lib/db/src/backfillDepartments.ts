@@ -134,8 +134,11 @@ export async function backfillDepartments(): Promise<void> {
   // show out of the box, and seed a maintenance trail for any truck
   // or equipment row that has no logs yet (typical for the brand-new
   // Sales / Fertilization assets).
-  await enrichMaintenanceLogs();
-  await seedMissingMaintenanceLogs();
+  // Both steps are demo-only — real databases manage their own logs.
+  if (isDemoMode()) {
+    await enrichMaintenanceLogs();
+    await seedMissingMaintenanceLogs();
+  }
 
   // 7. Repair the eight demo accounts on every boot when DEMO_MODE
   // is on. Guarantees the published preview always has working
