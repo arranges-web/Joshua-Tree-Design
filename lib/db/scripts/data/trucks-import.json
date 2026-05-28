@@ -46,8 +46,5 @@
   { "vehNum": 51, "year": 2023, "brand": "Bigfoot",      "model": "Flatbed",         "bodyType": "T",     "vin": "7T5BF1425PM001794", "statedValueCents": 500000,   "gvwLbs": 6000  },
   { "vehNum": 52, "year": 2022, "brand": "Ford",         "model": "F450",            "bodyType": "TK",    "vin": "1FDXF46F22EC33251", "statedValueCents": 4500000,  "gvwLbs": 14000 },
   { "vehNum": 53, "year": 2016, "brand": "Mitsubishi",   "model": "Dump Truck",      "bodyType": "TK",    "vin": "JL6BPH1A4GK000115", "statedValueCents": 4500000,  "gvwLbs": 14000 },
-  { "vehNum": 54, "year": 2023, "brand": "PG",           "model": "Open Serv. Utility","bodyType": "T",   "vin": "150877400",         "statedValueCents": 600000,   "gvwLbs": 6000  },
-
-  { "vehNum": 101, "year": 2021, "brand": "Chevrolet", "model": "Silverado 2500", "bodyType": "TK", "vin": "1GB5YLE75MF184509", "statedValueCents": 4000000, "gvwLbs": 14000 },
-  { "vehNum": 102, "year": 2020, "brand": "Chevrolet", "model": "4500",           "bodyType": "TK", "vin": "54DCDJ1B9LS803756", "statedValueCents": 5000000, "gvwLbs": 14001 }
+  { "vehNum": 54, "year": 2023, "brand": "PG",           "model": "Open Serv. Utility","bodyType": "T",   "vin": "150877400",         "statedValueCents": 600000,   "gvwLbs": 6000  }
 ]
