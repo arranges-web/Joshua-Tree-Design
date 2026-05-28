@@ -38,6 +38,11 @@ export async function backfillFleetData(): Promise<void> {
     await backfillMaintenanceLogs();
     await ensureExtraAssets();
     await ensureExtraTrailersAndHandhelds();
+  } else {
+    // Real-data mode: remove any demo trucks that may have been seeded
+    // before DEMO_MODE was disabled. Runs on every boot but is a no-op
+    // once the trucks table is clean.
+    await cleanupDemoTrucks();
   }
 }
 
@@ -209,6 +214,53 @@ async function ensureInvitesTable() {
   );
   await db.execute(
     sql`CREATE INDEX IF NOT EXISTS invites_created_at_idx ON invites (created_at)`,
+  );
+}
+
+/**
+ * All truck names that were seeded by demo backfill scripts (backfillFleet.ts
+ * ensureExtraAssets / ensureExtraTrailersAndHandhelds, and backfillDemoData.ts
+ * Phase 1). When DEMO_MODE is false these rows must not exist; this function
+ * is idempotent and a no-op when the trucks table is already clean.
+ */
+const DEMO_TRUCK_NAMES = new Set([
+  // ensureExtraAssets()
+  "T-04 Stump Truck",
+  "T-05 Mulch Truck",
+  // ensureExtraTrailersAndHandhelds()
+  "TR-01 Equipment Trailer",
+  "TR-02 Mulch Dump Trailer",
+  // backfillDemoData.ts Phase 1 — per-department demo vehicles
+  "T-06 Lawn Service Truck",
+  "T-07 Pest Control Van",
+  "T-08 Sales Estimator",
+  "T-08 Land Loader",
+  "T-09 Fertilization Tank Truck",
+  "T-10 Landscape Loader",
+  "T-11 Tree Service Truck",
+]);
+
+async function cleanupDemoTrucks() {
+  const trucks = await db
+    .select({ id: trucksTable.id, name: trucksTable.name })
+    .from(trucksTable);
+  const demoIds = trucks
+    .filter((t) => DEMO_TRUCK_NAMES.has(t.name))
+    .map((t) => t.id);
+  if (demoIds.length === 0) return;
+
+  // Null FK references before deleting to avoid constraint violations.
+  await db.execute(
+    sql`UPDATE equipment SET assigned_truck_id = NULL WHERE assigned_truck_id = ANY(${sql.raw(`ARRAY[${demoIds.join(",")}]::int[]`)})`,
+  );
+  await db.execute(
+    sql`DELETE FROM maintenance_logs WHERE truck_id = ANY(${sql.raw(`ARRAY[${demoIds.join(",")}]::int[]`)})`,
+  );
+  await db.execute(
+    sql`DELETE FROM usage_readings WHERE truck_id = ANY(${sql.raw(`ARRAY[${demoIds.join(",")}]::int[]`)})`,
+  );
+  await db.execute(
+    sql`DELETE FROM trucks WHERE id = ANY(${sql.raw(`ARRAY[${demoIds.join(",")}]::int[]`)})`,
   );
 }
 

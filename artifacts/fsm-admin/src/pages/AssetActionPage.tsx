@@ -575,9 +575,9 @@ function EditableIdentifier({
       onError: () => toast({ title: `Could not update ${label}`, variant: "destructive" }),
     };
     if (asset.kind === "TRUCK") {
-      updateTruck.mutate({ id: asset.id, data: { vin: val } as any }, opts);
+      updateTruck.mutate({ id: asset.id, data: { vin: val } }, opts);
     } else {
-      updateEquipment.mutate({ id: asset.id, data: { serial: val } as any }, opts);
+      updateEquipment.mutate({ id: asset.id, data: { serial: val } }, opts);
     }
   }
 
