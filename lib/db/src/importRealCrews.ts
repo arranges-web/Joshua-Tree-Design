@@ -17,7 +17,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { eq, inArray, sql } from "drizzle-orm";
 import { db } from "./client";
-import { crewsTable, equipmentTable } from "./schema";
+import { crewsTable, equipmentTable, usersTable, rolesTable } from "./schema";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const XLSX_PATH = path.resolve(
@@ -135,10 +135,20 @@ export async function importRealCrews(): Promise<void> {
   }
   const crewNames = [...crewNameSet].sort();
 
-  // ── 4. Pick the fallback lead user (admin user, id=1 equivalent) ────────
-  const [adminUser] = await db.execute<{ id: number }>(
-    sql`SELECT id FROM users WHERE role_id = (SELECT id FROM roles WHERE key = 'ADMIN') ORDER BY id LIMIT 1`,
-  );
+  // ── 4. Pick the fallback lead user (first ADMIN user) ───────────────────
+  const [adminRole] = await db
+    .select({ id: rolesTable.id })
+    .from(rolesTable)
+    .where(eq(rolesTable.key, "ADMIN"))
+    .limit(1);
+  const [adminUser] = adminRole
+    ? await db
+        .select({ id: usersTable.id })
+        .from(usersTable)
+        .where(eq(usersTable.roleId, adminRole.id))
+        .orderBy(usersTable.id)
+        .limit(1)
+    : [];
   const leadId: number = adminUser?.id ?? 1;
 
   // ── 5. Insert real crews ─────────────────────────────────────────────────
@@ -166,18 +176,21 @@ export async function importRealCrews(): Promise<void> {
   }
 
   // ── 7. Assign equipment to crews (single UPDATE…FROM VALUES) ────────────
+  let matchedCount = 0;
   if (assignments.length > 0) {
     const values = assignments
       .map((a) => `('${a.serial.replace(/'/g, "''")}', ${a.crewId})`)
       .join(", ");
-    await db.execute(
+    const result = await db.execute(
       sql.raw(`
         UPDATE equipment
         SET assigned_crew_id = v.crew_id::integer
         FROM (VALUES ${values}) AS v(serial_no, crew_id)
         WHERE LOWER(TRIM(equipment.serial)) = LOWER(TRIM(v.serial_no))
+        RETURNING equipment.serial
       `),
     );
+    matchedCount = result.rows.length;
   }
 
   // ── 8. Mark "Broken" items as RETIRED ───────────────────────────────────
@@ -191,4 +204,28 @@ export async function importRealCrews(): Promise<void> {
       ),
     );
   }
+
+  // ── 9. Report unmatched serials ──────────────────────────────────────────
+  const unmatchedSerials: string[] = [];
+  if (assignments.length > matchedCount) {
+    const matchedSerials = new Set(
+      assignments.slice(0, matchedCount).map((a) => a.serial.toLowerCase()),
+    );
+    for (const a of assignments) {
+      if (!matchedSerials.has(a.serial.toLowerCase())) {
+        unmatchedSerials.push(a.serial);
+      }
+    }
+  }
+
+  if (unmatchedSerials.length > 0) {
+    console.warn(
+      `[importRealCrews] ${unmatchedSerials.length} serial(s) from spreadsheet had no matching equipment row:`,
+      unmatchedSerials,
+    );
+  }
+
+  console.info(
+    `[importRealCrews] complete — crews: ${crewNames.length}, assigned: ${matchedCount}, broken/retired: ${brokenSerials.length}, unmatched: ${unmatchedSerials.length}`,
+  );
 }
