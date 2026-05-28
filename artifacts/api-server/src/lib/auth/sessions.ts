@@ -59,11 +59,16 @@ export async function purgeExpiredSessions(): Promise<void> {
 }
 
 export function sessionCookieOptions(expiresAt: Date) {
-  const isProd = process.env["NODE_ENV"] === "production";
+  // SameSite=None + Secure=true is required so the session cookie survives
+  // when the app is rendered inside an iframe (e.g. the Replit preview pane)
+  // whose top-level document is a different origin. Browsers block SameSite=Lax
+  // cookies in cross-site iframe contexts, which caused login to silently fail
+  // even though the API returned 200. Replit always serves over HTTPS so
+  // Secure=true is safe in both dev and production.
   return {
     httpOnly: true,
-    sameSite: "lax" as const,
-    secure: isProd,
+    sameSite: "none" as const,
+    secure: true,
     signed: true,
     path: "/",
     expires: expiresAt,
@@ -71,11 +76,10 @@ export function sessionCookieOptions(expiresAt: Date) {
 }
 
 export function clearSessionCookieOptions() {
-  const isProd = process.env["NODE_ENV"] === "production";
   return {
     httpOnly: true,
-    sameSite: "lax" as const,
-    secure: isProd,
+    sameSite: "none" as const,
+    secure: true,
     signed: true,
     path: "/",
     maxAge: 0,
