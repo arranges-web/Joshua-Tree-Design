@@ -1,4 +1,4 @@
-import { eq, isNull, or, and, sql } from "drizzle-orm";
+import { eq, isNull, or, and, sql, inArray } from "drizzle-orm";
 import { db } from "./client";
 import {
   trucksTable,
@@ -326,14 +326,12 @@ const DEMO_MAINTENANCE_DESCRIPTIONS = new Set([
 
 async function cleanupDemoMaintenanceLogs() {
   // Delete any row whose description matches a known synthetic description.
-  // Idempotent — deletes 0 rows once the table is clean.
-  await db.execute(
-    sql`DELETE FROM maintenance_logs WHERE description = ANY(ARRAY[${sql.raw(
-      Array.from(DEMO_MAINTENANCE_DESCRIPTIONS)
-        .map((d) => `'${d.replace(/'/g, "''")}'`)
-        .join(","),
-    )}]::text[])`,
-  );
+  // Uses inArray (not sql.raw) so Drizzle's parameterised binding handles
+  // the strings correctly. Idempotent — deletes 0 rows once the table is clean.
+  const descriptions = Array.from(DEMO_MAINTENANCE_DESCRIPTIONS);
+  await db
+    .delete(maintenanceLogsTable)
+    .where(inArray(maintenanceLogsTable.description, descriptions));
 }
 
 async function backfillTruckFixtures() {
