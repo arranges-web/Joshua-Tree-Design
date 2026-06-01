@@ -7,7 +7,6 @@ import {
   UserPlus,
   Wrench,
   Menu,
-  TreeDeciduous,
   Activity,
   Package,
   Building2,
@@ -113,28 +112,13 @@ const NAV_GROUPS: Array<{ label: string; items: NavItem[] }> = [
 
 function Brand({ inHeader = false }: { inHeader?: boolean }) {
   return (
-    <div className="flex items-center gap-3">
-      <div className="relative flex h-9 w-9 items-center justify-center rounded-md bg-accent text-accent-foreground shadow-sm ring-1 ring-inset ring-accent/30">
-        <TreeDeciduous className="h-5 w-5" />
-      </div>
-      <div className="leading-tight">
-        <div
-          className={`text-lg font-bold tracking-tight ${
-            inHeader ? "text-foreground" : "text-sidebar-foreground"
-          }`}
-        >
-          Joshua Tree
-        </div>
-        <div
-          className={`text-[10px] font-mono uppercase tracking-[0.18em] ${
-            inHeader
-              ? "text-muted-foreground"
-              : "text-sidebar-foreground/55"
-          }`}
-        >
-          Operations Console
-        </div>
-      </div>
+    <div className="flex items-center">
+      <img
+        src={`${import.meta.env.BASE_URL}logo.png`}
+        alt="Joshua Tree"
+        className={`object-contain ${inHeader ? "h-8" : "h-9"}`}
+        style={{ maxWidth: inHeader ? 140 : 155 }}
+      />
     </div>
   );
 }

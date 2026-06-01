@@ -13,7 +13,6 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { TreeDeciduous } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 
 const TEST_ACCOUNTS = [
@@ -94,18 +93,12 @@ export function Login() {
         {/* Left: branding + form */}
         <Card className="w-full">
           <CardHeader className="space-y-3">
-            <div className="flex items-center gap-3">
-              <div className="flex h-11 w-11 items-center justify-center rounded-md bg-accent text-accent-foreground shadow-sm">
-                <TreeDeciduous className="h-6 w-6" />
-              </div>
-              <div className="leading-tight">
-                <div className="text-2xl font-bold tracking-tight">
-                  Joshua Tree
-                </div>
-                <div className="text-[10px] font-mono uppercase tracking-[0.18em] text-muted-foreground">
-                  Operations Console
-                </div>
-              </div>
+            <div className="flex items-center">
+              <img
+                src={`${import.meta.env.BASE_URL}logo.png`}
+                alt="Joshua Tree"
+                className="h-11 w-auto object-contain"
+              />
             </div>
             <CardTitle className="font-serif text-3xl">
               Welcome back.
