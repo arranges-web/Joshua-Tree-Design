@@ -7,6 +7,7 @@ import {
   backfillDemoData,
   backfillDepartments,
   importRealCrews,
+  cleanupDemoUsers,
 } from "@workspace/db";
 
 const rawPort = process.env["PORT"];
@@ -81,6 +82,15 @@ async function startup() {
     await importRealCrews();
   } catch (err) {
     logger.error({ err }, "Failed to import real crews on boot");
+  }
+
+  // Remove any demo/test user accounts that may have been seeded
+  // in a previous environment. Idempotent — no-op if they don't exist.
+  // Runs last so it always wins over any backfill that re-inserts them.
+  try {
+    await cleanupDemoUsers();
+  } catch (err) {
+    logger.error({ err }, "Failed to clean up demo users on boot");
   }
 }
 
