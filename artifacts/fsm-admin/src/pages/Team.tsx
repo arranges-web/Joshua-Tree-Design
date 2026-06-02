@@ -366,20 +366,28 @@ function NewInviteDialog() {
     setCopied(false);
   }
 
+  // ADMIN invites don't need a department — the server routes them to
+  // the synthetic "Admin" home department. Every other role does.
+  const isAdminInvite = roleKey === "ADMIN";
+
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
-    const deptId = Number(departmentId);
-    if (!Number.isFinite(deptId)) {
-      setError("Please pick a department.");
-      return;
+    let deptIdToSend: number | undefined;
+    if (!isAdminInvite) {
+      const deptId = Number(departmentId);
+      if (!Number.isFinite(deptId)) {
+        setError("Please pick a department.");
+        return;
+      }
+      deptIdToSend = deptId;
     }
     createInvite.mutate(
       {
         email: email.trim(),
         fullName: fullName.trim() || undefined,
         roleKey,
-        departmentId: deptId,
+        departmentId: deptIdToSend,
       },
       {
         onSuccess: ({ invite }) => {
@@ -497,21 +505,35 @@ function NewInviteDialog() {
                   </SelectContent>
                 </Select>
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="invite-dept">Department *</Label>
-                <Select value={departmentId} onValueChange={setDepartmentId}>
-                  <SelectTrigger id="invite-dept">
-                    <SelectValue placeholder="Select" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {depts.map((d) => (
-                      <SelectItem key={d.id} value={String(d.id)}>
-                        {d.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+              {/* ADMIN role skips the department picker — admins span all
+                  departments, so we surface that explicitly instead of
+                  forcing a meaningless dropdown choice. The server will
+                  land the new user in the Admin home department on
+                  accept. Other roles still require a real dept. */}
+              {isAdminInvite ? (
+                <div className="space-y-2">
+                  <Label>Department</Label>
+                  <div className="flex h-9 items-center rounded-md border border-dashed bg-muted/30 px-3 text-xs text-muted-foreground">
+                    Admins span all departments — none required.
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <Label htmlFor="invite-dept">Department *</Label>
+                  <Select value={departmentId} onValueChange={setDepartmentId}>
+                    <SelectTrigger id="invite-dept">
+                      <SelectValue placeholder="Select" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {depts.map((d) => (
+                        <SelectItem key={d.id} value={String(d.id)}>
+                          {d.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
             </div>
             <div className="flex flex-col-reverse gap-2 pt-2 sm:flex-row sm:justify-end">
               <Button
