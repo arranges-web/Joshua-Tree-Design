@@ -322,6 +322,10 @@ async function cleanupDemoEquipment() {
 const DEMO_MAINTENANCE_DESCRIPTIONS = new Set([
   "Oil & filter change, lube fittings, fluid top-off",
   "Replaced front brake pads & rotors — pulsing complaint",
+  "Quarterly DOT safety inspection — passed with notes",
+  "Hydraulic fluid + filter change",
+  "PM service: oil, filter, lube, brake inspection",
+  "Drum bearings + belt replacement",
 ]);
 
 async function cleanupDemoMaintenanceLogs() {

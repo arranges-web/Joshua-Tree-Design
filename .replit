@@ -53,7 +53,7 @@ channel = "stable-25_05"
 [userenv]
 
 [userenv.production]
-DEMO_MODE = "true"
+DEMO_MODE = "false"
 
 [userenv.development]
 DEMO_MODE = "false"
