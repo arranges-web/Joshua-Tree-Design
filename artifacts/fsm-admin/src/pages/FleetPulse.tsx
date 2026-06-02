@@ -110,13 +110,6 @@ const QUICK_ACTIONS: QuickAction[] = [
     roles: ["ADMIN"],
   },
   {
-    href: "/assistant",
-    label: "AI Assistant",
-    description: "Ask anything about the fleet",
-    icon: Sparkles,
-    roles: ["ADMIN", "ACCOUNTING_MANAGER"],
-  },
-  {
     href: "/accounting",
     label: "Accounting",
     description: "Spend by department",
@@ -135,6 +128,14 @@ const QUICK_ACTIONS: QuickAction[] = [
     label: "Expense Categories",
     description: "Labor, parts, fuel breakdown",
     icon: Receipt,
+    roles: ["ADMIN", "ACCOUNTING_MANAGER"],
+  },
+  // Keep AI Assistant last so the tile order matches the sidebar.
+  {
+    href: "/assistant",
+    label: "AI Assistant",
+    description: "Ask anything about the fleet",
+    icon: Sparkles,
     roles: ["ADMIN", "ACCOUNTING_MANAGER"],
   },
 ];

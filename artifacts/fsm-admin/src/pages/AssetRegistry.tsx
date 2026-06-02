@@ -7,6 +7,8 @@ import {
   useGetMe,
   useUpdateTruck,
   useUpdateEquipment,
+  useDeleteTruck,
+  useDeleteEquipment,
   getListAssetsQueryKey,
   getGetFleetPulseQueryKey,
   type Asset,
@@ -69,7 +71,21 @@ import {
   Plus,
   Construction,
   MapPin,
+  Trash2,
 } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import { deleteOutcomeToast } from "@/lib/delete-outcome";
+import { DELETE_REQUESTS_PENDING_COUNT_KEY } from "@/lib/extra-api";
 
 const usd = (cents: number | null | undefined) =>
   new Intl.NumberFormat("en-US", {
@@ -933,19 +949,28 @@ export function AssetRegistry() {
                       {usd(periodValue(a))}
                     </TableCell>
                     <TableCell>
-                      <Button
-                        asChild
-                        variant="ghost"
-                        size="sm"
-                        className="gap-1"
-                        data-testid={`asset-open-${a.slug}`}
-                      >
-                        <Link href={`/assets/${a.slug}`}>
-                          <QrCode className="h-3.5 w-3.5" />
-                          Open
-                          <ArrowRight className="h-3.5 w-3.5" />
-                        </Link>
-                      </Button>
+                      <div className="flex items-center justify-end gap-1">
+                        <Button
+                          asChild
+                          variant="ghost"
+                          size="sm"
+                          className="gap-1"
+                          data-testid={`asset-open-${a.slug}`}
+                        >
+                          <Link href={`/assets/${a.slug}`}>
+                            <QrCode className="h-3.5 w-3.5" />
+                            Open
+                            <ArrowRight className="h-3.5 w-3.5" />
+                          </Link>
+                        </Button>
+                        {canEditFleet && (
+                          <DeleteAssetButton
+                            kind={a.kind}
+                            id={a.id}
+                            name={a.name}
+                          />
+                        )}
+                      </div>
                     </TableCell>
                   </TableRow>
                 );
@@ -955,6 +980,85 @@ export function AssetRegistry() {
         </div>
       )}
     </div>
+  );
+}
+
+// Per-row delete control for an asset. Trucks and equipment live in
+// different tables, so we pick the right mutation by `kind` and let the
+// existing delete-guard server flow handle "in use" cases — if the asset
+// is referenced (maintenance logs, open checkouts, etc.) the server
+// turns it into a pending delete request instead of a hard delete, and
+// deleteOutcomeToast surfaces that to the user.
+function DeleteAssetButton({
+  kind,
+  id,
+  name,
+}: {
+  kind: "TRUCK" | "EQUIPMENT";
+  id: number;
+  name: string;
+}) {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const deleteTruck = useDeleteTruck();
+  const deleteEquipment = useDeleteEquipment();
+  const isPending = deleteTruck.isPending || deleteEquipment.isPending;
+
+  function handleDelete() {
+    const onSuccess = (result: unknown) => {
+      queryClient.invalidateQueries({ queryKey: getListAssetsQueryKey() });
+      queryClient.invalidateQueries({ queryKey: getGetFleetPulseQueryKey() });
+      queryClient.invalidateQueries({ queryKey: DELETE_REQUESTS_PENDING_COUNT_KEY });
+      toast(deleteOutcomeToast(result, `${name} deleted`));
+    };
+    const onError = () =>
+      toast({
+        title: "Error deleting asset",
+        description: `Couldn't delete ${name}. Please try again.`,
+        variant: "destructive",
+      });
+    if (kind === "TRUCK") {
+      deleteTruck.mutate({ id }, { onSuccess, onError });
+    } else {
+      deleteEquipment.mutate({ id }, { onSuccess, onError });
+    }
+  }
+
+  return (
+    <AlertDialog>
+      <AlertDialogTrigger asChild>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-8 w-8 text-destructive hover:bg-destructive/10 hover:text-destructive"
+          aria-label={`Delete ${name}`}
+          data-testid={`asset-delete-${id}`}
+        >
+          <Trash2 className="h-4 w-4" />
+        </Button>
+      </AlertDialogTrigger>
+      <AlertDialogContent className="w-[calc(100vw-2rem)] sm:max-w-md">
+        <AlertDialogHeader>
+          <AlertDialogTitle>Delete this asset?</AlertDialogTitle>
+          <AlertDialogDescription>
+            Remove <span className="font-semibold">{name}</span> from the
+            registry. If the asset has maintenance logs or open checkouts,
+            this will create a deletion request for an admin to approve
+            instead of removing it immediately.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel disabled={isPending}>Cancel</AlertDialogCancel>
+          <AlertDialogAction
+            onClick={handleDelete}
+            disabled={isPending}
+            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+          >
+            {isPending ? "Deleting…" : "Delete"}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   );
 }
 
