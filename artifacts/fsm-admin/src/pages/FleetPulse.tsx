@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link } from "wouter";
-import { useGetFleetPulse } from "@workspace/api-client-react";
+import { useGetFleetPulse, useGetMe } from "@workspace/api-client-react";
 import { useDepartmentFilter } from "@/context/DepartmentContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -17,6 +17,14 @@ import {
   DollarSign,
   ArrowRight,
   UserCheck,
+  Package,
+  HardHat,
+  Users,
+  Calculator,
+  Receipt,
+  Sparkles,
+  Shield,
+  UserPlus,
 } from "lucide-react";
 import {
   Bar,
@@ -48,9 +56,136 @@ function monthLabel(key: string) {
 type ChartView = "MONTHLY" | "YEARLY";
 type PeriodKey = "MTD" | "YTD" | "LIFETIME";
 
+// Quick-action shortcuts shown at the top of the home dashboard. Each
+// tile is a one-click jump into a major section of the app, ordered
+// by how often a foreman/admin needs them. Visibility honors the same
+// role gates as the sidebar (Shell.tsx NAV_GROUPS): admin-only links
+// are filtered out for non-admin viewers so the grid never shows a
+// shortcut they can't follow.
+type QuickAction = {
+  href: string;
+  label: string;
+  description: string;
+  icon: typeof Activity;
+  roles?: ReadonlyArray<string>;
+};
+
+const QUICK_ACTIONS: QuickAction[] = [
+  {
+    href: "/assets",
+    label: "Asset Registry",
+    description: "Trucks, trailers & equipment",
+    icon: Package,
+  },
+  {
+    href: "/maintenance",
+    label: "Maintenance Log",
+    description: "Repairs, inspections, costs",
+    icon: Wrench,
+  },
+  {
+    href: "/crews",
+    label: "Crews",
+    description: "Field crews & assignments",
+    icon: HardHat,
+  },
+  {
+    href: "/employees",
+    label: "Crew & Members",
+    description: "Roster, roles, activity",
+    icon: Users,
+  },
+  {
+    href: "/team",
+    label: "Invite Team",
+    description: "Add users, set permissions",
+    icon: UserPlus,
+    roles: ["ADMIN"],
+  },
+  {
+    href: "/delete-requests",
+    label: "Delete Approvals",
+    description: "Review pending deletes",
+    icon: Shield,
+    roles: ["ADMIN"],
+  },
+  {
+    href: "/assistant",
+    label: "AI Assistant",
+    description: "Ask anything about the fleet",
+    icon: Sparkles,
+    roles: ["ADMIN", "ACCOUNTING_MANAGER"],
+  },
+  {
+    href: "/accounting",
+    label: "Accounting",
+    description: "Spend by department",
+    icon: Calculator,
+    roles: ["ADMIN", "ACCOUNTING_MANAGER"],
+  },
+  {
+    href: "/accounting?tab=assets",
+    label: "Cost per Asset",
+    description: "What each truck costs",
+    icon: TrendingUp,
+    roles: ["ADMIN", "ACCOUNTING_MANAGER"],
+  },
+  {
+    href: "/accounting?tab=expenses",
+    label: "Expense Categories",
+    description: "Labor, parts, fuel breakdown",
+    icon: Receipt,
+    roles: ["ADMIN", "ACCOUNTING_MANAGER"],
+  },
+];
+
+function QuickActions({ role }: { role: string | null | undefined }) {
+  const visible = QUICK_ACTIONS.filter((a) => {
+    if (!a.roles) return true;
+    if (!role) return false;
+    return a.roles.includes(role);
+  });
+  if (visible.length === 0) return null;
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <CardTitle className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+          Jump to
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+          {visible.map((action) => {
+            const Icon = action.icon;
+            return (
+              <Link
+                key={action.href}
+                href={action.href}
+                className="group flex items-start gap-2.5 rounded-lg border bg-card px-3 py-2.5 transition-all hover:border-primary/60 hover:bg-accent/30 hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary transition-colors group-hover:bg-primary group-hover:text-primary-foreground">
+                  <Icon className="h-4 w-4" />
+                </span>
+                <div className="min-w-0">
+                  <div className="truncate text-sm font-medium">{action.label}</div>
+                  <div className="truncate text-xs text-muted-foreground">
+                    {action.description}
+                  </div>
+                </div>
+              </Link>
+            );
+          })}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 export function FleetPulse() {
   const { activeDeptId } = useDepartmentFilter();
   const { data, isLoading } = useGetFleetPulse(activeDeptId != null ? { departmentId: activeDeptId } : {});
+  const { data: meData } = useGetMe();
+  const role = meData?.user?.role ?? null;
   const [chartView, setChartView] = useState<ChartView>("MONTHLY");
   const [period, setPeriod] = useState<PeriodKey>("MTD");
 
@@ -138,6 +273,8 @@ export function FleetPulse() {
           </Button>
         }
       />
+
+      <QuickActions role={role} />
 
       <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 md:grid-cols-5">
         <KpiCard
