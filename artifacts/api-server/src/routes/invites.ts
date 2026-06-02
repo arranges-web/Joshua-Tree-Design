@@ -68,7 +68,11 @@ const createInviteSchema = z.object({
   email: z.string().trim().toLowerCase().email(),
   fullName: z.string().trim().min(1).max(120).optional(),
   roleKey: z.enum(ROLE_KEYS),
-  departmentId: z.number().int().positive(),
+  // departmentId is optional for ADMIN invites — admins aren't pinned to
+  // a specific operational department, so when it's omitted we route the
+  // new user to the synthetic "Admin" home department. Non-admin roles
+  // still require an explicit dept (validated below after lookup).
+  departmentId: z.number().int().positive().optional(),
   expiresInDays: z.number().int().min(1).max(60).optional(),
 });
 
@@ -90,10 +94,25 @@ router.post("/invites", requireAuth, async (req, res) => {
     res.status(400).json({ error: "role_not_found" });
     return;
   }
-  const [dept] = await db
-    .select()
-    .from(departmentsTable)
-    .where(eq(departmentsTable.id, parsed.data.departmentId));
+
+  // Resolve department. ADMIN invites land in the synthetic "Admin"
+  // home department by default (so the inviter doesn't have to pick
+  // one); other roles must specify a real operational department.
+  let dept: typeof departmentsTable.$inferSelect | undefined;
+  if (parsed.data.departmentId != null) {
+    [dept] = await db
+      .select()
+      .from(departmentsTable)
+      .where(eq(departmentsTable.id, parsed.data.departmentId));
+  } else if (parsed.data.roleKey === "ADMIN") {
+    [dept] = await db
+      .select()
+      .from(departmentsTable)
+      .where(eq(departmentsTable.key, "Admin"));
+  } else {
+    res.status(400).json({ error: "department_required" });
+    return;
+  }
   if (!dept) {
     res.status(400).json({ error: "department_not_found" });
     return;

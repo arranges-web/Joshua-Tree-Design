@@ -569,7 +569,10 @@ export type CreateInviteBody = {
   email: string;
   fullName?: string;
   roleKey: string;
-  departmentId: number;
+  // Optional for ADMIN role — the server lands new admins in the
+  // synthetic "Admin" home department when departmentId is omitted.
+  // All other roles still need an explicit department.
+  departmentId?: number;
   expiresInDays?: number;
 };
 
