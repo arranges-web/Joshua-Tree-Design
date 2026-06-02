@@ -68,6 +68,7 @@ import {
   Boxes,
   Plus,
   Construction,
+  MapPin,
 } from "lucide-react";
 
 const usd = (cents: number | null | undefined) =>
@@ -820,6 +821,12 @@ export function AssetRegistry() {
                           {a.identifier && (
                             <div className="font-mono text-[11px] text-muted-foreground/80">
                               {a.kind === "TRUCK" ? "VIN" : "S/N"} {a.identifier}
+                            </div>
+                          )}
+                          {a.category === "HANDHELD" && a.location && (
+                            <div className="mt-0.5 flex items-center gap-1 text-[11px] text-muted-foreground/70">
+                              <MapPin className="h-3 w-3 shrink-0" />
+                              {a.location}
                             </div>
                           )}
                         </div>

@@ -26,6 +26,7 @@ export async function backfillFleetData(): Promise<void> {
   await ensureInvitesTable();
   await ensureDeleteRequestsTable();
   await backfillSlugs();
+  await backfillHandheldNames();
 
   // Demo-only enrichments — synthetic T-01/T-02/T-03 trucks, chainsaws,
   // backfilled maintenance logs, extra trailers/handhelds. These are
@@ -46,6 +47,7 @@ export async function backfillFleetData(): Promise<void> {
     await cleanupDemoTrucks();
     await cleanupDemoEquipment();
     await cleanupDemoMaintenanceLogs();
+    await ensureNewTrucks();
   }
 }
 
@@ -338,6 +340,75 @@ async function cleanupDemoMaintenanceLogs() {
     .where(inArray(maintenanceLogsTable.description, descriptions));
 }
 
+/**
+ * Real trucks from the insurance schedule that were added after the initial
+ * import. Keyed by VIN so the check is idempotent — safe to run on every boot.
+ */
+const NEW_REAL_TRUCKS = [
+  {
+    name: "#55 2021 Chevy Silverado 2500",
+    vehicleType: "TRUCK" as const,
+    brand: "Chevrolet",
+    model: "Silverado 2500",
+    vin: "1GB5YLE75MF184509",
+    year: 2021,
+    statedValueCents: 4_000_000,
+    gvwGcwLbs: 14_000,
+    garagingState: "FL",
+    bodyTypeCode: "TK",
+    insuranceVehNumber: 55,
+  },
+  {
+    name: "#56 2020 Chevy 4500",
+    vehicleType: "TRUCK" as const,
+    brand: "Chevrolet",
+    model: "4500",
+    vin: "54DCDJ1B9LS803756",
+    year: 2020,
+    statedValueCents: 5_000_000,
+    gvwGcwLbs: 14_001,
+    garagingState: "FL",
+    bodyTypeCode: "TK",
+    insuranceVehNumber: 56,
+  },
+];
+
+async function ensureNewTrucks() {
+  const existing = await db
+    .select({ vin: trucksTable.vin })
+    .from(trucksTable);
+  const existingVins = new Set(
+    existing.map((t) => t.vin).filter((v): v is string => v != null),
+  );
+
+  for (const fix of NEW_REAL_TRUCKS) {
+    if (existingVins.has(fix.vin)) continue;
+    const [row] = await db
+      .insert(trucksTable)
+      .values({
+        name: fix.name,
+        vehicleType: fix.vehicleType,
+        brand: fix.brand,
+        model: fix.model,
+        vin: fix.vin,
+        status: "ACTIVE",
+        year: fix.year,
+        statedValueCents: fix.statedValueCents,
+        gvwGcwLbs: fix.gvwGcwLbs,
+        garagingState: fix.garagingState,
+        bodyTypeCode: fix.bodyTypeCode,
+        insuranceVehNumber: fix.insuranceVehNumber,
+      })
+      .returning();
+    if (row) {
+      await db
+        .update(trucksTable)
+        .set({ slug: makeAssetSlug("truck", row.id, row.name) })
+        .where(eq(trucksTable.id, row.id));
+    }
+  }
+}
+
 async function backfillTruckFixtures() {
   const trucks = await db.select().from(trucksTable);
   for (const t of trucks) {
@@ -490,6 +561,46 @@ async function backfillSlugs() {
       .update(equipmentTable)
       .set({ slug: makeAssetSlug("equip", e.id, e.name) })
       .where(eq(equipmentTable.id, e.id));
+  }
+}
+
+/**
+ * Strips the legacy `[Site: <yard> · ...]` bracket annotations that were
+ * embedded in handheld equipment names during the original spreadsheet import.
+ * Populates the `location` column from the extracted site value (only when
+ * location is currently NULL so manual admin edits are preserved).
+ * Idempotent — a no-op once all names are already clean.
+ */
+async function backfillHandheldNames() {
+  const rows = await db
+    .select({
+      id: equipmentTable.id,
+      name: equipmentTable.name,
+      location: equipmentTable.location,
+    })
+    .from(equipmentTable)
+    .where(sql`${equipmentTable.name} LIKE '%[%'`);
+
+  for (const row of rows) {
+    const bracketIdx = row.name.indexOf(" [");
+    if (bracketIdx === -1) continue;
+    const cleanName = row.name.slice(0, bracketIdx).trimEnd();
+
+    // Extract site value from "[Site: Tree Yard · ...]" or "[Site: Tree Yard]"
+    let site: string | null = null;
+    const siteMatch = row.name.match(/\[Site:\s*([^·\]]+)/);
+    if (siteMatch) {
+      site = siteMatch[1].trim();
+    }
+
+    await db
+      .update(equipmentTable)
+      .set({
+        name: cleanName,
+        // Only seed location when it has never been set; preserve manual edits.
+        ...(row.location == null && site != null ? { location: site } : {}),
+      })
+      .where(eq(equipmentTable.id, row.id));
   }
 }
 
