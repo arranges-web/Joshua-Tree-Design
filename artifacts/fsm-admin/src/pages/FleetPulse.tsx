@@ -139,7 +139,7 @@ export function FleetPulse() {
         }
       />
 
-      <div className="grid gap-3 grid-cols-2 md:grid-cols-5">
+      <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 md:grid-cols-5">
         <KpiCard
           label="Active"
           value={num(counts.active)}

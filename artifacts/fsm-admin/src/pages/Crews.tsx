@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Link } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
 import { useListDepartments, useGetMe } from "@workspace/api-client-react";
@@ -14,7 +14,7 @@ import {
   type CrewLeadCandidate,
   type CreateCrewBody,
 } from "@/lib/extra-api";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -34,7 +34,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
-import { HardHat, Truck, Wrench, Users, ChevronRight, Plus, UserCog } from "lucide-react";
+import { HardHat, Truck, Wrench, Users, ChevronRight, Plus, UserCog, Search } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { cn } from "@/lib/utils";
 
@@ -55,6 +55,82 @@ function StatusBadge({ status }: { status: string }) {
     >
       {label}
     </span>
+  );
+}
+
+// Compact summary card used in the responsive crew grid. Keeps the page
+// scannable: at typical zoom you can fit 12+ crews above the fold on
+// desktop and 4–6 on a phone without horizontal scrolling.
+function CrewCard({
+  crew,
+  selected,
+  onSelect,
+}: {
+  crew: Crew;
+  selected: boolean;
+  onSelect: () => void;
+}) {
+  const memberCount = crew.memberCount ?? 0;
+  const truckCount = crew.truckCount ?? 0;
+  const equipCount = crew.equipmentCount ?? 0;
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      className={cn(
+        "group flex w-full flex-col gap-2 rounded-lg border bg-card px-3 py-3 text-left transition-all",
+        "hover:border-primary/60 hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+        selected ? "border-primary bg-primary/5 shadow-sm" : "border-border",
+      )}
+    >
+      <div className="flex items-start justify-between gap-2">
+        <div className="flex min-w-0 items-center gap-2">
+          <span
+            className={cn(
+              "flex h-7 w-7 shrink-0 items-center justify-center rounded-md",
+              selected ? "bg-primary/15 text-primary" : "bg-muted text-muted-foreground",
+            )}
+          >
+            <HardHat className="h-4 w-4" />
+          </span>
+          <span className="truncate text-sm font-semibold">{crew.name}</span>
+        </div>
+        <ChevronRight
+          className={cn(
+            "h-4 w-4 shrink-0 text-muted-foreground transition-transform",
+            "group-hover:translate-x-0.5 group-hover:text-primary",
+          )}
+        />
+      </div>
+      {(crew.leadName || crew.departmentLabel) && (
+        <div className="space-y-0.5 text-xs">
+          {crew.leadName && (
+            <div className="truncate text-muted-foreground">
+              <span className="font-medium text-foreground/80">Lead:</span> {crew.leadName}
+            </div>
+          )}
+          {crew.departmentLabel && (
+            <div className="truncate text-muted-foreground">
+              <span className="font-medium text-foreground/80">Dept:</span> {crew.departmentLabel}
+            </div>
+          )}
+        </div>
+      )}
+      <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px]">
+        <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-muted-foreground">
+          <Users className="h-3 w-3" />
+          {memberCount}
+        </span>
+        <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-muted-foreground">
+          <Truck className="h-3 w-3" />
+          {truckCount}
+        </span>
+        <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-muted-foreground">
+          <Wrench className="h-3 w-3" />
+          {equipCount}
+        </span>
+      </div>
+    </button>
   );
 }
 
@@ -87,18 +163,18 @@ function CrewDetailPanel({
   const leadMember = crew.members.find((m) => m.userId === crew.leadUserId);
 
   return (
-    <div className="space-y-5 p-1">
+    <div className="space-y-5">
       <section className="rounded-md border bg-muted/20 px-3 py-3">
-        <div className="flex items-center justify-between gap-3">
-          <div>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="min-w-0">
             <div className="text-xs font-mono uppercase tracking-widest text-muted-foreground">
               Crew Lead
             </div>
-            <div className="mt-1 text-sm font-semibold">
+            <div className="mt-1 truncate text-sm font-semibold">
               {leadMember?.fullName ?? "Unassigned"}
             </div>
             {leadMember?.department && (
-              <div className="text-xs text-muted-foreground">
+              <div className="truncate text-xs text-muted-foreground">
                 {leadMember.department}
               </div>
             )}
@@ -122,12 +198,12 @@ function CrewDetailPanel({
         ) : (
           <div className="divide-y rounded-md border">
             {crew.members.map((m: CrewMember) => (
-              <div key={m.userId} className="flex items-center justify-between px-3 py-2.5">
-                <div>
-                  <p className="text-sm font-medium">{m.fullName}</p>
-                  <p className="text-xs text-muted-foreground">{m.department}</p>
+              <div key={m.userId} className="flex items-center justify-between gap-2 px-3 py-2.5">
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium">{m.fullName}</p>
+                  <p className="truncate text-xs text-muted-foreground">{m.department}</p>
                 </div>
-                <Badge variant="secondary" className="text-xs">
+                <Badge variant="secondary" className="shrink-0 text-xs">
                   {m.role}
                 </Badge>
               </div>
@@ -146,14 +222,14 @@ function CrewDetailPanel({
         ) : (
           <div className="divide-y rounded-md border">
             {crew.trucks.map((t: { id: number; name: string; status: string; slug: string | null }) => (
-              <div key={t.id} className="flex items-center justify-between px-3 py-2.5">
-                <span className="text-sm font-medium">{t.name}</span>
-                <div className="flex items-center gap-2">
+              <div key={t.id} className="flex items-center justify-between gap-2 px-3 py-2.5">
+                <span className="min-w-0 truncate text-sm font-medium">{t.name}</span>
+                <div className="flex shrink-0 items-center gap-2">
                   <StatusBadge status={t.status} />
                   {t.slug && (
                     <Link
                       href={`/assets/${t.slug}`}
-                      className="text-xs text-primary hover:underline flex items-center gap-0.5"
+                      className="flex items-center gap-0.5 text-xs text-primary hover:underline"
                     >
                       View <ChevronRight className="h-3 w-3" />
                     </Link>
@@ -175,17 +251,17 @@ function CrewDetailPanel({
         ) : (
           <div className="divide-y rounded-md border">
             {crew.equipment.map((e: { id: number; name: string; type: string; status: string; slug: string | null }) => (
-              <div key={e.id} className="flex items-center justify-between px-3 py-2.5">
-                <div>
-                  <p className="text-sm font-medium">{e.name}</p>
-                  <p className="text-xs text-muted-foreground">{e.type}</p>
+              <div key={e.id} className="flex items-center justify-between gap-2 px-3 py-2.5">
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium">{e.name}</p>
+                  <p className="truncate text-xs text-muted-foreground">{e.type}</p>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex shrink-0 items-center gap-2">
                   <StatusBadge status={e.status} />
                   {e.slug && (
                     <Link
                       href={`/assets/${e.slug}`}
-                      className="text-xs text-primary hover:underline flex items-center gap-0.5"
+                      className="flex items-center gap-0.5 text-xs text-primary hover:underline"
                     >
                       View <ChevronRight className="h-3 w-3" />
                     </Link>
@@ -388,12 +464,29 @@ export function Crews() {
   const { data, isLoading, error, refetch } = useListCrews();
   const queryClient = useQueryClient();
   const [selectedCrewId, setSelectedCrewId] = useState<number | null>(null);
+  const [query, setQuery] = useState("");
 
   const { data: meData } = useGetMe();
   const canCreateCrew =
     (meData?.user?.permissions?.["fleet.trucks"]?.canEdit ?? false) ||
     (meData?.user?.permissions?.["admin.users"]?.canEdit ?? false);
-  const crews = data?.crews ?? [];
+  const crews = (data?.crews ?? []) as Crew[];
+
+  // Cheap client-side filter — useful when the team grows past a screenful
+  // of crews. Matches name, lead, and department.
+  const filteredCrews = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return crews;
+    return crews.filter((c) => {
+      return (
+        c.name.toLowerCase().includes(q) ||
+        (c.leadName ?? "").toLowerCase().includes(q) ||
+        (c.departmentLabel ?? "").toLowerCase().includes(q)
+      );
+    });
+  }, [crews, query]);
+
+  const selectedCrew = crews.find((c) => c.id === selectedCrewId) ?? null;
 
   function handleCrewCreated() {
     queryClient.invalidateQueries({ queryKey: ["crews"] });
@@ -416,8 +509,6 @@ export function Crews() {
     );
   }
 
-  const selectedCrew = crews.find((c: Crew) => c.id === selectedCrewId);
-
   return (
     <div className="space-y-6">
       <PageHeader
@@ -428,63 +519,81 @@ export function Crews() {
         actions={canCreateCrew ? <NewCrewDialog onCreated={handleCrewCreated} /> : undefined}
       />
 
-      <div className="grid gap-6 md:grid-cols-[280px_1fr]">
-        <div className="space-y-2">
-          {crews.length === 0 ? (
-            <Card>
-              <CardContent className="py-8 text-center text-sm text-muted-foreground">
-                No crews yet. Create your first crew with the button above.
-              </CardContent>
-            </Card>
-          ) : (
-            crews.map((crew: Crew) => (
-              <button
-                key={crew.id}
-                onClick={() => setSelectedCrewId(crew.id)}
-                className={cn(
-                  "w-full text-left rounded-lg border px-4 py-3 transition-colors",
-                  selectedCrewId === crew.id
-                    ? "border-primary bg-primary/5"
-                    : "border-border bg-card hover:bg-accent",
-                )}
-              >
-                <div className="flex items-center gap-2">
-                  <HardHat
-                    className={cn(
-                      "h-4 w-4 shrink-0",
-                      selectedCrewId === crew.id ? "text-primary" : "text-muted-foreground",
-                    )}
-                  />
-                  <span className="text-sm font-medium">{crew.name}</span>
-                </div>
-              </button>
-            ))
-          )}
-        </div>
+      {crews.length === 0 ? (
+        <Card>
+          <CardContent className="py-12 text-center text-sm text-muted-foreground">
+            No crews yet. Create your first crew with the button above.
+          </CardContent>
+        </Card>
+      ) : (
+        <>
+          {/* Filter bar — visible whenever there are crews. On mobile the
+              search input stretches full-width; the result count anchors
+              to the right at sm+. */}
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div className="relative w-full sm:max-w-xs">
+              <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search crews, leads, departments…"
+                className="pl-8"
+                aria-label="Search crews"
+              />
+            </div>
+            <div className="text-xs text-muted-foreground">
+              Showing {filteredCrews.length} of {crews.length}{" "}
+              {crews.length === 1 ? "crew" : "crews"}
+            </div>
+          </div>
 
-        <div>
-          {selectedCrewId && selectedCrew ? (
+          {/* Responsive grid — 1 col on phones, 2 on small tablets,
+              3 on laptops, 4 on full-width desktops. The xl breakpoint
+              keeps cards from getting absurdly wide on big monitors. */}
+          {filteredCrews.length === 0 ? (
             <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="flex items-center gap-2 text-lg">
-                  <HardHat className="h-5 w-5 text-primary" />
-                  {selectedCrew.name}
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <CrewDetailPanel crewId={selectedCrewId} canEdit={canCreateCrew} />
+              <CardContent className="py-10 text-center text-sm text-muted-foreground">
+                No crews match “{query}”.
               </CardContent>
             </Card>
           ) : (
-            <Card className="flex items-center justify-center border-dashed py-24">
-              <CardContent className="text-center text-muted-foreground">
-                <HardHat className="mx-auto mb-3 h-8 w-8 opacity-30" />
-                <p className="text-sm">Select a crew to see its details</p>
-              </CardContent>
-            </Card>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+              {filteredCrews.map((crew) => (
+                <CrewCard
+                  key={crew.id}
+                  crew={crew}
+                  selected={selectedCrewId === crew.id}
+                  onSelect={() => setSelectedCrewId(crew.id)}
+                />
+              ))}
+            </div>
           )}
-        </div>
-      </div>
+        </>
+      )}
+
+      {/* Detail dialog. We use a modal here (rather than an inline panel)
+          so the crew grid stays visible context — close the dialog and
+          you're right back where you were. Sized to comfortably hold the
+          three rosters (members / trucks / equipment) on tablets+; on
+          phones it stretches near-full-width with internal scroll. */}
+      <Dialog
+        open={selectedCrewId !== null}
+        onOpenChange={(next) => {
+          if (!next) setSelectedCrewId(null);
+        }}
+      >
+        <DialogContent className="w-[calc(100vw-1.5rem)] max-h-[85vh] overflow-y-auto sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-lg">
+              <HardHat className="h-5 w-5 text-primary" />
+              {selectedCrew?.name ?? "Crew"}
+            </DialogTitle>
+          </DialogHeader>
+          {selectedCrewId !== null && (
+            <CrewDetailPanel crewId={selectedCrewId} canEdit={canCreateCrew} />
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

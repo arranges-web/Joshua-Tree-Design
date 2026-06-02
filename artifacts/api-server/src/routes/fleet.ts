@@ -2081,18 +2081,106 @@ router.get(
   },
 );
 
-// GET /crews — lightweight list for asset-assignment dropdowns.
-// Anyone with fleet view permission can see crew names.
+// GET /crews — list with summary counts so the Crews page can show
+// at-a-glance cards (members / trucks / equipment / lead / dept) without
+// fetching a detail payload per crew. Anyone with fleet view permission
+// can see crew names. Asset-assignment dropdowns ignore the extra fields.
 router.get(
   "/crews",
   requireAuth,
   requireFleetView(),
   async (_req, res) => {
     const rows = await db
-      .select({ id: crewsTable.id, name: crewsTable.name })
+      .select({
+        id: crewsTable.id,
+        name: crewsTable.name,
+        leadUserId: crewsTable.leadUserId,
+        departmentId: crewsTable.departmentId,
+      })
       .from(crewsTable)
       .orderBy(crewsTable.name);
-    res.json({ crews: rows });
+
+    if (rows.length === 0) {
+      res.json({ crews: [] });
+      return;
+    }
+
+    const crewIds = rows.map((r) => r.id);
+    const leadIds = Array.from(
+      new Set(rows.map((r) => r.leadUserId).filter((id): id is number => id != null)),
+    );
+    const deptIds = Array.from(
+      new Set(rows.map((r) => r.departmentId).filter((id): id is number => id != null)),
+    );
+
+    const [memberCounts, truckCounts, equipCounts, leadNames, deptLabels] =
+      await Promise.all([
+        db
+          .select({
+            crewId: crewMembersTable.crewId,
+            n: sql<number>`count(*)::int`,
+          })
+          .from(crewMembersTable)
+          .where(inArray(crewMembersTable.crewId, crewIds))
+          .groupBy(crewMembersTable.crewId),
+        db
+          .select({
+            crewId: trucksTable.assignedCrewId,
+            n: sql<number>`count(*)::int`,
+          })
+          .from(trucksTable)
+          .where(inArray(trucksTable.assignedCrewId, crewIds))
+          .groupBy(trucksTable.assignedCrewId),
+        db
+          .select({
+            crewId: equipmentTable.assignedCrewId,
+            n: sql<number>`count(*)::int`,
+          })
+          .from(equipmentTable)
+          .where(inArray(equipmentTable.assignedCrewId, crewIds))
+          .groupBy(equipmentTable.assignedCrewId),
+        leadIds.length
+          ? db
+              .select({ id: usersTable.id, fullName: usersTable.fullName })
+              .from(usersTable)
+              .where(inArray(usersTable.id, leadIds))
+          : Promise.resolve([] as Array<{ id: number; fullName: string }>),
+        deptIds.length
+          ? db
+              .select({ id: departmentsTable.id, label: departmentsTable.label })
+              .from(departmentsTable)
+              .where(inArray(departmentsTable.id, deptIds))
+          : Promise.resolve([] as Array<{ id: number; label: string }>),
+      ]);
+
+    const memberMap = new Map(memberCounts.map((r) => [r.crewId, r.n]));
+    const truckMap = new Map(
+      truckCounts
+        .filter((r): r is { crewId: number; n: number } => r.crewId != null)
+        .map((r) => [r.crewId, r.n]),
+    );
+    const equipMap = new Map(
+      equipCounts
+        .filter((r): r is { crewId: number; n: number } => r.crewId != null)
+        .map((r) => [r.crewId, r.n]),
+    );
+    const leadMap = new Map(leadNames.map((r) => [r.id, r.fullName]));
+    const deptMap = new Map(deptLabels.map((r) => [r.id, r.label]));
+
+    const crews = rows.map((r) => ({
+      id: r.id,
+      name: r.name,
+      leadUserId: r.leadUserId,
+      leadName: r.leadUserId != null ? (leadMap.get(r.leadUserId) ?? null) : null,
+      departmentId: r.departmentId,
+      departmentLabel:
+        r.departmentId != null ? (deptMap.get(r.departmentId) ?? null) : null,
+      memberCount: memberMap.get(r.id) ?? 0,
+      truckCount: truckMap.get(r.id) ?? 0,
+      equipmentCount: equipMap.get(r.id) ?? 0,
+    }));
+
+    res.json({ crews });
   },
 );
 
