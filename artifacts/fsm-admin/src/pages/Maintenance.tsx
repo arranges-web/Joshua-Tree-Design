@@ -1,7 +1,7 @@
 import { useMemo, useRef, useState } from "react";
 import {
   useListMaintenanceLogs, useCreateMaintenanceLog, useUpdateMaintenanceLog, useDeleteMaintenanceLog, getListMaintenanceLogsQueryKey,
-  useListTrucks, useListEquipment, useListEmployees,
+  useListTrucks, useListEquipment, useListEmployees, useListDepartments,
   type MaintenanceLog,
 } from "@workspace/api-client-react";
 import {
@@ -62,12 +62,19 @@ const RECEIPT_CATEGORIES: { value: MaintenanceReceiptCategory; label: string }[]
   { value: "OTHER", label: "Other" },
 ];
 
+// Server returns these fields on every truck/equipment row but the
+// orval-generated `Truck` / `Equipment` types don't surface them. We
+// widen at the call site so we can resolve a maintenance log's
+// department through its asset without a schema change.
+type WithDept = { id: number; name: string; departmentId?: number | null };
+
 export function Maintenance() {
   const { activeDeptId } = useDepartmentFilter();
   const deptParams = activeDeptId != null ? { departmentId: activeDeptId } : {};
   const { data, isLoading } = useListMaintenanceLogs(deptParams);
   const { data: trucksData } = useListTrucks(deptParams);
   const { data: equipmentData } = useListEquipment(deptParams);
+  const { data: deptsData } = useListDepartments();
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [previewLogId, setPreviewLogId] = useState<number | null>(null);
   const [search, setSearch] = useState("");
@@ -75,23 +82,56 @@ export function Maintenance() {
   const [categoryFilter, setCategoryFilter] = useState<string>("ALL");
   const [receiptFilter, setReceiptFilter] = useState<string>("ALL");
 
+  // Build asset → { name, departmentId } lookups. Maintenance logs
+  // inherit their department from the underlying truck/equipment, so
+  // these maps power both the table's Department column and the
+  // form's read-only department display.
   const truckById = useMemo(
-    () => new Map((trucksData?.trucks ?? []).map((t) => [t.id, t.name] as const)),
+    () =>
+      new Map(
+        ((trucksData?.trucks ?? []) as unknown as WithDept[]).map(
+          (t) => [t.id, t] as const,
+        ),
+      ),
     [trucksData],
   );
   const equipmentById = useMemo(
     () =>
       new Map(
-        (equipmentData?.equipment ?? []).map((e) => [e.id, e.name] as const),
+        ((equipmentData?.equipment ?? []) as unknown as WithDept[]).map(
+          (e) => [e.id, e] as const,
+        ),
       ),
     [equipmentData],
   );
+  const deptLabelById = useMemo(
+    () =>
+      new Map(
+        (deptsData?.departments ?? []).map(
+          (d: { id: number; label: string }) => [d.id, d.label] as const,
+        ),
+      ),
+    [deptsData],
+  );
 
   function assetName(log: MaintenanceLogExt): string {
-    if (log.truckId) return truckById.get(log.truckId) ?? `Truck #${log.truckId}`;
+    if (log.truckId) return truckById.get(log.truckId)?.name ?? `Truck #${log.truckId}`;
     if (log.equipmentId)
-      return equipmentById.get(log.equipmentId) ?? `Equipment #${log.equipmentId}`;
+      return equipmentById.get(log.equipmentId)?.name ?? `Equipment #${log.equipmentId}`;
     return "Unknown";
+  }
+
+  function logDepartmentId(log: MaintenanceLogExt): number | null {
+    if (log.truckId) return truckById.get(log.truckId)?.departmentId ?? null;
+    if (log.equipmentId)
+      return equipmentById.get(log.equipmentId)?.departmentId ?? null;
+    return null;
+  }
+
+  function logDepartmentLabel(log: MaintenanceLogExt): string | null {
+    const id = logDepartmentId(log);
+    if (id == null) return null;
+    return deptLabelById.get(id) ?? null;
   }
 
   const allLogs = useMemo(
@@ -163,6 +203,7 @@ export function Maintenance() {
     const csv = rowsToCsv(filteredLogs, [
       { header: "Date", value: (l) => new Date(l.performedAt).toISOString().slice(0, 10) },
       { header: "Asset", value: (l) => assetName(l) },
+      { header: "Department", value: (l) => logDepartmentLabel(l) ?? "" },
       { header: "Kind", value: (l) => l.kind },
       { header: "Category", value: (l) => l.category ?? "" },
       { header: "Vendor", value: (l) => l.vendor ?? "" },
@@ -346,6 +387,7 @@ export function Maintenance() {
               <TableHeader className="sticky top-0 z-10 bg-muted/40 backdrop-blur">
                 <TableRow>
                   <TableHead className="whitespace-nowrap">Asset</TableHead>
+                  <TableHead className="whitespace-nowrap">Department</TableHead>
                   <TableHead>Kind</TableHead>
                   <TableHead>Category</TableHead>
                   <TableHead>Vendor</TableHead>
@@ -362,6 +404,18 @@ export function Maintenance() {
                 {filteredLogs.map((log) => (
                   <TableRow key={log.id} className="hover:bg-muted/40">
                     <TableCell className="text-sm font-medium whitespace-nowrap">{assetName(log)}</TableCell>
+                    <TableCell className="whitespace-nowrap">
+                      {(() => {
+                        const label = logDepartmentLabel(log);
+                        return label ? (
+                          <Badge variant="outline" className="text-xs font-normal">
+                            {label}
+                          </Badge>
+                        ) : (
+                          <span className="text-xs text-muted-foreground/40">—</span>
+                        );
+                      })()}
+                    </TableCell>
                     <TableCell>
                       <Badge
                         variant="outline"
@@ -542,6 +596,7 @@ function MaintenanceFormDialog({ log, trigger, isOpen: controlledIsOpen, setIsOp
   const { data: trucksData } = useListTrucks(deptParams);
   const { data: equipmentData } = useListEquipment(deptParams);
   const { data: employeesData } = useListEmployees();
+  const { data: deptsData } = useListDepartments();
 
   const [formData, setFormData] = useState({
     assetType: log?.truckId ? "truck" : (log?.equipmentId ? "equipment" : "truck"),
@@ -739,6 +794,61 @@ function MaintenanceFormDialog({ log, trigger, isOpen: controlledIsOpen, setIsOp
                </div>
              )}
           </div>
+
+          {/* Department readout — derived from whichever asset is selected.
+              Maintenance logs are pinned to their asset's department; this
+              chip makes that visible so the user understands where the
+              log will roll up in the accounting views. If no asset is
+              picked yet (or the asset has no department), we leave the
+              field clearly unassigned rather than guessing. */}
+          {(() => {
+            const id =
+              formData.assetType === "truck"
+                ? formData.truckId !== "none"
+                  ? Number(formData.truckId)
+                  : null
+                : formData.equipmentId !== "none"
+                  ? Number(formData.equipmentId)
+                  : null;
+            if (id == null) return null;
+            const rows =
+              formData.assetType === "truck"
+                ? ((trucksData?.trucks ?? []) as unknown as WithDept[])
+                : ((equipmentData?.equipment ?? []) as unknown as WithDept[]);
+            const asset = rows.find((r) => r.id === id);
+            const deptId = asset?.departmentId ?? null;
+            const deptLabel =
+              deptId != null
+                ? (
+                    deptsData?.departments ?? []
+                  ).find(
+                    (d: { id: number; label: string }) => d.id === deptId,
+                  )?.label ?? null
+                : null;
+            return (
+              <div className="rounded-md border bg-muted/30 px-3 py-2">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <div className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground">
+                      Department
+                    </div>
+                    <div className="mt-0.5 text-sm font-medium">
+                      {deptLabel ?? (
+                        <span className="text-muted-foreground">
+                          Unassigned — set department on the asset to file this log there
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  {deptLabel && (
+                    <Badge variant="outline" className="text-[10px]">
+                      from asset
+                    </Badge>
+                  )}
+                </div>
+              </div>
+            );
+          })()}
 
           <div className="space-y-2">
             <Label htmlFor="kind">Kind</Label>

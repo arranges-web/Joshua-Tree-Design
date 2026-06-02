@@ -34,7 +34,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
-import { HardHat, Truck, Wrench, Users, ChevronRight, Plus, UserCog, Search } from "lucide-react";
+import { HardHat, Truck, Wrench, Users, ChevronRight, Plus, UserCog, Search, Building2 } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { cn } from "@/lib/utils";
 
@@ -142,6 +142,8 @@ function CrewDetailPanel({
   canEdit: boolean;
 }) {
   const { data, isLoading, error } = useCrewDetail(crewId);
+  const { data: deptsData } = useListDepartments();
+  const depts = deptsData?.departments ?? [];
 
   if (isLoading) {
     return (
@@ -161,6 +163,9 @@ function CrewDetailPanel({
 
   const { crew } = data;
   const leadMember = crew.members.find((m) => m.userId === crew.leadUserId);
+  const currentDept = depts.find(
+    (d: { id: number; key: string; label: string }) => d.id === crew.departmentId,
+  );
 
   return (
     <div className="space-y-5">
@@ -183,6 +188,31 @@ function CrewDetailPanel({
             <ChangeCrewLeadDialog
               crewId={crew.id}
               currentLeadUserId={crew.leadUserId}
+            />
+          )}
+        </div>
+      </section>
+
+      {/* Department section. Crews are filtered by the active department
+          switcher elsewhere in the app, so making this editable here is
+          how a foreman re-pegs a crew when a team moves between divisions
+          (e.g., a tree crew picking up lawn work in winter). */}
+      <section className="rounded-md border bg-muted/20 px-3 py-3">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="min-w-0">
+            <div className="text-xs font-mono uppercase tracking-widest text-muted-foreground">
+              Department
+            </div>
+            <div className="mt-1 truncate text-sm font-semibold">
+              {currentDept?.label ?? (
+                <span className="text-muted-foreground">Unassigned</span>
+              )}
+            </div>
+          </div>
+          {canEdit && (
+            <ChangeCrewDepartmentDialog
+              crewId={crew.id}
+              currentDepartmentId={crew.departmentId}
             />
           )}
         </div>
@@ -273,6 +303,96 @@ function CrewDetailPanel({
         )}
       </section>
     </div>
+  );
+}
+
+// Re-assigns a crew to a different department (or clears it). Uses the
+// existing PATCH /api/crews/:id endpoint which already accepts a
+// nullable departmentId — no new server work needed.
+function ChangeCrewDepartmentDialog({
+  crewId,
+  currentDepartmentId,
+}: {
+  crewId: number;
+  currentDepartmentId: number | null;
+}) {
+  // "" = no selection yet, "NONE" = explicit clear, otherwise dept id as string.
+  const initial =
+    currentDepartmentId == null ? "NONE" : String(currentDepartmentId);
+  const [open, setOpen] = useState(false);
+  const [value, setValue] = useState<string>(initial);
+  const [error, setError] = useState<string | null>(null);
+  const queryClient = useQueryClient();
+
+  const updateCrew = useUpdateCrew(crewId);
+  const { data: deptsData } = useListDepartments();
+  const depts = deptsData?.departments ?? [];
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    const next: number | null = value === "NONE" ? null : Number(value);
+    if (next === currentDepartmentId) {
+      setOpen(false);
+      return;
+    }
+    try {
+      await updateCrew.mutateAsync({ departmentId: next });
+      queryClient.invalidateQueries({ queryKey: getCrewDetailKey(crewId) });
+      queryClient.invalidateQueries({ queryKey: ["crews"] });
+      setOpen(false);
+    } catch {
+      setError("Failed to change department. Please try again.");
+    }
+  }
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        setOpen(next);
+        if (next) setValue(initial);
+      }}
+    >
+      <DialogTrigger asChild>
+        <Button size="sm" variant="outline" className="gap-1.5">
+          <Building2 className="h-3.5 w-3.5" />
+          Change Department
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="w-[calc(100vw-2rem)] sm:max-w-sm">
+        <DialogHeader>
+          <DialogTitle>Change Department</DialogTitle>
+        </DialogHeader>
+        <form onSubmit={handleSubmit} className="space-y-4 pt-2">
+          <div>
+            <Label htmlFor="change-crew-dept">Department</Label>
+            <Select value={value} onValueChange={setValue}>
+              <SelectTrigger id="change-crew-dept" className="mt-1">
+                <SelectValue placeholder="Select department" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="NONE">— Unassigned —</SelectItem>
+                {depts.map((d: { id: number; key: string; label: string }) => (
+                  <SelectItem key={d.id} value={String(d.id)}>
+                    {d.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          {error && <p className="text-sm text-destructive">{error}</p>}
+          <div className="flex justify-end gap-2 pt-1">
+            <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+              Cancel
+            </Button>
+            <Button type="submit" disabled={updateCrew.isPending}>
+              {updateCrew.isPending ? "Saving…" : "Save"}
+            </Button>
+          </div>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }
 
