@@ -7,6 +7,7 @@ import {
   crewsTable,
   customersTable,
   jobsTable,
+  propertiesTable,
 } from "@workspace/db";
 import { requireAuth } from "../middlewares/requireAuth";
 import { requireRole } from "../middlewares/requireRole";
@@ -18,16 +19,23 @@ router.get(
   requireAuth,
   requireRole("ADMIN"),
   async (_req, res) => {
-    const [trucks, equipment, crews, customers, jobs] = await Promise.all([
-      db.select().from(trucksTable),
-      db.select().from(equipmentTable),
-      db.select().from(crewsTable),
-      db.select().from(customersTable),
-      db.select().from(jobsTable),
-    ]);
+    const [trucks, equipment, crews, customers, jobs, properties] =
+      await Promise.all([
+        db.select().from(trucksTable),
+        db.select().from(equipmentTable),
+        db.select().from(crewsTable),
+        db.select().from(customersTable),
+        db.select().from(jobsTable),
+        db.select().from(propertiesTable),
+      ]);
 
-    // Build crew lookup for equipment sheet
+    // Lookup maps used across sheets
     const crewById = new Map(crews.map((c) => [c.id, c.name]));
+    const customerById = new Map(customers.map((c) => [c.id, c.fullName]));
+    // property → customer name (two-hop: job.propertyId → property.customerId → customer.fullName)
+    const customerByPropertyId = new Map(
+      properties.map((p) => [p.id, customerById.get(p.customerId) ?? ""]),
+    );
 
     // ---- Fleet sheet ----
     const fleetRows = trucks.map((t) => ({
@@ -105,9 +113,14 @@ router.get(
 
     // ---- Jobs sheet ----
     const jobRows = jobs.map((j) => ({
-      "Job ID": j.id,
+      Title: `Job #${j.id}`,
+      Customer:
+        j.propertyId != null
+          ? (customerByPropertyId.get(j.propertyId) ?? "")
+          : "",
+      Crew: j.crewId != null ? (crewById.get(j.crewId) ?? "") : "",
       Status: j.status ?? "",
-      "Scheduled For": j.scheduledFor
+      "Scheduled Date": j.scheduledFor
         ? new Date(j.scheduledFor).toLocaleDateString()
         : "",
       "Completed At": j.completedAt
