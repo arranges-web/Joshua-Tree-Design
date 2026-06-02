@@ -69,17 +69,6 @@ const NAV_GROUPS: Array<{ label: string; items: NavItem[] }> = [
     ],
   },
   {
-    label: "AI",
-    items: [
-      {
-        href: "/assistant",
-        label: "Assistant",
-        icon: Sparkles,
-        roles: ["ADMIN", "ACCOUNTING_MANAGER"],
-      },
-    ],
-  },
-  {
     label: "Accounting",
     items: [
       {
@@ -104,6 +93,21 @@ const NAV_GROUPS: Array<{ label: string; items: NavItem[] }> = [
         href: "/accounting?tab=trends",
         label: "Trends",
         icon: TrendingUp,
+        roles: ["ADMIN", "ACCOUNTING_MANAGER"],
+      },
+    ],
+  },
+  // AI Assistant sits last in the sidebar on purpose — it's a power-user
+  // tool that lives alongside the operational sections rather than
+  // above them. Anchoring it to the bottom keeps daily-use links
+  // (Fleet, Maintenance, Crews, Accounting) closest to the top.
+  {
+    label: "AI",
+    items: [
+      {
+        href: "/assistant",
+        label: "Assistant",
+        icon: Sparkles,
         roles: ["ADMIN", "ACCOUNTING_MANAGER"],
       },
     ],
