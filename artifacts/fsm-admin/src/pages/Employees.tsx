@@ -146,7 +146,7 @@ export function Employees() {
         />
       </div>
 
-      <div className="grid gap-4 grid-cols-3">
+      <div className="grid gap-4 grid-cols-1 sm:grid-cols-3">
         <StatCard title="Total Crew" value={employees.length} icon={Users} />
         <StatCard
           title="Active"
@@ -213,7 +213,7 @@ export function Employees() {
           ))}
         </div>
       ) : filtered.length > 0 ? (
-        <div className="rounded-md border bg-card overflow-hidden">
+        <div className="rounded-md border bg-card overflow-x-auto">
           <Table>
             <TableHeader className="bg-muted/30">
               <TableRow>

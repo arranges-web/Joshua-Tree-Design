@@ -69,7 +69,7 @@ const otpRequestPhoneLimiter = rateLimit({
   max: 5,
   standardHeaders: true,
   legacyHeaders: false,
-  keyGenerator: (req) => `phone:${phoneRateKey(req) ?? `ip:${ipKeyGenerator(req)}`}`,
+  keyGenerator: (req) => `phone:${phoneRateKey(req) ?? `ip:${ipKeyGenerator(req.ip ?? "")}`}`,
   message: { error: "too_many_otp_requests" },
 });
 const otpVerifyPhoneLimiter = rateLimit({
@@ -77,7 +77,7 @@ const otpVerifyPhoneLimiter = rateLimit({
   max: 20,
   standardHeaders: true,
   legacyHeaders: false,
-  keyGenerator: (req) => `phone:${phoneRateKey(req) ?? `ip:${ipKeyGenerator(req)}`}`,
+  keyGenerator: (req) => `phone:${phoneRateKey(req) ?? `ip:${ipKeyGenerator(req.ip ?? "")}`}`,
   message: { error: "too_many_verify_attempts" },
 });
 
@@ -89,7 +89,7 @@ const otpRequestIpLimiter = rateLimit({
   max: 20,
   standardHeaders: true,
   legacyHeaders: false,
-  keyGenerator: (req) => `ip:${ipKeyGenerator(req)}`,
+  keyGenerator: (req) => `ip:${ipKeyGenerator(req.ip ?? "")}`,
   message: { error: "too_many_otp_requests" },
 });
 const otpVerifyIpLimiter = rateLimit({
@@ -97,7 +97,7 @@ const otpVerifyIpLimiter = rateLimit({
   max: 50,
   standardHeaders: true,
   legacyHeaders: false,
-  keyGenerator: (req) => `ip:${ipKeyGenerator(req)}`,
+  keyGenerator: (req) => `ip:${ipKeyGenerator(req.ip ?? "")}`,
   message: { error: "too_many_verify_attempts" },
 });
 

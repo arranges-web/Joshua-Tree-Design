@@ -120,7 +120,21 @@ export function useCheckInAsset(slug: string) {
 }
 
 // ---------- Crews ----------
-export type Crew = { id: number; name: string };
+// `Crew` is the list-summary shape from GET /crews. The counts +
+// lead/department fields power the at-a-glance grid on the Crews page;
+// the older `{ id, name }` consumers (dropdowns, asset assignment) keep
+// working since they only read those two fields.
+export type Crew = {
+  id: number;
+  name: string;
+  leadUserId?: number | null;
+  leadName?: string | null;
+  departmentId?: number | null;
+  departmentLabel?: string | null;
+  memberCount?: number;
+  truckCount?: number;
+  equipmentCount?: number;
+};
 export type CrewMember = {
   userId: number;
   fullName: string;

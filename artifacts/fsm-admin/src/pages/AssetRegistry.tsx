@@ -231,7 +231,7 @@ function AddAssetDialog({ onCreated }: { onCreated: () => void }) {
           Add Asset
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+      <DialogContent className="w-[calc(100vw-1.5rem)] max-h-[90vh] overflow-y-auto sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>Add New Asset</DialogTitle>
         </DialogHeader>
@@ -286,7 +286,7 @@ function AddAssetDialog({ onCreated }: { onCreated: () => void }) {
                     ))}
                   </div>
                 </div>
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <div>
                     <Label htmlFor="asset-brand">Brand</Label>
                     <Input id="asset-brand" value={form.brand} onChange={e => field("brand", e.target.value)} placeholder="Ford" className="mt-1" />
@@ -296,7 +296,7 @@ function AddAssetDialog({ onCreated }: { onCreated: () => void }) {
                     <Input id="asset-model" value={form.model} onChange={e => field("model", e.target.value)} placeholder="F-550" className="mt-1" />
                   </div>
                 </div>
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <div>
                     <Label htmlFor="asset-vin">VIN</Label>
                     <Input id="asset-vin" value={form.vin} onChange={e => field("vin", e.target.value)} placeholder="1FDXX000..." className="mt-1" />
@@ -306,7 +306,7 @@ function AddAssetDialog({ onCreated }: { onCreated: () => void }) {
                     <Input id="asset-plate" value={form.plate} onChange={e => field("plate", e.target.value)} placeholder="ABC-1234" className="mt-1" />
                   </div>
                 </div>
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <div>
                     <Label htmlFor="asset-mileage">Current Mileage</Label>
                     <Input id="asset-mileage" type="number" min="0" value={form.mileage} onChange={e => field("mileage", e.target.value)} placeholder="0" className="mt-1" />
@@ -340,7 +340,7 @@ function AddAssetDialog({ onCreated }: { onCreated: () => void }) {
                     <Input id="asset-custom-label" value={form.customCategoryLabel} onChange={e => field("customCategoryLabel", e.target.value)} placeholder="e.g. Sprayer" className="mt-1" />
                   </div>
                 )}
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <div>
                     <Label htmlFor="asset-brand-eq">Brand</Label>
                     <Input id="asset-brand-eq" value={form.brand} onChange={e => field("brand", e.target.value)} placeholder="Husqvarna" className="mt-1" />
@@ -354,7 +354,7 @@ function AddAssetDialog({ onCreated }: { onCreated: () => void }) {
                   <Label htmlFor="asset-serial">Serial Number</Label>
                   <Input id="asset-serial" value={form.serial} onChange={e => field("serial", e.target.value)} placeholder="SN-123456" className="mt-1" />
                 </div>
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <div>
                     <Label htmlFor="asset-hours">Current Hours</Label>
                     <Input id="asset-hours" type="number" min="0" value={form.hours} onChange={e => field("hours", e.target.value)} placeholder="0" className="mt-1" />
@@ -367,7 +367,7 @@ function AddAssetDialog({ onCreated }: { onCreated: () => void }) {
               </>
             )}
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div>
                 <Label htmlFor="asset-price">Purchase Price ($)</Label>
                 <Input id="asset-price" type="number" min="0" step="0.01" value={form.purchasePrice} onChange={e => field("purchasePrice", e.target.value)} placeholder="0.00" className="mt-1" />
@@ -522,7 +522,7 @@ export function AssetRegistry() {
         {canEditFleet && <AddAssetDialog onCreated={handleAssetCreated} />}
       </div>
 
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-6">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
         <KpiCard label="Total Assets" value={isLoading ? "—" : num(totals.count)} icon={Package} />
         <button
           type="button"
@@ -569,13 +569,13 @@ export function AssetRegistry() {
             placeholder="Search by name, brand, model, VIN/serial…"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            className="max-w-sm"
+            className="w-full sm:max-w-sm"
           />
           <Select
             value={categoryFilter}
             onValueChange={(v) => setCategoryFilter(v as CategoryFilter)}
           >
-            <SelectTrigger className="w-[160px]">
+            <SelectTrigger className="w-full sm:w-[160px]">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -587,7 +587,7 @@ export function AssetRegistry() {
             </SelectContent>
           </Select>
           <Select value={crewFilter} onValueChange={(v) => setCrewFilter(v)}>
-            <SelectTrigger className="w-[180px]">
+            <SelectTrigger className="w-full sm:w-[180px]">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -601,7 +601,7 @@ export function AssetRegistry() {
             </SelectContent>
           </Select>
           <Select value={deptFilterValue} onValueChange={setDeptFilterValue}>
-            <SelectTrigger className="w-[200px]" data-testid="dept-filter">
+            <SelectTrigger className="w-full sm:w-[200px]" data-testid="dept-filter">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>

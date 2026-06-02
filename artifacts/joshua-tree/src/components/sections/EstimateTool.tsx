@@ -70,15 +70,18 @@ function fmt(n: number) {
 
 function useAnimatedNumber(target: number, duration = 550) {
   const [current, setCurrent] = useState(target);
-  const rafRef  = useRef<number>();
+  // `useRef<T>()` was zero-arg in @types/react <19 but became one-arg in
+  // 19 (initial value is required). We pass an explicit undefined / 0 so
+  // the call sites match either type without changing runtime behavior.
+  const rafRef  = useRef<number | undefined>(undefined);
   const fromRef = useRef(target);
-  const t0Ref   = useRef<number>();
+  const t0Ref   = useRef<number | undefined>(undefined);
 
   useEffect(() => {
     if (target === fromRef.current) return;
     const from = fromRef.current;
     t0Ref.current = undefined;
-    if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    if (rafRef.current !== undefined) cancelAnimationFrame(rafRef.current);
 
     const animate = (ts: number) => {
       if (!t0Ref.current) t0Ref.current = ts;
